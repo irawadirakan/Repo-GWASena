@@ -10,7 +10,7 @@ Mata kuliah BIF 1322 Pembangunan Perangkat Lunak, IPB University, Kelompok 04.
 | Backend | FastAPI (Python) |
 | Basis data | PostgreSQL 16 (kolom JSONB) |
 | Antrean tugas | Redis + Celery |
-| Engine bioinformatika | PLINK 2 + GAPIT (menyusul Minggu 6–7) |
+| Engine bioinformatika | Python (validasi berkas); analisis GWAS menyusul minggu 8 |
 
 ## Menjalankan di komputer pengembang (ringkas)
 
@@ -58,14 +58,22 @@ GWASena/
 
 ## Endpoint yang sudah tersedia
 
+Fitur awal (login, daftar analisis, unggah dan validasi berkas) sudah berfungsi.
+Daftar endpoint, contoh pemakaian, dan panduan untuk frontend ada di
+[`docs/FITUR_AWAL.md`](docs/FITUR_AWAL.md).
+
 | Method | Path | Keterangan |
 |---|---|---|
-| GET | `/api/health` | Status API, PostgreSQL (beserta daftar tabel), Redis |
-| GET | `/api/health/worker` | Mengirim tugas uji ke Celery worker |
-| GET | `/api/meta` | Organisme target, format input, daftar modul M-01–M-08 |
-| GET | `/api/analyses` | Daftar sesi analisis (masih kosong) |
-| GET | `/api/analyses/models` | Model uji asosiasi (GLM, MLM) dari basis data |
-| POST | `/api/auth/register`, `/api/auth/login`, `/api/datasets/upload`, `/api/analyses` | Sudah terdaftar, mengembalikan 501 sampai diimplementasikan |
+| GET | `/api/health` | Status API, PostgreSQL, Redis |
+| GET | `/api/meta` | Organisme target dan status modul |
+| POST | `/api/auth/register`, `/api/auth/login` | Daftar akun dan login |
+| GET | `/api/auth/me` | Profil pengguna yang sedang login |
+| GET | `/api/analyses` | Daftar analisis milik pengguna |
+| POST | `/api/analyses` | Buat sesi analisis |
+| GET | `/api/analyses/{id}` | Detail sesi analisis |
+| POST | `/api/analyses/{id}/upload` | Unggah dan validasi VCF + CSV |
+| GET | `/api/analyses/models` | Daftar model uji asosiasi |
+| – | `/parameters`, `/run`, `/status`, `/results` | Terdaftar, membalas 501 (minggu 8) |
 
 ## Alur kerja Git
 

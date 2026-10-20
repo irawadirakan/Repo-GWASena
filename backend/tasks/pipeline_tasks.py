@@ -7,6 +7,4 @@ def ping() -> str:
     return "pong"
 
 
-# Minggu 6–8: tambahkan di sini
-# @celery_app.task(name="gwasena.run_pipeline")
-# def run_pipeline(analysis_id: int): ...  # QC -> PCA -> asosiasi -> koreksi -> anotasi
+# Minggu 8: tugas run_pipeline (QC -> PCA -> uji asosiasi -> koreksi) ditambahkan di sini.

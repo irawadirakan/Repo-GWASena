@@ -4,6 +4,13 @@ import StatusPanel from "./components/StatusPanel.jsx";
 import UploadStep from "./components/UploadStep.jsx";
 import { api } from "./services/api.js";
 
+const STATUS_LABEL = {
+  berfungsi: "berfungsi",
+  sebagian: "sebagian",
+  kerangka: "kerangka siap",
+  belum: "belum dibuat",
+};
+
 export default function App() {
   const [currentStep, setCurrentStep] = useState(0);
   const [uploadedFiles, setUploadedFiles] = useState(null);
@@ -106,9 +113,7 @@ export default function App() {
                 <li key={m.id}>
                   <span className="mod-id">{m.id}</span>
                   <span>{m.nama}</span>
-                  <span className={`badge ${m.status}`}>
-                    {m.status === "kerangka" ? "kerangka siap" : "belum dibuat"}
-                  </span>
+                  <span className={`badge ${m.status}`}>{STATUS_LABEL[m.status] || m.status}</span>
                 </li>
               ))}
             </ul>

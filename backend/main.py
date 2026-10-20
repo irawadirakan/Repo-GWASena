@@ -12,7 +12,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend import models  # noqa: F401  (mendaftarkan semua tabel)
-from backend.api import analyses, auth, datasets, health, meta
+from backend.api import analyses, auth, health, meta
 from backend.core.config import settings
 from backend.core.database import Base, engine
 from backend.services.seed import seed_reference_data
@@ -49,7 +49,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-for r in (health.router, meta.router, auth.router, datasets.router, analyses.router):
+for r in (health.router, meta.router, auth.router, analyses.router):
     app.include_router(r)
 
 

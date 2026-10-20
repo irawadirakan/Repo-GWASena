@@ -7,12 +7,12 @@ from backend.models import AnalysisModel
 DEFAULT_MODELS = [
     {
         "model_name": "GLM",
-        "software_version": "PLINK 2 / GAPIT (versi ditetapkan Minggu 7)",
+        "software_version": "belum ditetapkan (minggu 8)",
         "description": "General Linear Model dengan kovariat PC dari PCA.",
     },
     {
         "model_name": "MLM",
-        "software_version": "GAPIT (versi ditetapkan Minggu 7)",
+        "software_version": "belum ditetapkan (minggu 8)",
         "description": "Mixed Linear Model dengan kovariat PC dan matriks kinship.",
     },
 ]

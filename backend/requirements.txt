@@ -1,5 +1,5 @@
 # Dependensi backend GWASena
-# Disarankan Python 3.11 atau 3.12.
+# Python 3.11 ke atas.
 fastapi>=0.115,<1.0
 uvicorn[standard]>=0.30,<1.0
 SQLAlchemy>=2.0.30,<2.1
@@ -8,3 +8,4 @@ python-dotenv>=1.0,<2
 python-multipart>=0.0.9
 celery>=5.4,<6
 redis>=5.0,<7
+numpy>=2.0

@@ -1,13 +1,24 @@
 # Python
 __pycache__/
-*.pyc
+*.py[cod]
 .venv/
+venv/
+.pytest_cache/
+*.db
+
+# Environment (JANGAN commit .env, commit .env.example saja)
+.env
 
 # Node
 node_modules/
+frontend/dist/
 
-# Environment
-.env
+# Data & hasil analisis (berkas genomik besar tidak masuk Git)
+storage/*
+!storage/.gitkeep
 
-# Testing
-.pytest_cache/
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

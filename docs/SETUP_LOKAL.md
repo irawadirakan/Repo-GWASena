@@ -123,3 +123,26 @@ Ambil tangkapan layar: (1) `docker compose ps`, (2) terminal uvicorn yang berjal
 | `pip install` gagal membangun `psycopg`/`pydantic-core` | Versi Python terlalu baru. Pasang Python 3.12 lalu buat ulang `.venv`. |
 | Celery di Windows diam/tidak memproses tugas | Wajib tambahkan `--pool=solo`. |
 | Laptop tidak kuat Docker | Pasang PostgreSQL langsung (installer resmi), buat user/DB `gwasena` dengan kata sandi `gwasena`. Redis boleh dilewati minggu ini (status merah Redis tidak menghentikan aplikasi). |
+
+---
+
+## Opsi tanpa Docker (untuk anggota yang tidak memakai Docker)
+
+Docker hanya dipakai untuk menjalankan PostgreSQL dan Redis. Untuk pengembangan
+lokal, keduanya bisa diganti:
+
+1. Di `.env`, ganti baris DATABASE_URL menjadi:
+   ```
+   DATABASE_URL=sqlite:///./storage/gwasena_dev.db
+   ```
+2. Lewati langkah `docker compose up -d`. Jalankan backend dan frontend seperti biasa.
+
+Basis data akan berupa satu berkas `storage/gwasena_dev.db` (tidak ikut ke Git).
+Di `/api/health`, Redis akan berstatus tidak terhubung; itu normal untuk tahap ini.
+
+Catatan: SQLite hanya untuk memudahkan pengembangan. Demonstrasi dan deployment
+tetap memakai PostgreSQL sesuai rancangan.
+
+Alternatif lain: memakai PostgreSQL yang sudah terpasang langsung di laptop
+(tanpa Docker). Buat user dan database `gwasena` (kata sandi `gwasena`) lewat
+pgAdmin, lalu pakai `DATABASE_URL=postgresql+psycopg://gwasena:gwasena@localhost:5432/gwasena`.
