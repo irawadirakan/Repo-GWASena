@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import Stepper from "./components/Stepper.jsx";
 import StatusPanel from "./components/StatusPanel.jsx";
+import UploadStep from "./components/UploadStep.jsx";
 import { api } from "./services/api.js";
 
 const STATUS_LABEL = {
@@ -11,6 +12,8 @@ const STATUS_LABEL = {
 };
 
 export default function App() {
+  const [currentStep, setCurrentStep] = useState(0);
+  const [uploadedFiles, setUploadedFiles] = useState(null);
   const [health, setHealth] = useState(null);
   const [meta, setMeta] = useState(null);
   const [error, setError] = useState("");
@@ -35,6 +38,11 @@ export default function App() {
     load();
   }, []);
 
+  const handleUploadComplete = (files) => {
+    setUploadedFiles(files);
+    setCurrentStep(1); // Berpindah ke tahap 2: Konfigurasi
+  };
+
   const org = meta?.organisme;
 
   return (
@@ -48,13 +56,35 @@ export default function App() {
       </header>
 
       <main className="content">
-        <Stepper active={0} />
+        <Stepper active={currentStep} />
 
         <h1>Analisis GWAS bawang putih</h1>
         <p className="lead">
-          Fitur awal backend (login, daftar analisis, serta unggah dan validasi berkas) sudah
-          berfungsi dan dapat dicoba melalui Swagger UI di http://localhost:8000/docs.
+          Platform analisis Genome-Wide Association Study terpadu untuk komoditas bawang putih.
         </p>
+
+        {/* Form Upload & Validasi (Target Progres Minggu 7) */}
+        {currentStep === 0 && (
+          <UploadStep onNext={handleUploadComplete} />
+        )}
+
+        {/* Tampilan Konfigurasi jika form upload selesai */}
+        {currentStep === 1 && (
+          <section className="panel" style={{ marginTop: "1.5rem" }}>
+            <h2>2. Konfigurasi Parameter QC & Model</h2>
+            <p className="muted">Berkas berhasil divalidasi di browser:</p>
+            <ul>
+              <li>Genotipe: <strong>{uploadedFiles?.genotypeFile?.name}</strong></li>
+              <li>Fenotipe: <strong>{uploadedFiles?.phenotypeFile?.name}</strong></li>
+            </ul>
+            <button
+              onClick={() => setCurrentStep(0)}
+              style={{ marginTop: "1rem", padding: "0.5rem 1rem", cursor: "pointer" }}
+            >
+              ← Kembali ke Unggah Berkas
+            </button>
+          </section>
+        )}
 
         <StatusPanel health={health} error={error} loading={loading} onRefresh={load} />
 
