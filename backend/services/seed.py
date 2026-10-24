@@ -7,12 +7,12 @@ from backend.models import AnalysisModel
 DEFAULT_MODELS = [
     {
         "model_name": "GLM",
-        "software_version": "belum ditetapkan (minggu 8)",
+        "software_version": "Python numpy/scipy (pipeline/gwas/glm.py)",
         "description": "General Linear Model dengan kovariat PC dari PCA.",
     },
     {
         "model_name": "MLM",
-        "software_version": "belum ditetapkan (minggu 8)",
+        "software_version": "Python numpy/scipy, REML P3D (pipeline/gwas/mlm.py)",
         "description": "Mixed Linear Model dengan kovariat PC dan matriks kinship.",
     },
 ]
