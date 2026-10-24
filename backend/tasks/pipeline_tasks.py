@@ -1,4 +1,4 @@
-"""Tugas-tugas Celery. Saat ini hanya tugas uji koneksi."""
+"""Tugas-tugas Celery."""
 from backend.tasks.celery_app import celery_app
 
 
@@ -7,4 +7,10 @@ def ping() -> str:
     return "pong"
 
 
-# Minggu 8: tugas run_pipeline (QC -> PCA -> uji asosiasi -> koreksi) ditambahkan di sini.
+@celery_app.task(name="gwasena.run_pipeline")
+def run_pipeline_task(analysis_id: int) -> str:
+    """Menjalankan alur QC -> PCA -> GLM -> koreksi untuk satu analisis."""
+    from backend.services.analysis_runner import run_analysis
+
+    run_analysis(analysis_id)
+    return f"analysis {analysis_id} diproses"

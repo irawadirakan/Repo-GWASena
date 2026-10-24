@@ -14,7 +14,7 @@ def _as_bool(value: str) -> bool:
 
 class Settings:
     APP_NAME: str = "GWASena API"
-    APP_VERSION: str = "0.1.1"
+    APP_VERSION: str = "0.2.0"
     APP_ENV: str = os.getenv("APP_ENV", "development")
 
     DATABASE_URL: str = os.getenv(
@@ -35,6 +35,12 @@ class Settings:
     # Autentikasi (FR-01). Ganti SECRET_KEY di .env dengan teks acak yang panjang.
     SECRET_KEY: str = os.getenv("SECRET_KEY", "dev-ganti-kunci-ini-di-env")
     TOKEN_EXPIRE_HOURS: int = int(os.getenv("TOKEN_EXPIRE_HOURS", "12"))
+
+    # Cara menjalankan pipeline:
+    #   auto       -> pakai Celery bila worker aktif, selain itu dijalankan di latar belakang FastAPI
+    #   celery     -> selalu dikirim ke antrean Celery (worker wajib dinyalakan)
+    #   background -> selalu dijalankan di latar belakang FastAPI (tanpa Celery)
+    PIPELINE_MODE: str = os.getenv("PIPELINE_MODE", "auto").strip().lower()
 
     # Batas jumlah sel genotipe yang disalin ke tabel genotypes (sampel x SNP).
     MAX_GENOTYPE_ROWS: int = int(os.getenv("MAX_GENOTYPE_ROWS", "2000000"))

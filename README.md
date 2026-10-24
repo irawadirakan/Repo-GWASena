@@ -10,7 +10,7 @@ Mata kuliah BIF 1322 Pembangunan Perangkat Lunak, IPB University, Kelompok 04.
 | Backend | FastAPI (Python) |
 | Basis data | PostgreSQL 16 (kolom JSONB) |
 | Antrean tugas | Redis + Celery |
-| Engine bioinformatika | Python (validasi berkas); analisis GWAS menyusul minggu 8 |
+| Engine bioinformatika | Python (numpy, scipy): validasi, QC, PCA, GLM, MLM, koreksi |
 
 ## Menjalankan di komputer pengembang (ringkas)
 
@@ -58,22 +58,20 @@ GWASena/
 
 ## Endpoint yang sudah tersedia
 
-Fitur awal (login, daftar analisis, unggah dan validasi berkas) sudah berfungsi.
-Daftar endpoint, contoh pemakaian, dan panduan untuk frontend ada di
-[`docs/FITUR_AWAL.md`](docs/FITUR_AWAL.md).
+Alur utama (UC-01) sudah berfungsi dari login sampai unduh hasil. Daftar endpoint
+lengkap dan cara mencobanya ada di [`docs/ALUR_UTAMA.md`](docs/ALUR_UTAMA.md)
+(fitur awal minggu sebelumnya tetap di [`docs/FITUR_AWAL.md`](docs/FITUR_AWAL.md)).
 
 | Method | Path | Keterangan |
 |---|---|---|
 | GET | `/api/health` | Status API, PostgreSQL, Redis |
 | GET | `/api/meta` | Organisme target dan status modul |
-| POST | `/api/auth/register`, `/api/auth/login` | Daftar akun dan login |
-| GET | `/api/auth/me` | Profil pengguna yang sedang login |
-| GET | `/api/analyses` | Daftar analisis milik pengguna |
-| POST | `/api/analyses` | Buat sesi analisis |
-| GET | `/api/analyses/{id}` | Detail sesi analisis |
+| POST | `/api/auth/register`, `/api/auth/login`, GET `/api/auth/me` | Autentikasi |
+| GET/POST | `/api/analyses` | Daftar / buat sesi analisis |
 | POST | `/api/analyses/{id}/upload` | Unggah dan validasi VCF + CSV |
-| GET | `/api/analyses/models` | Daftar model uji asosiasi |
-| – | `/parameters`, `/run`, `/status`, `/results` | Terdaftar, membalas 501 (minggu 8) |
+| PUT | `/api/analyses/{id}/parameters` | Parameter QC dan model |
+| POST | `/api/analyses/{id}/run` | Jalankan QC → PCA → GLM/MLM → koreksi |
+| GET | `/api/analyses/{id}/status`, `/results`, `/results/csv`, `/plots/{jenis}` | Pantau dan ambil hasil |
 
 ## Alur kerja Git
 
