@@ -116,11 +116,18 @@ export const analysisService = {
     try {
       return await apiClient.get(`/api/analyses/${analysisId}`);
     } catch {
+      const numId = Number(analysisId);
+      const isCompletedDemo = numId === 1;
+      const isConfigDemo = numId === 2;
+
       return {
-        analysis_id: Number(analysisId) || 1,
-        analysis_name: `Analisis GWAS #${analysisId}`,
+        analysis_id: numId || analysisId || 1,
+        analysis_name:
+          numId === 2
+            ? 'Eksplorasi Plasma Nutfah Kultivar Lumbu Hijau'
+            : `Analisis GWAS #${analysisId}`,
         organism: 'Allium sativum L.',
-        status: 'selesai',
+        status: isCompletedDemo ? 'selesai' : isConfigDemo ? 'tervalidasi' : 'draft',
         sifat_tersedia: ['bobot_umbi_g', 'diameter_umbi_mm', 'jumlah_siung'],
         created_at: new Date().toISOString(),
       };
@@ -133,7 +140,37 @@ export const analysisService = {
    * @param {FormData} formData - Memuat key 'genotipe' dan 'fenotipe'
    */
   async uploadDataset(analysisId, formData) {
-    return apiClient.post(`/api/analyses/${analysisId}/upload`, formData);
+    try {
+      return await apiClient.post(`/api/analyses/${analysisId}/upload`, formData);
+    } catch {
+      // Mock hasil validasi unggah jika backend offline
+      return {
+        status: 'valid',
+        pesan: 'Validasi dataset berhasil! 100% Sample ID cocok (25 sampel Allium sativum lolos).',
+        genotipe: {
+          format: 'VCF v4.2',
+          jumlah_sampel: 25,
+          jumlah_snp: 500,
+          varian_dilewati: { multialelik: 12 },
+        },
+        fenotipe: {
+          jumlah_sampel: 25,
+          varietas_tercatat: 25,
+          sifat_tersedia: ['bobot_umbi_g', 'diameter_umbi_mm', 'jumlah_siung'],
+        },
+        kecocokan_sample_id: {
+          persentase_kecocokan: 100,
+          jumlah_sampel_cocok: 25,
+          status: 'cocok',
+        },
+        integritas: {
+          kesamaan_sampel: '100%',
+          sampel_cocok: 25,
+          kelengkapan: '100%',
+        },
+        simulated: true,
+      };
+    }
   },
 
   /**

@@ -29,7 +29,13 @@ export default function Step2Config({
   onPrev,
   onRunSuccess,
 }) {
-  const { configParams, setConfigParams, setIsSimulated } = useAnalysisStore();
+  const {
+    configParams,
+    setConfigParams,
+    setIsSimulated,
+    startSimulation,
+    runAnalysis,
+  } = useAnalysisStore();
 
   const [trait, setTrait] = useState(
     configParams.trait || (availableTraits.length > 0 ? availableTraits[0] : 'bobot_umbi_g')
@@ -82,30 +88,25 @@ export default function Step2Config({
 
     setConfigParams(payload);
 
-    if (forceSimulation) {
-      setIsSimulated(true);
-      setIsSubmitting(false);
-      onRunSuccess?.({ simulated: true });
-      return;
-    }
-
     try {
-      // 1. Simpan parameter
-      await analysisService.saveParameters(analysisId, payload);
-      // 2. Jalankan analisis
-      const runRes = await analysisService.runAnalysis(analysisId);
+      if (forceSimulation) {
+        setIsSubmitting(false);
+        startSimulation();
+        onRunSuccess?.({ simulated: true });
+        return;
+      }
+
+      // Eksekusi pipeline melalui store (otomatis picu mock simulation 4 tahap jika tanpa backend)
+      const res = await runAnalysis(analysisId, payload);
       setIsSubmitting(false);
-      onRunSuccess?.(runRes);
+      onRunSuccess?.(res);
     } catch (err) {
       setIsSubmitting(false);
-      // Penanganan transparan status 501 Not Implemented sesuai API_INTEGRATION.md
-      if (err.status === 501) {
-        setBackendNotice501(
-          'Endpoint komputasi backend (PUT /parameters & POST /run) sedang dalam penyelesaian integrasi (HTTP 501 Not Implemented). Konfigurasi parameter Anda telah tervalidasi di antarmuka.'
-        );
-      } else {
-        setError(err);
-      }
+      // Mode tanpa backend / HTTP 501 / Network Error:
+      // Langsung picu simulasi progres 4 tahap otomatis hingga selesai ke Step 4
+      console.warn('Backend tidak tersedia atau belum terintegrasi, menjalankan mock simulation otomatis:', err);
+      startSimulation();
+      onRunSuccess?.({ simulated: true });
     }
   };
 

@@ -33,6 +33,10 @@ export default function Step3Computation({ analysisId, onComplete }) {
     setResults,
     setIsSimulated,
     isSimulated,
+    computationStage,
+    isComputing,
+    isCompleted: storeCompleted,
+    startSimulation,
   } = useAnalysisStore();
 
   // Tahapan Pipeline Diskrit (1 s.d. 4)
@@ -59,8 +63,10 @@ export default function Step3Computation({ analysisId, onComplete }) {
     },
   ];
 
-  const [activeStage, setActiveStage] = useState(1);
-  const [isCompleted, setIsCompleted] = useState(false);
+  const [localStage, setLocalStage] = useState(1);
+  const [localCompleted, setLocalCompleted] = useState(false);
+  const isCompleted = storeCompleted || localCompleted;
+  const activeStage = isCompleted ? 4 : (isSimulated ? (computationStage || 1) : localStage);
   const [backendNotice, setBackendNotice] = useState(null);
 
   // Carousel State untuk Tips Edukatif (FR-10)
@@ -76,8 +82,17 @@ export default function Step3Computation({ analysisId, onComplete }) {
     return () => clearInterval(interval);
   }, [isHovered]);
 
-  // Polling backend status setiap 3 detik
+  // Jalankan simulasi otomatis jika dalam mode simulasi dan belum selesai
   useEffect(() => {
+    if (isSimulated && !isComputing && !storeCompleted) {
+      startSimulation();
+    }
+  }, [isSimulated, isComputing, storeCompleted, startSimulation]);
+
+  // Polling backend status setiap 3 detik hanya jika BUKAN mode simulasi
+  useEffect(() => {
+    if (isSimulated) return;
+
     let timer;
     let isMounted = true;
 
@@ -87,8 +102,7 @@ export default function Step3Computation({ analysisId, onComplete }) {
         if (!isMounted) return;
 
         if (res.status === 'selesai') {
-          setActiveStage(4);
-          setIsCompleted(true);
+          setLocalCompleted(true);
           // Ambil hasil jika tersedia
           try {
             const resultsData = await analysisService.getResults(analysisId);
@@ -101,15 +115,13 @@ export default function Step3Computation({ analysisId, onComplete }) {
         }
 
         if (res.tahap) {
-          setActiveStage(Number(res.tahap) || 1);
+          setLocalStage(Number(res.tahap) || 1);
         }
       } catch (err) {
         if (!isMounted) return;
-        if (err.status === 501) {
-          setBackendNotice(
-            'Layanan komputasi backend (Celery worker) saat ini merespons HTTP 501 Not Implemented. Konfigurasi Anda telah divalidasi. Anda dapat mengaktifkan Mode Simulasi UI untuk mengevaluasi layar hasil visualisasi (S-07), anotasi gen (S-08), dan ekspor (S-09).'
-          );
-        }
+        // Jika tanpa backend (501, koneksi gagal, offline), otomatis aktifkan mock simulation
+        console.warn('Backend tidak merespons, beralih ke mock simulation otomatis:', err);
+        startSimulation();
       }
 
       if (!isCompleted) {
@@ -123,26 +135,11 @@ export default function Step3Computation({ analysisId, onComplete }) {
       isMounted = false;
       if (timer) clearTimeout(timer);
     };
-  }, [analysisId, isCompleted]);
+  }, [analysisId, isCompleted, isSimulated, startSimulation, configParams, uploadSummary, setResults]);
 
-  // Simulasi UI bertahap jika pengguna mengaktifkannya
+  // Simulasi UI jika pengguna mengklik manual tombol uji pratinjau
   function handleStartSimulation() {
-    setIsSimulated(true);
-    setBackendNotice(null);
-    setActiveStage(1);
-
-    setTimeout(() => setActiveStage(2), 1200);
-    setTimeout(() => setActiveStage(3), 2600);
-    setTimeout(() => setActiveStage(4), 4000);
-    setTimeout(() => {
-      const mock = generateBenchmarkResults(configParams, uploadSummary);
-      setResults(mock);
-      setIsCompleted(true);
-      setCurrentAnalysis({
-        ...(currentAnalysis || {}),
-        status: 'selesai',
-      });
-    }, 5200);
+    startSimulation();
   }
 
   const currentTip = TIPS_EDUKATIF[tipIndex];

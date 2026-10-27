@@ -41,6 +41,11 @@ export default function AnalysisWizardPage() {
   const [isAccessDenied, setIsAccessDenied] = useState(false);
 
   async function loadAnalysis() {
+    // Jangan tindih state lokal jika sedang dalam proses simulasi komputasi aktif
+    if (useAnalysisStore.getState().isSimulated && useAnalysisStore.getState().isComputing) {
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
     setIsAccessDenied(false);
@@ -51,6 +56,8 @@ export default function AnalysisWizardPage() {
     } catch (err) {
       if (err.status === 403) {
         setIsAccessDenied(true);
+      } else if (isSimulated || useAnalysisStore.getState().isSimulated) {
+        console.warn('Backend tidak tersedia dalam mode simulasi, mempertahankan sesi lokal:', err);
       } else {
         setError(err);
       }
@@ -154,7 +161,9 @@ export default function AnalysisWizardPage() {
             analysisId={id}
             onUploadSuccess={(res) => {
               setUploadSummary(res);
-              loadAnalysis(); // Muat ulang data sesi dari backend
+              if (!res?.simulated && !isSimulated && !useAnalysisStore.getState().isSimulated) {
+                loadAnalysis(); // Muat ulang data sesi dari backend jika bukan mode simulasi/offline
+              }
             }}
             onNext={() => setActiveStep(2)}
           />
@@ -165,9 +174,11 @@ export default function AnalysisWizardPage() {
             analysisId={id}
             availableTraits={availableTraits}
             onPrev={() => setActiveStep(1)}
-            onRunSuccess={() => {
+            onRunSuccess={(res) => {
               setActiveStep(3);
-              loadAnalysis();
+              if (!res?.simulated && !isSimulated && !useAnalysisStore.getState().isSimulated) {
+                loadAnalysis();
+              }
             }}
           />
         )}
@@ -177,7 +188,9 @@ export default function AnalysisWizardPage() {
             analysisId={id}
             onComplete={() => {
               setActiveStep(4);
-              loadAnalysis();
+              if (!isSimulated && !useAnalysisStore.getState().isSimulated) {
+                loadAnalysis();
+              }
             }}
           />
         )}
