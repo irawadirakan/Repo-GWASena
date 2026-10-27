@@ -1,108 +1,322 @@
-/* Warna mengikuti desain high-fidelity Figma GWASena (LKP 5):
-   biru tua IPB + aksen ungu-biru, indikator hijau (valid) dan merah (galat). */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* GWASena 2.0 — Precision Bioluminescence & Figma Design Tokens */
+
+/* ── Dark Mode (Default Cosmic Purple-Indigo-Blue Canvas) ── */
 :root {
-  --navy-900: #0d1433;
-  --navy-800: #151d45;
-  --navy-700: #1f2a5c;
-  --line: #2d3a75;
-  --ipb-blue: #2f5fd0;
-  --violet: #6c5ce7;
-  --text: #eef1ff;
-  --muted: #9aa4d6;
-  --ok: #2ecc8f;
-  --bad: #ff6b6b;
-  font-family: "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  color: var(--text);
-  background: var(--navy-900);
+  --bg-background: #080D24;
+  --bg-gradient: linear-gradient(135deg, #080D24 0%, #111A3E 50%, #1B1240 100%);
+  --bg-surface: rgba(22, 33, 68, 0.72);
+  --bg-surface-elevated: #0A1024;
+  --bg-surface-glass: rgba(18, 27, 56, 0.82);
+  --border-subtle: rgba(148, 163, 184, 0.18);
+  --border-strong: rgba(148, 163, 184, 0.28);
+  --text-primary: #FFFFFF;
+  --text-secondary: #94A3B8;
+  --text-muted: #64748B;
+  --accent-primary: #5B4DFE;
+  --accent-cyan: #06B6D4;
+  --accent-indigo: #6366F1;
+  --status-success: #10B981;
+  --status-warning: #F59E0B;
+  --status-error: #EF4444;
 }
 
-* { box-sizing: border-box; }
-body { margin: 0; }
-
-.page {
-  min-height: 100vh;
-  background:
-    radial-gradient(60rem 40rem at -10% 20%, rgba(108, 92, 231, 0.35), transparent 60%),
-    radial-gradient(50rem 40rem at 110% 60%, rgba(47, 95, 208, 0.35), transparent 60%),
-    var(--navy-900);
+/* ── Light Mode (Soft Crisp Periwinkle-Alabaster Canvas) ── */
+.light {
+  --bg-background: #E8EEFA;
+  --bg-gradient: linear-gradient(135deg, #E8EEFA 0%, #F1F5FD 50%, #E5EAFC 100%);
+  --bg-surface: rgba(255, 255, 255, 0.85);
+  --bg-surface-elevated: #FFFFFF;
+  --bg-surface-glass: rgba(255, 255, 255, 0.75);
+  --border-subtle: #E2E8F0;
+  --border-strong: rgba(99, 102, 241, 0.22);
+  --text-primary: #0F172A;
+  --text-secondary: #334155;
+  --text-muted: #64748B;
+  --accent-primary: #5B4DFE;
+  --accent-cyan: #0891B2;
+  --accent-indigo: #4F46E5;
+  --status-success: #059669;
+  --status-warning: #D97706;
+  --status-error: #DC2626;
 }
 
-.topbar {
-  display: flex; align-items: center; gap: 2rem;
-  padding: 0.9rem 2rem; border-bottom: 1px solid var(--line);
-  background: rgba(13, 20, 51, 0.8);
+@layer base {
+  body {
+    background: var(--bg-gradient);
+    background-color: var(--bg-background);
+    background-attachment: fixed;
+    color: var(--text-primary);
+    font-family: 'Source Sans 3', 'Source Sans Pro', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    min-height: 100vh;
+    margin: 0;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Source Sans 3', 'Source Sans Pro', sans-serif;
+    letter-spacing: -0.015em;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  /* Form inputs styling */
+  input:not([type="checkbox"]):not([type="radio"]), select, textarea {
+    color: var(--text-primary);
+    background-color: var(--bg-surface-elevated);
+  }
+
+  input::placeholder, textarea::placeholder {
+    color: var(--text-muted);
+    opacity: 0.85;
+  }
+
+  /* Fix browser autofill */
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover, 
+  input:-webkit-autofill:focus, 
+  input:-webkit-autofill:active {
+    -webkit-text-fill-color: var(--text-primary) !important;
+    -webkit-box-shadow: 0 0 0 1000px var(--bg-surface-elevated) inset !important;
+    box-shadow: 0 0 0 1000px var(--bg-surface-elevated) inset !important;
+    transition: background-color 5000s ease-in-out 0s;
+  }
 }
-.brand { font-weight: 700; font-size: 1.15rem; }
-.nav { display: flex; gap: 1.25rem; }
-.nav a { color: var(--muted); text-decoration: none; font-size: 0.9rem; }
-.nav a[aria-current="page"] { color: var(--text); }
 
-.content { max-width: 60rem; margin: 0 auto; padding: 1.5rem 1.25rem 4rem; }
+@layer components {
+  /* ── 3-Layer High-Separation Glassmorphism Panels ── */
+  .figma-card, .glass-panel {
+    border-radius: 1.5rem;
+    transition: all 180ms cubic-bezier(0.22, 1, 0.36, 1);
+    /* Light Mode Default */
+    background: linear-gradient(145deg, rgba(255, 255, 255, 0.88) 0%, rgba(248, 250, 255, 0.76) 100%);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border: 1px solid rgba(99, 102, 241, 0.22);
+    box-shadow: inset 0 1px 1px 0 rgba(255, 255, 255, 0.95), 0 18px 40px -12px rgba(30, 41, 59, 0.12), 0 4px 12px -2px rgba(79, 70, 229, 0.06);
+  }
 
-h1 { font-size: 1.9rem; margin: 1.75rem 0 0.4rem; }
-h2 { font-size: 1.05rem; margin: 0 0 0.9rem; }
-.lead { color: var(--muted); max-width: 42rem; line-height: 1.6; margin: 0 0 1.5rem; }
-.muted { color: var(--muted); }
+  .dark .figma-card, .dark .glass-panel {
+    background: linear-gradient(145deg, rgba(22, 33, 68, 0.74) 0%, rgba(15, 23, 48, 0.84) 100%);
+    backdrop-filter: blur(20px) saturate(160%);
+    -webkit-backdrop-filter: blur(20px) saturate(160%);
+    border: 1px solid rgba(148, 163, 184, 0.22);
+    box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.18), 0 20px 45px -15px rgba(2, 6, 23, 0.75), 0 0 0 1px rgba(15, 23, 42, 0.4);
+  }
 
-.stepper {
-  list-style: none; margin: 0; padding: 0.7rem 1rem;
-  display: flex; flex-wrap: wrap; gap: 0.5rem 1.25rem;
-  background: var(--navy-800); border: 1px solid var(--line); border-radius: 0.8rem;
+  /* Sub-Card / Inner Metric Box (High-Contrast Inside Glass) */
+  .glass-subcard {
+    border-radius: 1rem;
+    transition: all 150ms ease;
+    background: rgba(255, 255, 255, 0.95);
+    border: 1px solid #CBD5E1;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05);
+  }
+
+  .dark .glass-subcard {
+    background: rgba(11, 17, 38, 0.78);
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
+  }
+
+  /* Floating Liquid Glass Navbar */
+  .glass-navbar {
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    border-bottom: 1px solid rgba(99, 102, 241, 0.18);
+    box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.06);
+  }
+
+  .dark .glass-navbar {
+    background: rgba(11, 17, 40, 0.82);
+    backdrop-filter: blur(24px) saturate(160%);
+    -webkit-backdrop-filter: blur(24px) saturate(160%);
+    border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+    box-shadow: 0 4px 24px -2px rgba(2, 6, 23, 0.65);
+  }
+
+  /* High-Contrast Input Fields */
+  .figma-input {
+    border-radius: 0.75rem;
+    padding: 0.5rem 0.875rem;
+    font-size: 0.875rem;
+    transition: all 150ms ease;
+    background: #FFFFFF;
+    border: 1px solid #94A3B8;
+    color: #0F172A;
+    box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.06);
+  }
+
+  .figma-input::placeholder {
+    color: #94A3B8;
+  }
+
+  .figma-input:focus {
+    border-color: #5B4DFE;
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(91, 77, 254, 0.18);
+  }
+
+  .dark .figma-input {
+    background: #0A1024;
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    color: #F8FAFC;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.3);
+  }
+
+  .dark .figma-input::placeholder {
+    color: #64748B;
+  }
+
+  .dark .figma-input:focus {
+    border-color: #06B6D4;
+    box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.2);
+  }
+
+  /* Tactile Buttons with Micro-Interactions (80ms click press, 120ms hover lift) */
+  .figma-btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-[#5B4DFE] px-4 py-2.5 text-xs sm:text-sm font-bold text-white shadow-md hover:bg-[#4F46E5] hover:-translate-y-[1px] hover:shadow-lg active:scale-[0.97] active:brightness-95 transition-all duration-100 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none;
+  }
+
+  .figma-btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 dark:border-white/10 bg-[#EEF2F6] dark:bg-[#162142] px-4 py-2.5 text-xs sm:text-sm font-semibold text-slate-800 dark:text-white shadow-sm hover:bg-slate-200 dark:hover:bg-[#1E2C58] hover:-translate-y-[1px] hover:shadow-md active:scale-[0.97] active:brightness-95 transition-all duration-100 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none;
+  }
+
+  .btn-tactile {
+    @apply transition-all duration-100 hover:-translate-y-[1px] active:scale-[0.97] active:brightness-95 disabled:transform-none disabled:shadow-none;
+  }
+
+  .figma-pill-stepper {
+    transition: all 180ms ease;
+    background: rgba(255, 255, 255, 0.92);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border: 1px solid rgba(99, 102, 241, 0.22);
+    box-shadow: inset 0 1px 1px 0 rgba(255, 255, 255, 0.95), 0 12px 30px -8px rgba(30, 41, 59, 0.1);
+  }
+
+  .dark .figma-pill-stepper {
+    background: linear-gradient(145deg, rgba(22, 33, 68, 0.78) 0%, rgba(15, 23, 48, 0.88) 100%);
+    backdrop-filter: blur(20px) saturate(160%);
+    -webkit-backdrop-filter: blur(20px) saturate(160%);
+    border: 1px solid rgba(148, 163, 184, 0.22);
+    box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.18), 0 16px 36px -10px rgba(2, 6, 23, 0.7);
+  }
 }
-.step { display: flex; align-items: center; gap: 0.5rem; color: var(--muted); font-size: 0.85rem; }
-.step-num {
-  width: 1.6rem; height: 1.6rem; border-radius: 50%;
-  display: grid; place-items: center; font-size: 0.8rem;
-  background: var(--navy-700); border: 1px solid var(--line);
+
+/* Scientific data typography - tabular nums for aligned columns */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
 }
-.step.is-active { color: var(--text); font-weight: 600; }
-.step.is-active .step-num { background: var(--ipb-blue); border-color: var(--ipb-blue); }
 
-.panel {
-  background: rgba(21, 29, 69, 0.92); border: 1px solid var(--line);
-  border-radius: 0.9rem; padding: 1.25rem 1.4rem; margin-bottom: 1rem;
+.font-scientific {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-variant-numeric: tabular-nums;
 }
-.panel-head { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
 
-.btn {
-  font: inherit; font-size: 0.85rem; font-weight: 600; color: var(--text);
-  background: linear-gradient(90deg, var(--ipb-blue), var(--violet));
-  border: 0; border-radius: 0.5rem; padding: 0.5rem 1rem; cursor: pointer;
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
 }
-.btn:disabled { opacity: 0.6; cursor: wait; }
-.btn:focus-visible, .nav a:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
-
-.alert {
-  border-left: 3px solid var(--bad); background: rgba(255, 107, 107, 0.08);
-  padding: 0.7rem 0.9rem; border-radius: 0.4rem; line-height: 1.55;
+::-webkit-scrollbar-track {
+  background: var(--bg-surface);
 }
-code { background: var(--navy-700); padding: 0.1rem 0.35rem; border-radius: 0.3rem; font-size: 0.85em; }
-
-.status-list { display: grid; gap: 0.5rem; }
-.status-row {
-  display: grid; grid-template-columns: auto 13rem 8rem 1fr; align-items: center; gap: 0.75rem;
-  padding: 0.6rem 0.8rem; background: var(--navy-700); border-radius: 0.5rem; font-size: 0.9rem;
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 3px;
 }
-.dot { width: 0.6rem; height: 0.6rem; border-radius: 50%; }
-.dot.ok { background: var(--ok); }
-.dot.bad { background: var(--bad); }
-.status-text.ok { color: var(--ok); }
-.status-text.bad { color: var(--bad); }
-.status-detail { color: var(--muted); font-size: 0.82rem; overflow-wrap: anywhere; }
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
 
-.species { margin: 0 0 0.75rem; }
-.traits { margin: 0; padding-left: 1.2rem; line-height: 1.8; }
+/* Custom animations with GPU acceleration */
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 
-.modules { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.35rem; }
-.modules li { display: grid; grid-template-columns: 3.5rem 1fr auto; gap: 0.75rem; align-items: center; font-size: 0.9rem; padding: 0.35rem 0; border-bottom: 1px solid var(--line); }
-.modules li:last-child { border-bottom: 0; }
-.mod-id { color: var(--muted); font-variant-numeric: tabular-nums; }
-.badge { font-size: 0.75rem; padding: 0.15rem 0.55rem; border-radius: 1rem; border: 1px solid var(--line); color: var(--muted); }
-.badge.kerangka, .badge.berfungsi { color: var(--ok); border-color: rgba(46, 204, 143, 0.5); }
-.badge.sebagian { color: #f5c26b; border-color: rgba(245, 194, 107, 0.5); }
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 
-@media (max-width: 640px) {
-  .status-row { grid-template-columns: auto 1fr auto; }
-  .status-detail { grid-column: 2 / -1; }
-  .topbar { padding: 0.8rem 1rem; gap: 1rem; }
+@keyframes pop-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes modal-in {
+  from { opacity: 0; transform: scale(0.95) translateY(6px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@keyframes dropdown-in {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes fade-down {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes highlight-glow {
+  0% { box-shadow: 0 0 0 0 rgba(6, 182, 212, 0.7); border-color: rgba(6, 182, 212, 0.9); }
+  50% { box-shadow: 0 0 16px 4px rgba(6, 182, 212, 0.4); border-color: rgba(6, 182, 212, 0.8); }
+  100% { box-shadow: 0 0 0 0 rgba(6, 182, 212, 0); }
+}
+
+@keyframes pulse-ring {
+  0% { box-shadow: 0 0 0 0 rgba(6, 182, 212, 0.4); }
+  70% { box-shadow: 0 0 0 8px rgba(6, 182, 212, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(6, 182, 212, 0); }
+}
+
+.animate-fade-in {
+  animation: fade-in 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-step-transition {
+  animation: slide-up 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-pop-in {
+  animation: pop-in 200ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.animate-modal-in {
+  animation: modal-in 200ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.animate-dropdown-in {
+  animation: dropdown-in 150ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.animate-fade-down {
+  animation: fade-down 200ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-glow-brief {
+  animation: highlight-glow 500ms ease-out 1;
+}
+
+.animate-pulse-ring {
+  animation: pulse-ring 1.8s ease-in-out infinite;
+}
+
+/* Reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
