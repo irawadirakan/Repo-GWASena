@@ -134,11 +134,13 @@ lokal, keduanya bisa diganti:
 1. Di `.env`, ganti baris DATABASE_URL menjadi:
    ```
    DATABASE_URL=sqlite:///./storage/gwasena_dev.db
+   PIPELINE_MODE=background
    ```
 2. Lewati langkah `docker compose up -d`. Jalankan backend dan frontend seperti biasa.
 
 Basis data akan berupa satu berkas `storage/gwasena_dev.db` (tidak ikut ke Git).
-Di `/api/health`, Redis akan berstatus tidak terhubung; itu normal untuk tahap ini.
+Di `/api/health`, Redis akan berstatus tidak terhubung; itu normal, analisis tetap
+berjalan di latar belakang FastAPI.
 
 Catatan: SQLite hanya untuk memudahkan pengembangan. Demonstrasi dan deployment
 tetap memakai PostgreSQL sesuai rancangan.
