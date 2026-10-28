@@ -1,125 +1,73 @@
-import { useEffect, useState } from "react";
-import Stepper from "./components/Stepper.jsx";
-import StatusPanel from "./components/StatusPanel.jsx";
-import UploadStep from "./components/UploadStep.jsx";
-import { api } from "./services/api.js";
+import { useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import AuthLayout from './layouts/AuthLayout.jsx';
+import AppLayout from './layouts/AppLayout.jsx';
+import ProtectedRoute from './components/common/ProtectedRoute.jsx';
+import IntroPage from './pages/IntroPage.jsx';
+import LoginPage from './pages/LoginPage.jsx';
+import RegisterPage from './pages/RegisterPage.jsx';
+import DashboardPage from './pages/DashboardPage.jsx';
+import HistoryPage from './pages/HistoryPage.jsx';
+import AnalysisWizardPage from './pages/AnalysisWizardPage.jsx';
+import { useAuthStore } from './store/useAuthStore.js';
 
-const STATUS_LABEL = {
-  berfungsi: "berfungsi",
-  sebagian: "sebagian",
-  kerangka: "kerangka siap",
-  belum: "belum dibuat",
-};
+/**
+ * Root Gatekeeper (Logika Hybrid Onboarding & Sesi)
+ * Acuan: docs/gwasena-v2/USER_FLOW.md Bagian 2
+ */
+function RootGatekeeper() {
+  const { isAuthenticated, isInitialized } = useAuthStore();
 
-export default function App() {
-  const [currentStep, setCurrentStep] = useState(0);
-  const [uploadedFiles, setUploadedFiles] = useState(null);
-  const [health, setHealth] = useState(null);
-  const [meta, setMeta] = useState(null);
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  if (!isInitialized) return null;
 
-  async function load() {
-    setLoading(true);
-    setError("");
-    try {
-      const [h, m] = await Promise.all([api.health(), api.meta()]);
-      setHealth(h);
-      setMeta(m);
-    } catch (e) {
-      setHealth(null);
-      setError(e.message);
-    } finally {
-      setLoading(false);
-    }
+  if (isAuthenticated) {
+    return <Navigate to="/dashboard" replace />;
   }
 
+  const introCompleted = localStorage.getItem('gwasena_intro_completed') === 'true';
+  if (!introCompleted) {
+    return <Navigate to="/welcome" replace />;
+  }
+
+  return <Navigate to="/login" replace />;
+}
+
+export default function App() {
+  const { checkSession } = useAuthStore();
+
   useEffect(() => {
-    load();
-  }, []);
-
-  const handleUploadComplete = (files) => {
-    setUploadedFiles(files);
-    setCurrentStep(1); // Berpindah ke tahap 2: Konfigurasi
-  };
-
-  const org = meta?.organisme;
+    checkSession();
+  }, [checkSession]);
 
   return (
-    <div className="page">
-      <header className="topbar">
-        <span className="brand">GWASena</span>
-        <nav className="nav">
-          <a href="#" aria-current="page">Dashboard</a>
-          <a href="#">Riwayat Analisis</a>
-        </nav>
-      </header>
+    <BrowserRouter>
+      <Routes>
+        {/* ── Root Gatekeeper ── */}
+        <Route path="/" element={<RootGatekeeper />} />
 
-      <main className="content">
-        <Stepper active={currentStep} />
+        {/* ── Rute Publik (Dibungkus AuthLayout dengan persistent DnaBackdrop) ── */}
+        <Route element={<AuthLayout />}>
+          <Route path="/welcome" element={<IntroPage />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
+        </Route>
 
-        <h1>Analisis GWAS bawang putih</h1>
-        <p className="lead">
-          Platform analisis Genome-Wide Association Study terpadu untuk komoditas bawang putih.
-        </p>
+        {/* ── Rute Terproteksi (Dibungkus ProtectedRoute & AppLayout) ── */}
+        <Route
+          element={
+            <ProtectedRoute>
+              <AppLayout />
+            </ProtectedRoute>
+          }
+        >
+          <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/history" element={<HistoryPage />} />
+          <Route path="/analyses/:id" element={<AnalysisWizardPage />} />
+        </Route>
 
-        {/* Form Upload & Validasi (Target Progres Minggu 7) */}
-        {currentStep === 0 && (
-          <UploadStep onNext={handleUploadComplete} />
-        )}
-
-        {/* Tampilan Konfigurasi jika form upload selesai */}
-        {currentStep === 1 && (
-          <section className="panel" style={{ marginTop: "1.5rem" }}>
-            <h2>2. Konfigurasi Parameter QC & Model</h2>
-            <p className="muted">Berkas berhasil divalidasi di browser:</p>
-            <ul>
-              <li>Genotipe: <strong>{uploadedFiles?.genotypeFile?.name}</strong></li>
-              <li>Fenotipe: <strong>{uploadedFiles?.phenotypeFile?.name}</strong></li>
-            </ul>
-            <button
-              onClick={() => setCurrentStep(0)}
-              style={{ marginTop: "1rem", padding: "0.5rem 1rem", cursor: "pointer" }}
-            >
-              ← Kembali ke Unggah Berkas
-            </button>
-          </section>
-        )}
-
-        <StatusPanel health={health} error={error} loading={loading} onRefresh={load} />
-
-        {org && (
-          <section className="panel">
-            <h2>Organisme target</h2>
-            <p className="species">
-              <em>{org.nama_ilmiah}</em> · {org.nama_umum}, {org.ploidi}, {org.jumlah_kromosom} kromosom
-            </p>
-            <p className="muted">Contoh sifat yang dianalisis:</p>
-            <ul className="traits">
-              {org.contoh_sifat_fenotipe.map((t) => (
-                <li key={t.kolom}>
-                  {t.label} <span className="muted">({t.satuan})</span>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
-
-        {meta && (
-          <section className="panel">
-            <h2>Modul pipeline</h2>
-            <ul className="modules">
-              {meta.modul.map((m) => (
-                <li key={m.id}>
-                  <span className="mod-id">{m.id}</span>
-                  <span>{m.nama}</span>
-                  <span className={`badge ${m.status}`}>{STATUS_LABEL[m.status] || m.status}</span>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
-      </main>
-    </div>
+        {/* ── Wildcard Fallback ── */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </BrowserRouter>
   );
 }
