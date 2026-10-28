@@ -43,8 +43,22 @@ export default function Step2Config({
   const [mind, setMind] = useState(configParams.qc?.mind ?? 0.10);
   const [geno, setGeno] = useState(configParams.qc?.geno ?? 0.10);
   const [maf, setMaf] = useState(configParams.qc?.maf ?? 0.05);
-  const [hwe, setHwe] = useState(configParams.qc?.hwe ?? '1e-6');
-  const [kingCutoff, setKingCutoff] = useState(configParams.qc?.king_cutoff ?? 0.177);
+
+  // HWE Filter (Nonaktif secara bawaan untuk tanaman klonal bawang putih Allium sativum)
+  const [isHweActive, setIsHweActive] = useState(
+    configParams.qc?.hwe !== null && configParams.qc?.hwe !== undefined
+  );
+  const [hwe, setHwe] = useState(
+    configParams.qc?.hwe != null ? String(configParams.qc.hwe) : '1e-6'
+  );
+
+  // KING Cutoff Filter (Nonaktif secara bawaan untuk tanaman klonal bawang putih Allium sativum)
+  const [isKingActive, setIsKingActive] = useState(
+    configParams.qc?.king_cutoff !== null && configParams.qc?.king_cutoff !== undefined
+  );
+  const [kingCutoff, setKingCutoff] = useState(
+    configParams.qc?.king_cutoff != null ? configParams.qc.king_cutoff : 0.177
+  );
 
   // Model & Koreksi
   const [model, setModel] = useState(configParams.model || 'MLM');
@@ -77,8 +91,8 @@ export default function Step2Config({
         mind: parseFloat(mind),
         geno: parseFloat(geno),
         maf: parseFloat(maf),
-        hwe: typeof hwe === 'string' ? parseFloat(hwe) : hwe,
-        king_cutoff: parseFloat(kingCutoff),
+        hwe: isHweActive && hwe ? (typeof hwe === 'string' ? parseFloat(hwe) : hwe) : null,
+        king_cutoff: isKingActive && kingCutoff != null ? parseFloat(kingCutoff) : null,
       },
       n_pc: 3,
       model,
@@ -96,17 +110,28 @@ export default function Step2Config({
         return;
       }
 
-      // Eksekusi pipeline melalui store (otomatis picu mock simulation 4 tahap jika tanpa backend)
+      // Eksekusi pipeline melalui store
       const res = await runAnalysis(analysisId, payload);
       setIsSubmitting(false);
       onRunSuccess?.(res);
     } catch (err) {
       setIsSubmitting(false);
-      // Mode tanpa backend / HTTP 501 / Network Error:
-      // Langsung picu simulasi progres 4 tahap otomatis hingga selesai ke Step 4
-      console.warn('Backend tidak tersedia atau belum terintegrasi, menjalankan mock simulation otomatis:', err);
-      startSimulation();
-      onRunSuccess?.({ simulated: true });
+      const isNetworkError = !err.status || err.status === 0 || err.code === 'ERR_NETWORK';
+      const is501 = err.status === 501;
+
+      if (isNetworkError || is501) {
+        // Mode tanpa backend / HTTP 501 / Network Error:
+        console.warn('Backend tidak tersedia (Network / 501), menjalankan mock simulation otomatis:', err);
+        startSimulation();
+        onRunSuccess?.({ simulated: true });
+      } else {
+        // Error 4xx / 500 dari backend: DILARANG PINDAH SIMULASI & DILARANG PINDAH LANGKAH!
+        console.error('Konfigurasi ditolak backend (HTTP ' + err.status + '):', err);
+        setError({
+          message: err.message || err.pesan || 'Terjadi kesalahan saat memproses parameter analisis.',
+          details: err.details || err.rincian || [],
+        });
+      }
     }
   };
 
@@ -297,54 +322,113 @@ export default function Step2Config({
             </div>
 
             {/* 4. Relatedness / Kinship Cutoff (king_cutoff) */}
-            <div className="space-y-2 glass-subcard p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <label htmlFor="king" className="text-xs font-bold text-slate-900 dark:text-white font-sans">
-                    Kinship Cutoff KING
-                  </label>
-                  <EduHintTooltip hintKey="king_cutoff" />
-                </div>
-                <span className="font-mono text-xs font-bold text-[#5B4DFE] dark:text-[#06B6D4] tabular-nums">
-                  {kingCutoff}
-                </span>
+            <div className={`space-y-3 glass-subcard p-4 transition-all duration-200 ${!isKingActive ? 'opacity-85' : ''}`}>
+              <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-2">
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={isKingActive}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setIsKingActive(checked);
+                      if (checked && kingCutoff == null) setKingCutoff(0.177);
+                    }}
+                    className="rounded border-slate-400 dark:border-slate-600 text-[#5B4DFE] focus:ring-[#5B4DFE] h-4 w-4 cursor-pointer"
+                  />
+                  <span className="text-xs font-bold text-slate-900 dark:text-white font-sans">
+                    Aktifkan Filter Kinship KING (king_cutoff)
+                  </span>
+                </label>
+                <EduHintTooltip hintKey="king_cutoff" />
               </div>
+
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-sans text-slate-500 dark:text-slate-400">
+                  {isKingActive ? 'Ambang kinship aktif:' : 'Status filter:'}
+                </span>
+                {isKingActive ? (
+                  <span className="font-mono text-xs font-bold text-[#5B4DFE] dark:text-[#06B6D4] tabular-nums">
+                    {kingCutoff}
+                  </span>
+                ) : (
+                  <span className="rounded-full bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 px-2 py-0.5 text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+                    Nonaktif (null)
+                  </span>
+                )}
+              </div>
+
               <input
                 id="king"
                 type="range"
+                disabled={!isKingActive}
                 min={QC_PARAM_RANGES.king_cutoff.min}
                 max={QC_PARAM_RANGES.king_cutoff.max}
                 step={QC_PARAM_RANGES.king_cutoff.step}
-                value={kingCutoff}
+                value={kingCutoff ?? 0.177}
                 onChange={(e) => setKingCutoff(e.target.value)}
-                className="w-full accent-[#5B4DFE] dark:accent-[#06B6D4] cursor-pointer"
+                className={`w-full accent-[#5B4DFE] dark:accent-[#06B6D4] ${isKingActive ? 'cursor-pointer' : 'cursor-not-allowed opacity-40'}`}
               />
               <span className="text-[11px] text-slate-500 dark:text-slate-400 block font-sans">
-                Default: 0.177 (hubungan derajat pertama / klon kembar)
+                {isKingActive ? (
+                  'Nilai rekomendasi: 0.177 (hubungan derajat pertama / klon kembar)'
+                ) : (
+                  <span className="text-amber-700 dark:text-amber-400 font-medium">
+                    Nonaktif secara bawaan untuk tanaman klonal
+                  </span>
+                )}
               </span>
             </div>
 
             {/* 5. Hardy-Weinberg Equilibrium (hwe) - Input khusus dengan catatan agronomi */}
-            <div className="md:col-span-2 space-y-2 glass-subcard p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <label htmlFor="hwe" className="text-xs font-bold text-slate-900 dark:text-white font-sans">
-                    Ambang Batas HWE p-value (hwe)
-                  </label>
-                  <EduHintTooltip hintKey="hwe" />
-                </div>
-                <input
-                  id="hwe"
-                  type="text"
-                  value={hwe}
-                  onChange={(e) => setHwe(e.target.value)}
-                  className="w-28 font-mono text-xs font-bold text-[#5B4DFE] dark:text-[#06B6D4] bg-white dark:bg-[#121B38] rounded-xl border border-slate-300 dark:border-white/10 px-3 py-1.5 text-right focus:outline-none focus:border-[#5B4DFE]"
-                />
+            <div className={`md:col-span-2 space-y-3 glass-subcard p-4 transition-all duration-200 ${!isHweActive ? 'opacity-85' : ''}`}>
+              <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-2">
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={isHweActive}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setIsHweActive(checked);
+                      if (checked && !hwe) setHwe('1e-6');
+                    }}
+                    className="rounded border-slate-400 dark:border-slate-600 text-[#5B4DFE] focus:ring-[#5B4DFE] h-4 w-4 cursor-pointer"
+                  />
+                  <span className="text-xs font-bold text-slate-900 dark:text-white font-sans">
+                    Aktifkan Filter Hardy-Weinberg (HWE)
+                  </span>
+                </label>
+                <EduHintTooltip hintKey="hwe" />
               </div>
+
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <span className="text-xs font-bold text-slate-900 dark:text-white font-sans block">
+                    Ambang Batas HWE p-value (hwe)
+                  </span>
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400 font-sans">
+                    {isHweActive ? 'Rekomendasi nilai awal: 1e-6' : 'Nonaktif secara bawaan untuk tanaman klonal'}
+                  </span>
+                </div>
+                {isHweActive ? (
+                  <input
+                    id="hwe"
+                    type="text"
+                    value={hwe}
+                    onChange={(e) => setHwe(e.target.value)}
+                    className="w-28 font-mono text-xs font-bold text-[#5B4DFE] dark:text-[#06B6D4] bg-white dark:bg-[#121B38] rounded-xl border border-slate-300 dark:border-white/10 px-3 py-1.5 text-right focus:outline-none focus:border-[#5B4DFE]"
+                    placeholder="1e-6"
+                  />
+                ) : (
+                  <span className="rounded-full bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 px-2.5 py-1 text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                    Nonaktif (null)
+                  </span>
+                )}
+              </div>
+
               <div className="rounded-xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 p-3 text-[11px] text-slate-700 dark:text-slate-300 leading-relaxed flex items-start gap-2">
                 <Info className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
                 <span className="font-serif leading-relaxed">
-                  <strong>Catatan Khusus Bawang Putih:</strong> Tanaman bawang putih (<span className="italic font-bold">Allium sativum</span> L.) umumnya diperbanyak secara vegetatif (klonal), sehingga penyimpangan HWE sering terjadi secara alami. Dianjurkan menggunakan ambang longgar (<code>1e-6</code>) agar varian penting tidak terbuang.
+                  <strong>Catatan Khusus Bawang Putih:</strong> Tanaman bawang putih (<span className="italic font-bold">Allium sativum</span> L.) umumnya diperbanyak secara vegetatif (klonal), sehingga filter HWE dan kinship dinonaktifkan secara bawaan. Jika diaktifkan, pastikan menggunakan ambang yang sesuai agar varian dan aksesi klon tidak tersaring habis.
                 </span>
               </div>
             </div>

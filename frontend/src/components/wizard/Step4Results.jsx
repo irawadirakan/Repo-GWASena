@@ -21,7 +21,7 @@ import { generateBenchmarkResults } from '../../services/mockResults.js';
  * Acuan: 07 — Hasil & Visualisasi.png & 07b — Hasil_ Titik SNP Terpilih.png
  */
 export default function Step4Results({ onNavigateStep }) {
-  const { results, setResults, configParams, uploadSummary } = useAnalysisStore();
+  const { results, setResults, configParams, uploadSummary, isSimulated } = useAnalysisStore();
 
   // Pastikan ada data hasil (jika belum ada, gunakan benchmark simulasi)
   const activeResults = useMemo(() => {
@@ -93,6 +93,13 @@ export default function Step4Results({ onNavigateStep }) {
 
   return (
     <div className="space-y-6 animate-fade-in">
+      {/* ── Banner Mode Simulasi (Poin #2) ── */}
+      {isSimulated && (
+        <div className="rounded-2xl border-2 border-amber-500 bg-amber-400/20 text-amber-950 dark:text-amber-200 p-4 text-center font-bold text-sm sm:text-base shadow-lg animate-pulse flex items-center justify-center gap-2">
+          <span>⚠️ MODE SIMULASI — Bukan hasil analisis asli (Backend tidak terhubung)</span>
+        </div>
+      )}
+
       {/* ── Sub-Navigasi Cepat Pasca-Komputasi (Figma Style) ── */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 dark:border-white/10 pb-4">
         <div className="flex items-center gap-1.5 p-1 rounded-2xl glass-subcard">

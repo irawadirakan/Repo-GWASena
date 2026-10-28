@@ -54,6 +54,7 @@ export const useAnalysisStore = create((set, get) => ({
   computationStage: 1,
   isComputing: false,
   isCompleted: false,
+  isFailed: false,
   simulationTimeoutIds: [],
 
   setActiveStep: (step) => set({ activeStep: Math.min(Math.max(step, 1), 6) }),
@@ -125,6 +126,8 @@ export const useAnalysisStore = create((set, get) => ({
 
   setError: (error) => set({ error }),
 
+  setIsFailed: (isFailed) => set({ isFailed }),
+
   setComputationStage: (computationStage) => set({ computationStage }),
 
   // Memulai simulasi progres 4 tahap otomatis hingga selesai ke Step 4
@@ -140,6 +143,7 @@ export const useAnalysisStore = create((set, get) => ({
       isSimulated: true,
       isComputing: true,
       isCompleted: false,
+      isFailed: false,
       computationStage: 1,
       activeStep: 3,
       error: null,
@@ -171,6 +175,7 @@ export const useAnalysisStore = create((set, get) => ({
         results: mockResults,
         isComputing: false,
         isCompleted: true,
+        isFailed: false,
         computationStage: 4,
         currentAnalysis: {
           ...(get().currentAnalysis || {}),
@@ -188,19 +193,23 @@ export const useAnalysisStore = create((set, get) => ({
     set({ simulationTimeoutIds: [t1, t2, t3, t4, t5] });
   },
 
-  // Jalankan analisis dengan fallback otomatis ke mock simulation jika backend tidak aktif
+  // Jalankan analisis dengan fallback HANYA jika terjadi Network Error murni atau HTTP 501
   runAnalysis: async (analysisId, payload, options = {}) => {
     if (payload) {
       get().setConfigParams(payload);
     }
     const currentPayload = payload || get().configParams;
 
-    try {
-      if (analysisId) {
+    if (analysisId) {
+      try {
         await analysisService.saveParameters(analysisId, currentPayload);
         const res = await analysisService.runAnalysis(analysisId);
         set({
           activeStep: 3,
+          isSimulated: false,
+          isComputing: true,
+          isCompleted: false,
+          isFailed: false,
           jobStatus: res?.status || 'berjalan',
           currentAnalysis: {
             ...(get().currentAnalysis || {}),
@@ -208,12 +217,23 @@ export const useAnalysisStore = create((set, get) => ({
           },
         });
         return res;
+      } catch (err) {
+        const isNetworkError = !err.status || err.status === 0 || err.code === 'ERR_NETWORK';
+        const is501 = err.status === 501;
+
+        if (isNetworkError || is501) {
+          console.warn('Backend tidak tersedia (Network Error / 501), menjalankan mock simulation:', err);
+          get().startSimulation(options);
+          return { simulated: true };
+        }
+
+        // Error 4xx / 500 dari backend: DILARANG PINDAH SIMULASI & DILARANG PINDAH LANGKAH!
+        console.error('Eksekusi parameter/analisis ditolak backend:', err);
+        throw err;
       }
-    } catch (err) {
-      console.warn('Backend tidak tersedia atau belum terintegrasi, menjalankan mock simulation otomatis:', err);
     }
 
-    // Jika tanpa backend / offline: langsung jalankan mock simulation 4 tahap
+    // Jika tanpa analysisId (sesi demo murni tanpa database): jalankan mock simulation
     get().startSimulation(options);
     return { simulated: true };
   },
@@ -240,6 +260,7 @@ export const useAnalysisStore = create((set, get) => ({
       computationStage: 1,
       isComputing: false,
       isCompleted: false,
+      isFailed: false,
       simulationTimeoutIds: [],
     });
   },

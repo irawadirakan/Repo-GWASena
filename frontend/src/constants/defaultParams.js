@@ -7,8 +7,8 @@ export const DEFAULT_QC_PARAMS = {
   mind: 0.10,
   geno: 0.10,
   maf: 0.05,
-  hwe: '1e-6',
-  king_cutoff: 0.177,
+  hwe: null,
+  king_cutoff: null,
 };
 
 export const DEFAULT_ANALYSIS_CONFIG = {

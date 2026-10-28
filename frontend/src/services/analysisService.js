@@ -140,37 +140,7 @@ export const analysisService = {
    * @param {FormData} formData - Memuat key 'genotipe' dan 'fenotipe'
    */
   async uploadDataset(analysisId, formData) {
-    try {
-      return await apiClient.post(`/api/analyses/${analysisId}/upload`, formData);
-    } catch {
-      // Mock hasil validasi unggah jika backend offline
-      return {
-        status: 'valid',
-        pesan: 'Validasi dataset berhasil! 100% Sample ID cocok (25 sampel Allium sativum lolos).',
-        genotipe: {
-          format: 'VCF v4.2',
-          jumlah_sampel: 25,
-          jumlah_snp: 500,
-          varian_dilewati: { multialelik: 12 },
-        },
-        fenotipe: {
-          jumlah_sampel: 25,
-          varietas_tercatat: 25,
-          sifat_tersedia: ['bobot_umbi_g', 'diameter_umbi_mm', 'jumlah_siung'],
-        },
-        kecocokan_sample_id: {
-          persentase_kecocokan: 100,
-          jumlah_sampel_cocok: 25,
-          status: 'cocok',
-        },
-        integritas: {
-          kesamaan_sampel: '100%',
-          sampel_cocok: 25,
-          kelengkapan: '100%',
-        },
-        simulated: true,
-      };
-    }
+    return apiClient.post(`/api/analyses/${analysisId}/upload`, formData);
   },
 
   /**

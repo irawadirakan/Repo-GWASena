@@ -142,46 +142,60 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
       const res = await analysisService.uploadDataset(analysisId, formData);
       setUploadResult(res);
       setUploadSummary(res);
+      setIsSimulated(false);
       onUploadSuccess?.(res);
     } catch (err) {
-      // Auto-Mock / Fallback Offline jika backend offline atau terjadi network error
-      console.warn('Backend upload tidak merespons, mengaktifkan simulasi validasi lokal:', err);
+      const isNetworkError = !err.status || err.status === 0 || err.code === 'ERR_NETWORK';
+      const is501 = err.status === 501;
 
-      const fallbackResult = {
-        status: 'valid',
-        pesan: 'Validasi simulasi lokal berhasil (Backend Offline). 100% Sample ID cocok.',
-        genotipe: {
-          nama_berkas: genotypeFile.name || 'garlic_sample.vcf',
-          format: 'VCF v4.2',
-          jumlah_sampel: 25,
-          jumlah_snp: 500,
-          varian_dilewati: { multialelik: 12 },
-        },
-        fenotipe: {
-          nama_berkas: phenotypeFile.name || 'phenotype_sample.csv',
-          jumlah_sampel: 25,
-          varietas_tercatat: 25,
-          sifat_tersedia: ['bobot_umbi_g', 'diameter_umbi_mm', 'jumlah_siung'],
-        },
-        kecocokan_sample_id: {
-          persentase_kecocokan: 100,
-          jumlah_sampel_cocok: 25,
-          status: 'cocok',
-        },
-        integritas: {
-          kesamaan_sampel: '100%',
-          sampel_cocok: 25,
-          kelengkapan: '100%',
-          vcf_valid: true,
-          csv_valid: true,
-        },
-        simulated: true,
-      };
+      if (isNetworkError || is501) {
+        // Auto-Mock / Fallback Offline jika backend offline atau terjadi network error
+        console.warn('Backend upload tidak merespons (Network / 501), mengaktifkan simulasi validasi lokal:', err);
 
-      setUploadResult(fallbackResult);
-      setIsSimulated(true);
-      setUploadSummary(fallbackResult);
-      onUploadSuccess?.(fallbackResult);
+        const fallbackResult = {
+          status: 'valid',
+          pesan: 'Validasi simulasi lokal berhasil (Backend Offline). 100% Sample ID cocok.',
+          genotipe: {
+            nama_berkas: genotypeFile.name || 'garlic_sample.vcf',
+            format: 'VCF v4.2',
+            jumlah_sampel: 25,
+            jumlah_snp: 500,
+            varian_dilewati: { multialelik: 12 },
+          },
+          fenotipe: {
+            nama_berkas: phenotypeFile.name || 'phenotype_sample.csv',
+            jumlah_sampel: 25,
+            varietas_tercatat: 25,
+            sifat_tersedia: ['bobot_umbi_g', 'diameter_umbi_mm', 'jumlah_siung'],
+          },
+          kecocokan_sample_id: {
+            persentase_kecocokan: 100,
+            jumlah_sampel_cocok: 25,
+            status: 'cocok',
+          },
+          integritas: {
+            kesamaan_sampel: '100%',
+            sampel_cocok: 25,
+            kelengkapan: '100%',
+            vcf_valid: true,
+            csv_valid: true,
+          },
+          simulated: true,
+        };
+
+        setUploadResult(fallbackResult);
+        setIsSimulated(true);
+        setUploadSummary(fallbackResult);
+        onUploadSuccess?.(fallbackResult);
+      } else {
+        // Error 4xx / 500 dari Backend: DILARANG PINDAH SIMULASI & DILARANG PINDAH LANGKAH!
+        console.error('Validasi berkas ditolak backend (HTTP ' + err.status + '):', err);
+        setError({
+          message: err.message || err.pesan || 'Validasi berkas gagal.',
+          details: err.details || err.rincian || [],
+        });
+        setUploadResult(null);
+      }
     } finally {
       setIsUploading(false);
     }
