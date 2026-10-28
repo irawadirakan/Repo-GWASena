@@ -1,7 +1,7 @@
 """Skema masukan API (Pydantic). Keterangan field tampil di Swagger UI."""
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class RegisterIn(BaseModel):
@@ -23,6 +23,10 @@ class AnalysisCreate(BaseModel):
 
 
 class ParameterIn(BaseModel):
+    # Field yang tidak dikenal ditolak (422), supaya salah nama field dari frontend
+    # langsung kelihatan dan tidak diam-diam diabaikan.
+    model_config = ConfigDict(extra="forbid")
+
     trait: str = Field(description="Nama kolom sifat pada CSV fenotipe yang dianalisis",
                        examples=["bobot_umbi_g"])
     model: Literal["GLM", "MLM"] = Field(
@@ -46,3 +50,19 @@ class ParameterIn(BaseModel):
         default_factory=lambda: ["bonferroni", "fdr"],
         description="Metode koreksi multiple testing")
     alpha: float = Field(0.05, gt=0, lt=1, description="Tingkat signifikansi")
+
+    @model_validator(mode="before")
+    @classmethod
+    def ratakan_qc(cls, data):
+        """Terima dua format: ambang QC langsung di level atas, atau dikelompokkan
+        di dalam objek "qc" seperti yang dikirim frontend:
+        {"trait": ..., "qc": {"mind": 0.1, "geno": 0.1, "maf": 0.05, "hwe": null, "king_cutoff": null}}
+        Kalau keduanya diisi, nilai di level atas yang dipakai."""
+        if isinstance(data, dict) and "qc" in data:
+            data = dict(data)
+            qc = data.pop("qc") or {}
+            if not isinstance(qc, dict):
+                raise ValueError('"qc" harus berupa objek berisi mind, geno, maf, hwe, king_cutoff')
+            for kunci, nilai in qc.items():
+                data.setdefault(kunci, nilai)
+        return data
