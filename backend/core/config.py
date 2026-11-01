@@ -45,5 +45,11 @@ class Settings:
     # Batas jumlah sel genotipe yang disalin ke tabel genotypes (sampel x SNP).
     MAX_GENOTYPE_ROWS: int = int(os.getenv("MAX_GENOTYPE_ROWS", "2000000"))
 
+    # Anotasi gen kandidat (FR-07): berkas anotasi genom GFF3 dan jendela pencarian gen (bp).
+    ANNOTATION_GFF3: Path = (
+        ROOT_DIR / os.getenv("ANNOTATION_GFF3", "./data/contoh/anotasi_bawang_putih_contoh.gff3")
+    ).resolve()
+    ANNOTATION_WINDOW_BP: int = int(os.getenv("ANNOTATION_WINDOW_BP", "50000"))
+
 
 settings = Settings()
