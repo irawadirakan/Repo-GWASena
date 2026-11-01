@@ -12,6 +12,7 @@ Urutan pemakaian:
 import csv
 import io
 import time
+from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, status
 from fastapi.responses import Response
@@ -314,6 +315,46 @@ def get_plot(jenis: str, a: Analysis = Depends(owned_analysis), db: Session = De
         raise HTTPException(status.HTTP_404_NOT_FOUND, _detail("Jenis plot: manhattan, qq, atau pca."))
     _require_done(a)
     return _get_cache(db, a.analysis_id, jenis) or {}
+
+
+@router.get("/{analysis_id}/plots/{jenis}/png", summary="Unduh Manhattan atau QQ plot (PNG)",
+            response_class=Response,
+            responses={200: {"content": {"image/png": {}}, "description": "Berkas gambar PNG"}})
+def get_plot_png(jenis: str, a: Analysis = Depends(owned_analysis), db: Session = Depends(get_db)):
+    if jenis not in ("manhattan", "qq"):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, _detail("Jenis plot PNG: manhattan atau qq."))
+    _require_done(a)
+    row = db.scalar(select(VisualizationResult).where(
+        VisualizationResult.analysis_id == a.analysis_id, VisualizationResult.plot_type == jenis))
+    if row is None or not row.plot_cache:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, _detail("Data plot tidak ditemukan untuk analisis ini."))
+
+    # PNG dibuat sekali lalu disimpan; lokasinya dicatat di visualization_results.file_path (AC-08.1).
+    # Bila analisis dijalankan ulang, baris lama dihapus sehingga gambar dibuat ulang.
+    path = Path(row.file_path) if row.file_path else None
+    if path is not None and path.is_file():
+        png = path.read_bytes()
+    else:
+        # matplotlib dimuat di sini, bukan di awal berkas, supaya backend tetap bisa menyala
+        # walaupun paket matplotlib belum terpasang (hanya fitur PNG yang tidak tersedia).
+        try:
+            from pipeline.visualization import manhattan_png, qq_png
+        except ImportError:
+            raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, _detail(
+                "Ekspor PNG belum tersedia karena paket matplotlib belum terpasang.",
+                ["Jalankan: pip install -r backend/requirements.txt"]))
+        ringkasan = _get_cache(db, a.analysis_id, "ringkasan") or {}
+        nama = "Manhattan plot" if jenis == "manhattan" else "QQ plot"
+        judul = f"{nama} - {ringkasan.get('trait', '')} ({ringkasan.get('model', '')})"
+        png = manhattan_png(row.plot_cache, judul) if jenis == "manhattan" else qq_png(row.plot_cache, judul)
+        folder = ds.analysis_dir(a.analysis_id) / "plot"
+        folder.mkdir(parents=True, exist_ok=True)
+        path = folder / f"{jenis}.png"
+        path.write_bytes(png)
+        row.file_path = str(path)
+        db.commit()
+    return Response(content=png, media_type="image/png", headers={
+        "Content-Disposition": f'attachment; filename="gwasena_sesi{a.analysis_id}_{jenis}.png"'})
 
 
 # ------------------------------------------------------------------ 7. unduh CSV
