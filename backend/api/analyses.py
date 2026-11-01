@@ -38,7 +38,7 @@ from backend.services import dataset_service as ds
 from backend.services.analysis_runner import dispatch
 from pipeline.errors import ValidationError
 from pipeline.runner import STAGES
-from pipeline.validation import match_sample_ids, read_phenotype_csv, read_vcf
+from pipeline.validation import match_sample_ids, read_genotype, read_phenotype_csv
 
 router = APIRouter(prefix="/api/analyses", tags=["2. analisis (alur utama)"])
 
@@ -133,26 +133,38 @@ def get_analysis(a: Analysis = Depends(owned_analysis), db: Session = Depends(ge
 
 
 # ------------------------------------------------------------------ 2. unggah & validasi
-@router.post("/{analysis_id}/upload", summary="2. Unggah VCF + CSV dan validasi")
+@router.post("/{analysis_id}/upload", summary="2. Unggah genotipe (VCF atau PLINK biner) + CSV dan validasi")
 def upload(
     a: Analysis = Depends(owned_analysis),
-    genotipe: UploadFile = File(..., description="Berkas genotipe .vcf atau .vcf.gz"),
+    genotipe: UploadFile = File(..., description="Berkas genotipe .vcf, .vcf.gz, atau .bed (PLINK biner)"),
     fenotipe: UploadFile = File(..., description="Berkas fenotipe .csv (kolom sample_id + sifat)"),
+    bim: UploadFile | None = File(None, description="Wajib bila genotipe berupa .bed: berkas .bim"),
+    fam: UploadFile | None = File(None, description="Wajib bila genotipe berupa .bed: berkas .fam"),
     db: Session = Depends(get_db),
 ):
     if a.status in LOCKED:
         raise HTTPException(status.HTTP_409_CONFLICT,
                             _detail("Analisis sedang berjalan; unggahan dikunci sampai selesai."))
     folder = ds.analysis_dir(a.analysis_id)
+    # field berkas opsional yang dikirim kosong dianggap tidak diunggah
+    bim = bim if bim is not None and bim.filename else None
+    fam = fam if fam is not None and fam.filename else None
     try:
-        ds.check_extensions(genotipe.filename, fenotipe.filename)
+        plink = ds.is_plink(genotipe.filename)
+        ds.check_extensions(genotipe.filename, fenotipe.filename,
+                            bim.filename if bim else None, fam.filename if fam else None)
         ds.remove_dir(a.analysis_id)
         folder.mkdir(parents=True, exist_ok=True)
-        g_path = folder / ("genotipe.vcf.gz" if genotipe.filename.lower().endswith(".gz") else "genotipe.vcf")
+        if plink:
+            g_path = folder / "genotipe.bed"
+            ds.save_upload(bim, folder / "genotipe.bim")
+            ds.save_upload(fam, folder / "genotipe.fam")
+        else:
+            g_path = folder / ("genotipe.vcf.gz" if genotipe.filename.lower().endswith(".gz") else "genotipe.vcf")
         p_path = folder / "fenotipe.csv"
         ds.save_upload(genotipe, g_path)
         ds.save_upload(fenotipe, p_path)
-        geno = read_vcf(g_path)
+        geno = read_genotype(g_path)
         pheno = read_phenotype_csv(p_path)
         match = match_sample_ids(geno.samples, pheno.samples)
     except ValidationError as exc:
@@ -166,7 +178,8 @@ def upload(
 
     ds.clear_analysis_data(db, a.analysis_id)
     info = ds.store_datasets(db, a.analysis_id, genotipe.filename, g_path,
-                             fenotipe.filename, p_path, geno, pheno)
+                             fenotipe.filename, p_path, geno, pheno,
+                             genotype_type="plink_bed" if plink else "vcf")
     a.status = AnalysisStatus.TERVALIDASI
     db.add(AnalysisLog(analysis_id=a.analysis_id, stage="validasi", status="selesai",
                        message=f"{geno.n_samples} sampel, {geno.n_snps} SNP; Sample ID cocok"))

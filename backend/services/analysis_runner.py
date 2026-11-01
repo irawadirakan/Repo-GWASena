@@ -16,7 +16,7 @@ from backend.models import (
     Dataset,
     VisualizationResult,
 )
-from backend.services.dataset_service import dataset_paths
+from backend.services.dataset_service import GENOTYPE_TYPES, dataset_paths
 from pipeline.errors import PipelineError
 from pipeline.runner import run_pipeline
 
@@ -78,7 +78,7 @@ def run_analysis(analysis_id: int) -> None:
 
 def _save_results(db, analysis_id: int, result: dict) -> None:
     geno_ds = db.scalar(select(Dataset).where(Dataset.analysis_id == analysis_id,
-                                              Dataset.file_type == "vcf"))
+                                              Dataset.file_type.in_(GENOTYPE_TYPES)))
     snp_ids = db.scalars(select(SNP.snp_id).where(SNP.dataset_id == geno_ds.dataset_id)
                          .order_by(SNP.snp_id)).all()
     rows = [
