@@ -7,6 +7,7 @@ bawang putih sungguhan. Jangan dipakai untuk kesimpulan biologis.
 |---|---|
 | `genotipe_bawang_putih_mini.vcf` | 40 sampel × 500 SNP (chr1–chr8), dua kelompok asal, ±2% genotipe hilang, 4 SNP yang sengaja gagal QC |
 | `fenotipe_bawang_putih_mini.csv` | Pasangan VCF di atas: varietas, bobot_umbi_g, diameter_umbi_mm, jumlah_siung |
+| `genotipe_bawang_putih_mini.bed`, `.bim`, `.fam` | Data genotipe yang sama dengan VCF mini, dalam format biner PLINK. Untuk mencoba unggah format PLINK. |
 | `fenotipe_id_tidak_cocok.csv` | 3 ID sengaja salah, untuk menguji pesan galat pencocokan Sample ID |
 | `genotipe_bawang_putih_dummy.vcf`, `fenotipe_bawang_putih_dummy.csv` | Contoh kecil 6 sampel × 12 SNP (terlalu kecil untuk dianalisis) |
 
