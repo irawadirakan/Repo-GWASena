@@ -14,12 +14,13 @@ import io
 import time
 from pathlib import Path
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.api.deps import get_current_user, owned_analysis
+from backend.core.config import settings
 from backend.core.database import get_db
 from backend.models import (
     SNP,
@@ -36,6 +37,7 @@ from backend.models import (
 from backend.schemas import AnalysisCreate, ParameterIn
 from backend.services import dataset_service as ds
 from backend.services.analysis_runner import dispatch
+from pipeline.annotation import annotate_from_gff3
 from pipeline.errors import ValidationError
 from pipeline.runner import STAGES
 from pipeline.validation import match_sample_ids, read_genotype, read_phenotype_csv
@@ -368,6 +370,37 @@ def get_plot_png(jenis: str, a: Analysis = Depends(owned_analysis), db: Session 
         db.commit()
     return Response(content=png, media_type="image/png", headers={
         "Content-Disposition": f'attachment; filename="gwasena_sesi{a.analysis_id}_{jenis}.png"'})
+
+
+# ------------------------------------------------------------------ anotasi gen (FR-07)
+@router.get("/{analysis_id}/annotation", summary="Anotasi gen kandidat untuk SNP signifikan")
+def get_annotation(
+    a: Analysis = Depends(owned_analysis),
+    sertakan_teratas: bool = Query(
+        False, description="Ikut menganotasi 10 SNP dengan nilai p terkecil, berguna bila tidak ada "
+                           "SNP yang signifikan"),
+    db: Session = Depends(get_db),
+):
+    """Mencocokkan SNP signifikan dengan gen yang tumpang tindih atau terdekat (AC-07.1).
+
+    Bila sumber anotasi tidak dapat dipakai, respons tetap 200 dengan status
+    "tidak_tersedia" dan pesan, tanpa mengganggu hasil analisis lain (AC-07.2).
+    """
+    _require_done(a)
+    ringkasan = _get_cache(db, a.analysis_id, "ringkasan") or {}
+    snps = list(ringkasan.get("snp_signifikan") or [])
+    signifikan = {s["snp_id"] for s in snps}
+    label = "SNP signifikan"
+    if sertakan_teratas:
+        snps += [s for s in ringkasan.get("snp_teratas") or [] if s["snp_id"] not in signifikan]
+        label = "SNP (signifikan dan teratas)"
+    hasil = annotate_from_gff3(snps, settings.ANNOTATION_GFF3, settings.ANNOTATION_WINDOW_BP, label)
+    for k in hasil["kandidat"]:
+        k["signifikan"] = k["snp_id"] in signifikan
+    if hasil["status"] == "tersedia" and not snps:
+        hasil["pesan"] += " Gunakan sertakan_teratas=true untuk melihat kandidat gen di sekitar SNP teratas."
+    return {"analysis_id": a.analysis_id, "trait": ringkasan.get("trait"),
+            "model": ringkasan.get("model"), **hasil}
 
 
 # ------------------------------------------------------------------ 7. unduh CSV
