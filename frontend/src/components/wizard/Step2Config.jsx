@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Sliders,
   Dna,
@@ -19,8 +19,7 @@ import { analysisService } from '../../services/analysisService.js';
 import { useAnalysisStore } from '../../store/useAnalysisStore.js';
 
 /**
- * S-05: Step2Config (Konfigurasi Parameter QC & Model Asosiasi - Figma Aligned)
- * Modul: M-04, M-05, M-06 (FR-03 s.d. FR-06, BR-03, AC-04.1, AC-05.1, AC-05.2)
+ * Step2Config (Konfigurasi Parameter QC & Model Asosiasi - Figma Aligned)
  * Acuan: 05b — Konfigurasi_ GLM Terpilih (Terisi).png & 05c — Konfigurasi_ MLM Terpilih (Terisi).png
  */
 export default function Step2Config({
@@ -40,11 +39,18 @@ export default function Step2Config({
   const [trait, setTrait] = useState(
     configParams.trait || (availableTraits.length > 0 ? availableTraits[0] : 'bobot_umbi_g')
   );
+
+  // Sinkronkan trait jika availableTraits dimuat dari backend
+  useEffect(() => {
+    if (availableTraits.length > 0 && (!trait || !availableTraits.includes(trait))) {
+      setTrait(availableTraits[0]);
+    }
+  }, [availableTraits, trait]);
   const [mind, setMind] = useState(configParams.qc?.mind ?? 0.10);
   const [geno, setGeno] = useState(configParams.qc?.geno ?? 0.10);
   const [maf, setMaf] = useState(configParams.qc?.maf ?? 0.05);
 
-  // HWE Filter (Nonaktif secara bawaan untuk tanaman klonal bawang putih Allium sativum)
+  // HWE Filter (Nonaktif secara bawaan untuk populasi klonal atau struktur silang spesifik)
   const [isHweActive, setIsHweActive] = useState(
     configParams.qc?.hwe !== null && configParams.qc?.hwe !== undefined
   );
@@ -52,7 +58,7 @@ export default function Step2Config({
     configParams.qc?.hwe != null ? String(configParams.qc.hwe) : '1e-6'
   );
 
-  // KING Cutoff Filter (Nonaktif secara bawaan untuk tanaman klonal bawang putih Allium sativum)
+  // KING Cutoff Filter (Nonaktif secara bawaan untuk populasi klonal atau struktur silang spesifik)
   const [isKingActive, setIsKingActive] = useState(
     configParams.qc?.king_cutoff !== null && configParams.qc?.king_cutoff !== undefined
   );
@@ -173,7 +179,7 @@ export default function Step2Config({
               <Sparkles className="h-4 w-4" />
               <span>Buka Pratinjau Alur Komputasi & Visualisasi UI</span>
             </button>
-            <span className="text-[11px] text-slate-600 dark:text-slate-400">
+            <span className="text-xs sm:text-[13px] text-slate-700 dark:text-slate-300 font-medium">
               (Menampilkan antarmuka Langkah 3 s.d. 6 dengan penanda simulasi yang jelas)
             </span>
           </div>
@@ -222,7 +228,7 @@ export default function Step2Config({
           </div>
         </div>
 
-        {/* ── Bagian B: Parameter Quality Control (M-04) ── */}
+        {/* ── Bagian B: Parameter Quality Control ── */}
         <div className="figma-card p-6 space-y-6">
           <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-3">
             <div className="flex items-center gap-2.5">
@@ -260,7 +266,7 @@ export default function Step2Config({
                 onChange={(e) => setMind(e.target.value)}
                 className="w-full accent-[#5B4DFE] dark:accent-[#06B6D4] cursor-pointer"
               />
-              <span className="text-[11px] text-slate-500 dark:text-slate-400 block font-sans">
+              <span className="text-xs sm:text-[13px] text-slate-700 dark:text-slate-300 block font-sans font-medium">
                 Default: 0.10 (buang sampel dengan missing data &gt; 10%)
               </span>
             </div>
@@ -269,12 +275,12 @@ export default function Step2Config({
             <div className="space-y-2 glass-subcard p-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
-                  <label htmlFor="geno" className="text-xs font-bold text-slate-900 dark:text-white font-sans">
+                  <label htmlFor="geno" className="text-sm font-bold text-slate-900 dark:text-white font-sans">
                     Missingness SNP (geno)
                   </label>
                   <EduHintTooltip hintKey="geno" />
                 </div>
-                <span className="font-mono text-xs font-bold text-[#5B4DFE] dark:text-[#06B6D4] tabular-nums">
+                <span className="font-mono text-sm font-bold text-[#0284C7] dark:text-[#06B6D4] tabular-nums">
                   {geno}
                 </span>
               </div>
@@ -286,9 +292,9 @@ export default function Step2Config({
                 step={QC_PARAM_RANGES.geno.step}
                 value={geno}
                 onChange={(e) => setGeno(e.target.value)}
-                className="w-full accent-[#5B4DFE] dark:accent-[#06B6D4] cursor-pointer"
+                className="w-full accent-[#0284C7] dark:accent-[#06B6D4] cursor-pointer"
               />
-              <span className="text-[11px] text-slate-500 dark:text-slate-400 block font-sans">
+              <span className="text-xs sm:text-[13px] text-slate-700 dark:text-slate-300 block font-sans font-medium">
                 Default: 0.10 (buang SNP yang hilang pada &gt; 10% populasi)
               </span>
             </div>
@@ -297,12 +303,12 @@ export default function Step2Config({
             <div className="space-y-2 glass-subcard p-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
-                  <label htmlFor="maf" className="text-xs font-bold text-slate-900 dark:text-white font-sans">
+                  <label htmlFor="maf" className="text-sm font-bold text-slate-900 dark:text-white font-sans">
                     Minor Allele Frequency (maf)
                   </label>
                   <EduHintTooltip hintKey="maf" />
                 </div>
-                <span className="font-mono text-xs font-bold text-[#5B4DFE] dark:text-[#06B6D4] tabular-nums">
+                <span className="font-mono text-sm font-bold text-[#0284C7] dark:text-[#06B6D4] tabular-nums">
                   {maf}
                 </span>
               </div>
@@ -314,9 +320,9 @@ export default function Step2Config({
                 step={QC_PARAM_RANGES.maf.step}
                 value={maf}
                 onChange={(e) => setMaf(e.target.value)}
-                className="w-full accent-[#5B4DFE] dark:accent-[#06B6D4] cursor-pointer"
+                className="w-full accent-[#0284C7] dark:accent-[#06B6D4] cursor-pointer"
               />
-              <span className="text-[11px] text-slate-500 dark:text-slate-400 block font-sans">
+              <span className="text-xs sm:text-[13px] text-slate-700 dark:text-slate-300 block font-sans font-medium">
                 Default: 0.05 (saring varian langka &lt; 5%)
               </span>
             </div>
@@ -333,9 +339,9 @@ export default function Step2Config({
                       setIsKingActive(checked);
                       if (checked && kingCutoff == null) setKingCutoff(0.177);
                     }}
-                    className="rounded border-slate-400 dark:border-slate-600 text-[#5B4DFE] focus:ring-[#5B4DFE] h-4 w-4 cursor-pointer"
+                    className="rounded border-slate-400 dark:border-slate-600 text-[#0284C7] focus:ring-[#0284C7] h-4 w-4 cursor-pointer"
                   />
-                  <span className="text-xs font-bold text-slate-900 dark:text-white font-sans">
+                  <span className="text-sm font-bold text-slate-900 dark:text-white font-sans">
                     Aktifkan Filter Kinship KING (king_cutoff)
                   </span>
                 </label>
@@ -343,15 +349,15 @@ export default function Step2Config({
               </div>
 
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-sans text-slate-500 dark:text-slate-400">
+                <span className="text-xs sm:text-[13px] font-sans font-semibold text-slate-700 dark:text-slate-300">
                   {isKingActive ? 'Ambang kinship aktif:' : 'Status filter:'}
                 </span>
                 {isKingActive ? (
-                  <span className="font-mono text-xs font-bold text-[#5B4DFE] dark:text-[#06B6D4] tabular-nums">
+                  <span className="font-mono text-sm font-bold text-[#0284C7] dark:text-[#06B6D4] tabular-nums">
                     {kingCutoff}
                   </span>
                 ) : (
-                  <span className="rounded-full bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 px-2 py-0.5 text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+                  <span className="rounded-full bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 px-2.5 py-0.5 text-xs font-bold text-slate-600 dark:text-slate-300">
                     Nonaktif (null)
                   </span>
                 )}
@@ -366,13 +372,13 @@ export default function Step2Config({
                 step={QC_PARAM_RANGES.king_cutoff.step}
                 value={kingCutoff ?? 0.177}
                 onChange={(e) => setKingCutoff(e.target.value)}
-                className={`w-full accent-[#5B4DFE] dark:accent-[#06B6D4] ${isKingActive ? 'cursor-pointer' : 'cursor-not-allowed opacity-40'}`}
+                className={`w-full accent-[#0284C7] dark:accent-[#06B6D4] ${isKingActive ? 'cursor-pointer' : 'cursor-not-allowed opacity-40'}`}
               />
-              <span className="text-[11px] text-slate-500 dark:text-slate-400 block font-sans">
+              <span className="text-xs sm:text-[13px] text-slate-700 dark:text-slate-300 block font-sans font-medium">
                 {isKingActive ? (
                   'Nilai rekomendasi: 0.177 (hubungan derajat pertama / klon kembar)'
                 ) : (
-                  <span className="text-amber-700 dark:text-amber-400 font-medium">
+                  <span className="text-amber-800 dark:text-amber-300 font-semibold">
                     Nonaktif secara bawaan untuk tanaman klonal
                   </span>
                 )}
@@ -402,10 +408,10 @@ export default function Step2Config({
 
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
-                  <span className="text-xs font-bold text-slate-900 dark:text-white font-sans block">
+                  <span className="text-sm font-bold text-slate-900 dark:text-white font-sans block">
                     Ambang Batas HWE p-value (hwe)
                   </span>
-                  <span className="text-[11px] text-slate-500 dark:text-slate-400 font-sans">
+                  <span className="text-xs sm:text-[13px] text-slate-700 dark:text-slate-300 font-medium font-sans">
                     {isHweActive ? 'Rekomendasi nilai awal: 1e-6' : 'Nonaktif secara bawaan untuk tanaman klonal'}
                   </span>
                 </div>
@@ -415,27 +421,27 @@ export default function Step2Config({
                     type="text"
                     value={hwe}
                     onChange={(e) => setHwe(e.target.value)}
-                    className="w-28 font-mono text-xs font-bold text-[#5B4DFE] dark:text-[#06B6D4] bg-white dark:bg-[#121B38] rounded-xl border border-slate-300 dark:border-white/10 px-3 py-1.5 text-right focus:outline-none focus:border-[#5B4DFE]"
+                    className="w-32 font-mono text-sm font-bold text-[#0284C7] dark:text-[#06B6D4] bg-white dark:bg-[#121B38] rounded-xl border border-slate-300 dark:border-white/10 px-3 py-1.5 text-right focus:outline-none focus:border-[#0284C7]"
                     placeholder="1e-6"
                   />
                 ) : (
-                  <span className="rounded-full bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 px-2.5 py-1 text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                  <span className="rounded-full bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 px-3 py-1 text-xs font-bold text-slate-600 dark:text-slate-300">
                     Nonaktif (null)
                   </span>
                 )}
               </div>
 
-              <div className="rounded-xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 p-3 text-[11px] text-slate-700 dark:text-slate-300 leading-relaxed flex items-start gap-2">
+              <div className="rounded-xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 p-3.5 text-xs sm:text-sm text-slate-800 dark:text-slate-200 leading-relaxed flex items-start gap-2.5 font-medium">
                 <Info className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-                <span className="font-serif leading-relaxed">
-                  <strong>Catatan Khusus Bawang Putih:</strong> Tanaman bawang putih (<span className="italic font-bold">Allium sativum</span> L.) umumnya diperbanyak secara vegetatif (klonal), sehingga filter HWE dan kinship dinonaktifkan secara bawaan. Jika diaktifkan, pastikan menggunakan ambang yang sesuai agar varian dan aksesi klon tidak tersaring habis.
+                <span className="leading-relaxed">
+                  <strong>Catatan Ambang HWE & Kinship:</strong> Opsional (Nonaktif secara bawaan — direkomendasikan tetap nonaktif untuk populasi klonal, vegetatif, atau struktur silang spesifik). Jika diaktifkan pada populasi alami/kawin acak, sesuaikan ambang agar varian biologis penting tidak tereliminasi.
                 </span>
               </div>
             </div>
           </div>
         </div>
 
-        {/* ── Bagian C: PCA Otomatis (M-05, FR-04, AC-04.1) ── */}
+        {/* ── Bagian C: PCA Otomatis ── */}
         <div className="rounded-3xl border border-indigo-200 dark:border-[#5B4DFE]/30 bg-indigo-50/70 dark:bg-[#5B4DFE]/10 p-6 space-y-3 shadow-sm">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
@@ -448,7 +454,7 @@ export default function Step2Config({
               <EduHintTooltip hintKey="pca" />
             </div>
             <span className="rounded-full bg-indigo-100 dark:bg-[#5B4DFE]/20 border border-indigo-300 dark:border-[#5B4DFE]/30 px-3 py-0.5 text-xs font-bold text-indigo-900 dark:text-[#06B6D4] font-sans">
-              Otomatis & Wajib (FR-04)
+              Otomatis & Terintegrasi
             </span>
           </div>
 
@@ -459,7 +465,7 @@ export default function Step2Config({
           </p>
         </div>
 
-        {/* ── Bagian D: Pemilihan Model Asosiasi (M-06, FR-05, BR-03, AC-05.1) ── */}
+        {/* ── Bagian D: Pemilihan Model Asosiasi ── */}
         <div className="figma-card p-6 space-y-4">
           <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-3">
             <div className="flex items-center gap-2.5">
@@ -467,10 +473,10 @@ export default function Step2Config({
                 D
               </span>
               <h3 className="text-base font-bold tracking-tight text-slate-900 dark:text-white font-sans">
-                Model Uji Asosiasi (Pilih Tepat Satu - BR-03)
+                Model Uji Asosiasi Statistik
               </h3>
             </div>
-            <span className="text-xs text-slate-500 dark:text-slate-400 font-sans">Aturan Bisnis BR-03</span>
+            <span className="text-xs text-slate-500 dark:text-slate-400 font-sans">Pilih Salah Satu Model</span>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -503,7 +509,7 @@ export default function Step2Config({
               </p>
             </div>
 
-            {/* Model 2: MLM (Rekomendasi Bawang Putih) */}
+            {/* Model 2: MLM (Rekomendasi Struktur Populasi Kompleks) */}
             <div
               onClick={() => setModel('MLM')}
               className={`glass-subcard p-5 cursor-pointer transition-all duration-150 active:scale-[0.985] ${
@@ -525,27 +531,27 @@ export default function Step2Config({
                   <span className="text-base font-bold text-slate-900 dark:text-white font-sans">MLM</span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <span className="rounded-full bg-cyan-100 dark:bg-[#06B6D4]/20 border border-cyan-300 dark:border-[#06B6D4]/30 px-2.5 py-0.5 text-[10px] font-bold text-cyan-900 dark:text-[#06B6D4] font-sans">
+                  <span className="rounded-full bg-cyan-100 dark:bg-[#06B6D4]/20 border border-cyan-300 dark:border-[#06B6D4]/30 px-2.5 py-0.5 text-xs font-bold text-cyan-900 dark:text-[#06B6D4] font-sans">
                     Direkomendasikan
                   </span>
                   <EduHintTooltip hintKey="mlm" />
                 </div>
               </div>
-              <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed font-sans">
+              <p className="text-xs sm:text-[13px] text-slate-700 dark:text-slate-300 leading-relaxed font-sans font-medium">
                 Mixed Linear Model. Menggabungkan kovariat PCA (efek tetap) DAN matriks kekerabatan
-                genetik / <em>Kinship</em> (efek acak). Sangat direkomendasikan untuk tanaman klonal bawang putih.
+                genetik / <em>Kinship</em> (efek acak). Sangat direkomendasikan untuk populasi dengan struktur kekerabatan kompleks atau klonal guna menekan temuan positif palsu.
               </p>
               {model === 'MLM' && (
-                <div className="mt-3 flex items-center gap-1.5 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 animate-fade-down">
-                  <CheckCircle2 className="h-3.5 w-3.5 stroke-[2.5] animate-pop-in" />
-                  <span>Matriks Kinship disertakan secara otomatis (AC-05.2)</span>
+                <div className="mt-3 flex items-center gap-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-400 animate-fade-down">
+                  <CheckCircle2 className="h-4 w-4 stroke-[2.5] animate-pop-in" />
+                  <span>Matriks Kinship disertakan secara otomatis</span>
                 </div>
               )}
             </div>
           </div>
         </div>
 
-        {/* ── Bagian E: Koreksi Multiple Testing & Alpha (M-06, FR-06) ── */}
+        {/* ── Bagian E: Koreksi Multiple Testing & Alpha ── */}
         <div className="figma-card p-6 space-y-4">
           <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-3">
             <div className="flex items-center gap-2.5">
@@ -570,33 +576,33 @@ export default function Step2Config({
               />
               <div className="space-y-1">
                 <div className="flex items-center gap-1">
-                  <span className="text-xs font-bold text-slate-900 dark:text-white font-sans">Bonferroni</span>
+                  <span className="text-sm font-bold text-slate-900 dark:text-white font-sans">Bonferroni</span>
                   <EduHintTooltip hintKey="bonferroni" />
                 </div>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400 font-sans">Koreksi paling ketat (alpha / total SNP).</p>
+                <p className="text-xs sm:text-[13px] text-slate-700 dark:text-slate-300 font-sans font-medium">Koreksi paling ketat (alpha / total SNP).</p>
               </div>
             </label>
 
             {/* Checkbox FDR */}
-            <label className="flex items-start gap-3 glass-subcard p-4 cursor-pointer hover:border-[#5B4DFE] transition-colors">
+            <label className="flex items-start gap-3 glass-subcard p-4 cursor-pointer hover:border-[#0284C7] transition-colors">
               <input
                 type="checkbox"
                 checked={koreksi.includes('fdr')}
                 onChange={() => handleToggleKoreksi('fdr')}
-                className="mt-0.5 rounded border-slate-400 dark:border-slate-600 text-[#5B4DFE] focus:ring-[#5B4DFE] h-4 w-4"
+                className="mt-0.5 rounded border-slate-400 dark:border-slate-600 text-[#0284C7] focus:ring-[#0284C7] h-4 w-4"
               />
               <div className="space-y-1">
                 <div className="flex items-center gap-1">
-                  <span className="text-xs font-bold text-slate-900 dark:text-white font-sans">FDR (Benjamini-Hochberg)</span>
+                  <span className="text-sm font-bold text-slate-900 dark:text-white font-sans">FDR (Benjamini-Hochberg)</span>
                   <EduHintTooltip hintKey="fdr" />
                 </div>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400 font-sans">Koreksi adaptif untuk sifat poligenik.</p>
+                <p className="text-xs sm:text-[13px] text-slate-700 dark:text-slate-300 font-sans font-medium">Koreksi adaptif untuk sifat poligenik.</p>
               </div>
             </label>
 
             {/* Input Alpha */}
             <div className="glass-subcard p-4 space-y-1.5">
-              <label htmlFor="alpha" className="block text-xs font-bold text-slate-900 dark:text-white font-sans">
+              <label htmlFor="alpha" className="block text-sm font-bold text-slate-900 dark:text-white font-sans">
                 Ambang Alpha Signifikansi
               </label>
               <input
@@ -607,9 +613,9 @@ export default function Step2Config({
                 step={0.005}
                 value={alpha}
                 onChange={(e) => setAlpha(e.target.value)}
-                className="w-full font-mono text-xs font-bold text-slate-900 dark:text-[#06B6D4] bg-white dark:bg-[#121B38] rounded-xl border border-slate-300 dark:border-white/10 py-2 px-3 focus:outline-none focus:border-[#5B4DFE]"
+                className="w-full font-mono text-sm font-bold text-slate-900 dark:text-[#06B6D4] bg-white dark:bg-[#121B38] rounded-xl border border-slate-300 dark:border-white/10 py-2 px-3 focus:outline-none focus:border-[#0284C7]"
               />
-              <span className="text-[10px] text-slate-500 dark:text-slate-400 block font-sans">Default standar riset: 0.05</span>
+              <span className="text-xs text-slate-700 dark:text-slate-300 block font-sans font-medium">Default standar riset: 0.05</span>
             </div>
           </div>
         </div>
@@ -619,7 +625,7 @@ export default function Step2Config({
           <button
             type="button"
             onClick={onPrev}
-            className="inline-flex items-center gap-2 rounded-xl border border-slate-300 dark:border-white/10 bg-slate-100 dark:bg-[#162142] px-5 py-3 text-xs font-semibold text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-[#1E2C58] hover:-translate-y-[1px] hover:shadow-md active:scale-[0.97] active:brightness-95 transition-all duration-100 shadow-sm"
+            className="figma-btn-secondary"
           >
             <ArrowLeft className="h-4 w-4" />
             <span>Kembali ke Unggah Berkas</span>
@@ -628,7 +634,7 @@ export default function Step2Config({
           <button
             type="submit"
             disabled={isSubmitting}
-            className="inline-flex items-center gap-2 rounded-xl bg-[#5B4DFE] px-7 py-3 text-sm font-bold text-white shadow-lg shadow-[#5B4DFE]/30 hover:bg-[#4F46E5] hover:-translate-y-[1px] hover:shadow-xl active:scale-[0.97] active:brightness-95 focus:outline-none focus:ring-2 focus:ring-[#5B4DFE]/50 transition-all duration-100 disabled:opacity-60 disabled:transform-none disabled:shadow-none"
+            className="figma-btn-primary"
           >
             {isSubmitting ? (
               <>

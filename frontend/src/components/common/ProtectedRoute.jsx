@@ -4,7 +4,7 @@ import { useAuthStore } from '../../store/useAuthStore.js';
 import { Loader2 } from 'lucide-react';
 
 /**
- * ProtectedRoute - Penjaga Akses Terproteksi (AC-01.3)
+ * ProtectedRoute - Penjaga Akses Terproteksi
  * Mengalihkan pengguna tak terautentikasi ke /login dengan mempertahankan URL tujuan
  */
 export default function ProtectedRoute({ children }) {
@@ -19,7 +19,7 @@ export default function ProtectedRoute({ children }) {
 
   if (!isInitialized) {
     return (
-      <div className="flex min-h-screen w-full items-center justify-center bg-background">
+      <div className="relative z-10 flex min-h-screen w-full items-center justify-center bg-transparent">
         <div className="flex flex-col items-center gap-3">
           <Loader2 className="h-8 w-8 animate-spin text-accent-cyan" />
           <p className="text-sm text-text-secondary font-medium">Memeriksa sesi riset...</p>

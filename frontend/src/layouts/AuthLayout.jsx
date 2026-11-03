@@ -5,7 +5,7 @@ import BrandLogo from '../components/common/BrandLogo.jsx';
 import FigmaThemeToggle from '../components/common/FigmaThemeToggle.jsx';
 
 /**
- * AuthLayout - Pembungkus Layar Publik (S-00, S-01, S-02)
+ * AuthLayout - Pembungkus Layar Publik
  * Acuan: frontend/screens/01 — Login.png & 02 — Register.png
  */
 export default function AuthLayout() {
@@ -20,13 +20,13 @@ export default function AuthLayout() {
   };
 
   return (
-    <DnaBackdrop showDna={true}>
+    <DnaBackdrop showDna={false}>
       {/* ── Public Topbar Sesuai Figma (Floating Liquid Glass) ── */}
       <header className="sticky top-0 z-40 flex items-center justify-between glass-navbar px-4 py-3 sm:px-8">
         <BrandLogo size="md" />
 
         <div className="flex items-center gap-3">
-          {/* Tombol Lewati Pengenalan (khusus saat di S-00) */}
+          {/* Tombol Lewati Pengenalan (khusus saat di halaman Intro) */}
           {isIntroPage && (
             <button
               type="button"

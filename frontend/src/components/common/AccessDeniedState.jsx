@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import { ShieldAlert, ArrowLeft } from 'lucide-react';
 
 /**
- * AccessDeniedState - Layar Akses Ditolak (403 Forbidden - BR-04, AC-12.1)
+ * AccessDeniedState - Layar Akses Ditolak (403 Forbidden)
  * Ditampilkan saat pengguna mencoba mengakses sesi analisis milik peneliti lain
  */
 export default function AccessDeniedState({ analysisId }) {
@@ -20,7 +20,7 @@ export default function AccessDeniedState({ analysisId }) {
         Anda tidak memiliki izin untuk melihat atau memodifikasi sesi analisis{' '}
         {analysisId && <span className="font-mono text-accent-cyan">#{analysisId}</span>}. Demi
         keamanan dan privasi data riset genomik, setiap peneliti hanya dapat mengakses analisis
-        miliknya sendiri (Aturan Bisnis BR-04).
+        miliknya sendiri demi menjaga integritas data riset.
       </p>
 
       <div className="mt-6 flex flex-wrap items-center justify-center gap-3">

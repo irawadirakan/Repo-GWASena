@@ -1,13 +1,13 @@
 /**
- * Katalog Resmi Konten Edukatif GWASena 2.0
- * Acuan: docs/gwasena-v2/DESIGN.md Bagian 8
+ * Katalog Resmi Konten Edukatif GWASena
+ * Acuan: Panduan Parameter Ilmiah GWASena Design System
  */
 
 export const EDU_HINTS = {
   mind: {
     label: 'Missingness per Sampel (mind)',
     defaultValue: 0.10,
-    hint: 'Menyaring sampel individu bawang putih yang memiliki terlalu banyak data genotipe kosong/hilang. Nilai 0.10 berarti sampel dengan >10% SNP kosong akan dikeluarkan agar tidak menimbulkan bias.',
+    hint: 'Menyaring sampel individu yang memiliki proporsi data genotipe hilang (missing) melebihi batas toleransi. Nilai 0.10 berarti sampel dengan >10% SNP kosong akan dikeluarkan agar tidak menimbulkan bias.',
   },
   geno: {
     label: 'Missingness per SNP (geno)',
@@ -22,7 +22,7 @@ export const EDU_HINTS = {
   hwe: {
     label: 'Hardy-Weinberg Equilibrium (hwe)',
     defaultValue: '1e-6',
-    hint: 'Menguji penyimpangan frekuensi genotipe dari keseimbangan populasi. Catatan Agronomi Bawang Putih: Karena Allium sativum diperbanyak secara vegetatif (klonal), penyimpangan HWE alami sering terjadi; gunakan ambang longgar (1e-6) agar varian penting tidak terbuang.',
+    hint: 'Menguji penyimpangan frekuensi genotipe dari keseimbangan populasi. Pada populasi klonal, vegetatif, atau hasil seleksi buatan, penyimpangan HWE alami lumrah terjadi sehingga filter ini disarankan nonaktif atau menggunakan ambang longgar (1e-6).',
   },
   king_cutoff: {
     label: 'Relatedness / Kinship Cutoff (king_cutoff)',
@@ -32,7 +32,7 @@ export const EDU_HINTS = {
   pca: {
     label: 'PCA Otomatis (n_pc = 3)',
     defaultValue: 3,
-    hint: 'Principal Component Analysis (PCA) dijalankan secara otomatis setelah tahap QC dan tidak dapat dilewati (FR-04). Komponen utama (PC1–PC3) disertakan sebagai kovariat untuk mengoreksi stratifikasi struktur populasi.',
+    hint: 'Principal Component Analysis (PCA) dijalankan secara otomatis setelah tahap QC. Komponen utama (PC1–PC3) disertakan sebagai kovariat untuk mengoreksi stratifikasi struktur populasi.',
   },
   glm: {
     label: 'GLM (General Linear Model)',
@@ -40,7 +40,7 @@ export const EDU_HINTS = {
   },
   mlm: {
     label: 'MLM (Mixed Linear Model)',
-    hint: 'Menggabungkan kovariat PCA (efek tetap) DAN matriks kekerabatan genetik / Kinship secara otomatis (efek acak). Sangat direkomendasikan untuk tanaman klonal seperti bawang putih guna menekan positif palsu.',
+    hint: 'Menggabungkan kovariat PCA (efek tetap) dan matriks kekerabatan genetik / Kinship secara otomatis (efek acak). Sangat direkomendasikan untuk populasi dengan struktur kekerabatan kompleks atau klonal guna menekan positif palsu.',
   },
   bonferroni: {
     label: 'Koreksi Bonferroni',
@@ -55,13 +55,13 @@ export const EDU_HINTS = {
 export const TIPS_EDUKATIF = [
   {
     id: 1,
-    judul: 'Genom Raksasa Bawang Putih',
-    teks: 'Tahukah Anda? Genom bawang putih (Allium sativum) berukuran sekitar 16 Gigabase—hampir lima kali lebih besar dari genom manusia—dan terdistribusi ke dalam 8 pasang kromosom.',
+    judul: 'Skala Genomik & Kerapatan Penanda',
+    teks: 'Tahukah Anda? Analisis asosiasi genomik (GWAS) mengintegrasikan jutaan titik variasi penanda SNP untuk memetakan arsitektur genetik sifat kuantitatif secara presisi.',
   },
   {
     id: 2,
     judul: 'Pentingnya Koreksi PCA',
-    teks: 'Tanpa koreksi struktur populasi (PCA), perbedaan geografis asal kultivar bawang putih dapat disalahartikan sebagai asosiasi genetik terhadap bobot umbi.',
+    teks: 'Tanpa koreksi struktur populasi (PCA), perbedaan geografis asal kultivar atau aksesi dapat disalahartikan sebagai asosiasi genetik murni terhadap sifat fenotipe.',
   },
   {
     id: 3,

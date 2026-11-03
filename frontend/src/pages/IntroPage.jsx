@@ -13,9 +13,9 @@ import {
 import BrandLogo from '../components/common/BrandLogo.jsx';
 
 /**
- * S-00: IntroPage (Interactive Onboarding - Figma Aligned)
+ * IntroPage (Interactive Onboarding - Figma Aligned)
  * Terinspirasi dari pacing dan storytelling Microsoft Copilot Tasks.
- * Acuan: docs/gwasena-v2/USER_FLOW.md Bagian 2 & WIREFRAME.md Layar S-00
+ * Acuan: Panduan Onboarding GWASena
  */
 export default function IntroPage() {
   const navigate = useNavigate();
@@ -102,7 +102,7 @@ export default function IntroPage() {
 
         {/* Narasi Pacing (Neuton Editorial Font) */}
         <p className="mt-4 max-w-2xl font-serif text-base sm:text-lg text-slate-600 dark:text-slate-300 leading-relaxed">
-          Dirancang untuk peneliti agronomi, pemulia tanaman <span className="italic font-bold">Allium sativum</span> L., dan akademisi bioinformatika. Mengeliminasi kerumitan perintah CLI (PLINK 2 & GAPIT) dengan panduan parameter ilmiah yang transparan.
+          Dirancang untuk peneliti agronomi, pemulia genetik, dan akademisi bioinformatika. Mengeliminasi kerumitan perintah CLI (PLINK 2 & GAPIT) dengan panduan parameter ilmiah yang transparan dan alur kerja terpadu.
         </p>
       </div>
 
@@ -155,7 +155,7 @@ export default function IntroPage() {
       <div className="mt-12 w-full max-w-4xl">
         <div className="flex items-center justify-center gap-2 mb-6">
           <Layers className="h-4 w-4 text-[#06B6D4]" />
-          <h2 className="text-xs uppercase tracking-widest font-bold text-slate-600 dark:text-slate-400">
+          <h2 className="text-xs sm:text-sm uppercase tracking-widest font-bold text-slate-800 dark:text-slate-200">
             4 Tahapan Analisis Terstruktur
           </h2>
         </div>
@@ -164,15 +164,15 @@ export default function IntroPage() {
           {workflowSteps.map((ws, i) => (
             <div
               key={i}
-              className="flex flex-col justify-between glass-subcard p-4 hover:border-[#5B4DFE]/40 hover:-translate-y-1 shadow-sm transition-all"
+              className="flex flex-col justify-between glass-subcard p-4 hover:border-[#0284C7]/40 hover:-translate-y-1 shadow-sm transition-all"
             >
               <div>
-                <span className="font-mono text-xs font-bold text-[#06B6D4]">{ws.num}</span>
-                <h4 className="mt-1.5 text-sm font-semibold tracking-tight text-slate-900 dark:text-white">{ws.title}</h4>
-                <p className="mt-1 text-xs text-slate-600 dark:text-slate-400 leading-relaxed">{ws.desc}</p>
+                <span className="font-mono text-xs font-bold text-[#0284C7] dark:text-[#06B6D4]">{ws.num}</span>
+                <h4 className="mt-1.5 text-sm sm:text-base font-bold tracking-tight text-slate-900 dark:text-white">{ws.title}</h4>
+                <p className="mt-1 text-xs sm:text-[13px] text-slate-700 dark:text-slate-300 leading-relaxed font-medium">{ws.desc}</p>
               </div>
-              <div className="mt-4 flex items-center gap-1.5 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
-                <CheckCircle2 className="h-3.5 w-3.5" />
+              <div className="mt-4 flex items-center gap-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-400">
+                <CheckCircle2 className="h-4 w-4" />
                 <span>Terverifikasi Sistem</span>
               </div>
             </div>
@@ -182,26 +182,26 @@ export default function IntroPage() {
 
       {/* ── Babak 4: High-Contrast Action Dock (CTA) (3-Layer Glass) ── */}
       <div className="mt-12 w-full max-w-md figma-card p-6 text-center">
-        <p className="text-xs font-medium text-slate-700 dark:text-slate-300 mb-3.5">
-          Siap memulai penemuan genetik tanaman bawang putih?
+        <p className="text-sm font-semibold text-slate-800 dark:text-slate-200 mb-3.5">
+          Siap memulai eksplorasi dan penemuan asosiasi genomik?
         </p>
 
         <div className="flex flex-col sm:flex-row gap-3">
           <button
             type="button"
             onClick={() => completeIntroAndNavigate('/login')}
-            className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-[#5B4DFE] px-5 py-3 text-sm font-bold text-white shadow-lg shadow-[#5B4DFE]/30 hover:bg-[#4F46E5] hover:-translate-y-[1px] hover:shadow-xl active:scale-[0.97] active:brightness-95 transition-all duration-100"
+            className="flex-1 figma-btn-primary"
           >
-            Masuk ke Akun
+            <span>Masuk ke Akun</span>
             <ArrowRight className="h-4 w-4" />
           </button>
 
           <button
             type="button"
             onClick={() => completeIntroAndNavigate('/register')}
-            className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 dark:border-white/10 bg-slate-100 dark:bg-[#162142] px-5 py-3 text-sm font-semibold text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-[#1E2C58] hover:-translate-y-[1px] active:scale-[0.97] active:brightness-95 transition-all duration-100 shadow-sm"
+            className="flex-1 figma-btn-secondary"
           >
-            Buat Akun Baru
+            <span>Buat Akun Baru</span>
           </button>
         </div>
       </div>

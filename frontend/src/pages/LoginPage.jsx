@@ -5,7 +5,7 @@ import { useAuthStore } from '../store/useAuthStore.js';
 import ErrorMessageArea from '../components/common/ErrorMessageArea.jsx';
 
 /**
- * S-01: LoginPage (Autentikasi Pengguna - Figma Aligned)
+ * LoginPage (Autentikasi Pengguna - Figma Aligned)
  * Acuan: 01 — Login.png, 01 — Login (Light).png, 01b — Login_ Kredensial Salah.png
  */
 export default function LoginPage() {
@@ -13,7 +13,7 @@ export default function LoginPage() {
   const location = useLocation();
   const { login, isLoading } = useAuthStore();
 
-  // Ambil state pendaftaran jika pengguna baru dialihkan dari S-02
+  // Ambil state pendaftaran jika pengguna baru dialihkan dari registrasi
   const registeredSuccess = location.state?.registered;
   const prefilledUsername = location.state?.username || '';
 
@@ -35,7 +35,7 @@ export default function LoginPage() {
     try {
       await login(username.trim(), password);
 
-      // Arahkan ke rute awal jika sebelumnya dialihkan oleh ProtectedRoute (AC-01.3)
+      // Arahkan ke rute awal jika sebelumnya dialihkan oleh ProtectedRoute
       const destination = location.state?.from?.pathname || '/dashboard';
       navigate(destination, { replace: true });
     } catch (err) {
@@ -143,15 +143,15 @@ export default function LoginPage() {
             </label>
           </div>
 
-          {/* Tombol Masuk Submit (Figma Primary CTA #5B4DFE with Tactile Micro-Interactions) */}
+          {/* Tombol Masuk Submit */}
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-[#5B4DFE] py-3 text-sm font-bold text-white shadow-lg shadow-[#5B4DFE]/30 hover:bg-[#4F46E5] hover:-translate-y-[1px] hover:shadow-xl active:scale-[0.97] active:brightness-95 focus:outline-none focus:ring-2 focus:ring-[#5B4DFE]/50 transition-all duration-100 disabled:opacity-60 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none"
+            className="w-full figma-btn-primary py-3 text-sm sm:text-base cursor-pointer"
           >
             {isLoading ? (
               <>
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Loader2 className="h-5 w-5 animate-spin" />
                 <span>Memverifikasi kredensial...</span>
               </>
             ) : (
@@ -165,7 +165,7 @@ export default function LoginPage() {
           {/* Opsi Akses Demo Instan (Pengujian UI & Backend Offline) */}
           <div className="relative flex py-1 items-center">
             <div className="flex-grow border-t border-slate-200 dark:border-white/10"></div>
-            <span className="flex-shrink mx-2 text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            <span className="flex-shrink mx-2 text-xs uppercase tracking-wider text-slate-600 dark:text-slate-300 font-bold">
               atau mode pengujian
             </span>
             <div className="flex-grow border-t border-slate-200 dark:border-white/10"></div>
@@ -181,20 +181,20 @@ export default function LoginPage() {
                 console.error(e);
               }
             }}
-            className="w-full inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 dark:border-white/10 bg-slate-100 dark:bg-[#162142] py-2.5 text-xs font-semibold text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-[#1E2C58] hover:-translate-y-[1px] hover:shadow-md active:scale-[0.97] active:brightness-95 transition-all duration-100 shadow-sm"
+            className="w-full figma-btn-secondary py-2.5 text-xs sm:text-sm font-bold cursor-pointer"
           >
-            <Sparkles className="h-3.5 w-3.5 text-[#06B6D4]" />
+            <Sparkles className="h-4 w-4 text-[#0284C7] dark:text-[#06B6D4]" />
             <span>Masuk Cepat (Akun Peneliti Demo)</span>
           </button>
         </form>
 
         {/* Footer Kartu Form */}
         <div className="mt-6 border-t border-slate-200 dark:border-white/10 pt-4 text-center space-y-2">
-          <p className="text-xs text-slate-600 dark:text-slate-400">
+          <p className="text-xs sm:text-sm text-slate-700 dark:text-slate-300 font-medium">
             Belum memiliki akun peneliti?{' '}
             <Link
               to="/register"
-              className="font-semibold text-[#5B4DFE] dark:text-[#06B6D4] hover:underline transition-colors"
+              className="font-bold text-[#0284C7] dark:text-[#06B6D4] hover:underline transition-colors"
             >
               Daftar di sini
             </Link>
@@ -203,7 +203,7 @@ export default function LoginPage() {
           <div>
             <Link
               to="/welcome"
-              className="inline-flex items-center gap-1 text-[11px] text-slate-600 dark:text-slate-500 hover:text-[#5B4DFE] dark:hover:text-[#06B6D4] transition-colors"
+              className="inline-flex items-center gap-1 text-xs text-slate-700 dark:text-slate-300 hover:text-[#0284C7] dark:hover:text-[#06B6D4] transition-colors font-semibold"
             >
               <span>✨ Lihat Pengenalan GWASena</span>
             </Link>

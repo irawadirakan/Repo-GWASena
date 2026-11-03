@@ -10,6 +10,7 @@ import DashboardPage from './pages/DashboardPage.jsx';
 import HistoryPage from './pages/HistoryPage.jsx';
 import AnalysisWizardPage from './pages/AnalysisWizardPage.jsx';
 import { useAuthStore } from './store/useAuthStore.js';
+import SeamlessVideoBackground from './components/common/SeamlessVideoBackground.jsx';
 
 /**
  * Root Gatekeeper (Logika Hybrid Onboarding & Sesi)
@@ -41,6 +42,9 @@ export default function App() {
 
   return (
     <BrowserRouter>
+      {/* ── Global Seamless Looping Live Video Background (Anti Jump-Cut) ── */}
+      <SeamlessVideoBackground />
+
       <Routes>
         {/* ── Root Gatekeeper ── */}
         <Route path="/" element={<RootGatekeeper />} />

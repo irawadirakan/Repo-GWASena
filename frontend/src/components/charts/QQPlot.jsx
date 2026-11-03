@@ -4,7 +4,8 @@ import { useThemeStore } from '../../store/useThemeStore.js';
 
 /**
  * QQPlot - Visualisasi Quantile-Quantile (Expected vs Observed -log10 P)
- * Acuan: docs/gwasena-v2/DESIGN.md Bagian 7 & WIREFRAME.md Layar S-07
+ * Evaluasi inflasi genomik (lambda GC) terhadap distribusi teoretis (null hypothesis).
+ * Dilengkapi Custom HTML Legend Pills bar di luar SVG untuk menjamin 100% bebas clipping.
  */
 export default function QQPlot({ qqData = [], lambdaGc = 1.024 }) {
   const containerRef = useRef(null);
@@ -17,7 +18,7 @@ export default function QQPlot({ qqData = [], lambdaGc = 1.024 }) {
 
     const xVals = qqData.map((d) => d.expected);
     const yVals = qqData.map((d) => d.observed);
-    const maxVal = Math.ceil(Math.max(...xVals, ...yVals, 4));
+    const maxVal = Math.ceil(Math.max(...xVals, ...yVals, 4.5));
 
     // Trace 1: Observasi Titik SNP
     const traceObserved = {
@@ -25,7 +26,7 @@ export default function QQPlot({ qqData = [], lambdaGc = 1.024 }) {
       y: yVals,
       mode: 'markers',
       type: 'scattergl',
-      name: 'Observasi SNP',
+      name: 'Observasi SNP (-log₁₀ P)',
       hoverinfo: 'text',
       text: qqData.map(
         (d) =>
@@ -33,9 +34,9 @@ export default function QQPlot({ qqData = [], lambdaGc = 1.024 }) {
           `Observed -log₁₀(P): ${d.observed.toFixed(2)}`
       ),
       marker: {
-        size: 5,
-        color: isDark ? '#38BDF8' : '#2563EB', // Royal Blue
-        opacity: 0.8,
+        size: 5.5,
+        color: isDark ? '#38BDF8' : '#2563EB', // Royal Blue di Light Mode
+        opacity: 0.85,
       },
     };
 
@@ -56,29 +57,19 @@ export default function QQPlot({ qqData = [], lambdaGc = 1.024 }) {
 
     const layout = {
       autosize: true,
-      margin: { l: 56, r: 24, t: 36, b: 50 },
-      paper_bgcolor: isDark ? '#0F172A' : '#FFFFFF',
-      plot_bgcolor: isDark ? '#070B14' : '#F8FAFC',
-      showlegend: true,
-      legend: {
-        orientation: 'h',
-        x: 0.5,
-        xanchor: 'center',
-        y: 1.14,
-        font: {
-          family: 'Source Sans 3, Source Sans Pro, sans-serif',
-          size: 11,
-          color: isDark ? '#94A3B8' : '#1E293B',
-        },
-      },
+      margin: { l: 65, r: 30, t: 30, b: 60 },
+      paper_bgcolor: 'transparent',
+      plot_bgcolor: isDark ? 'rgba(7, 11, 20, 0.65)' : 'rgba(248, 250, 252, 0.65)',
+      showlegend: false, // Gunakan Custom HTML Legend di luar canvas
       xaxis: {
         title: {
           text: 'Expected -log₁₀(p-value)',
           font: {
             family: 'Source Sans 3, Source Sans Pro, sans-serif',
             size: 12,
-            color: isDark ? '#94A3B8' : '#1E293B',
+            color: isDark ? '#94A3B8' : '#334155',
           },
+          standoff: 14,
         },
         range: [0, maxVal],
         tickfont: {
@@ -87,7 +78,7 @@ export default function QQPlot({ qqData = [], lambdaGc = 1.024 }) {
           color: isDark ? '#E2E8F0' : '#1E293B',
         },
         showgrid: true,
-        gridcolor: isDark ? '#1E293B' : '#E2E8F0',
+        gridcolor: isDark ? 'rgba(51, 65, 85, 0.4)' : 'rgba(226, 232, 240, 0.8)',
         linecolor: isDark ? '#334155' : '#94A3B8',
         zeroline: false,
       },
@@ -97,8 +88,9 @@ export default function QQPlot({ qqData = [], lambdaGc = 1.024 }) {
           font: {
             family: 'Source Sans 3, Source Sans Pro, sans-serif',
             size: 12,
-            color: isDark ? '#94A3B8' : '#1E293B',
+            color: isDark ? '#94A3B8' : '#334155',
           },
+          standoff: 10,
         },
         range: [0, maxVal],
         tickfont: {
@@ -107,30 +99,10 @@ export default function QQPlot({ qqData = [], lambdaGc = 1.024 }) {
           color: isDark ? '#E2E8F0' : '#1E293B',
         },
         showgrid: true,
-        gridcolor: isDark ? '#1E293B' : '#E2E8F0',
+        gridcolor: isDark ? 'rgba(51, 65, 85, 0.4)' : 'rgba(226, 232, 240, 0.8)',
         linecolor: isDark ? '#334155' : '#94A3B8',
         zeroline: false,
       },
-      annotations: [
-        {
-          xref: 'paper',
-          yref: 'paper',
-          x: 0.05,
-          y: 0.95,
-          text: `<b>λ_GC = ${lambdaGc.toFixed(3)}</b><br><span style="font-size:10px;color:${isDark ? '#94A3B8' : '#475569'}">Terkontrol Baik (&lt; 1.05)</span>`,
-          showarrow: false,
-          align: 'left',
-          bgcolor: isDark ? 'rgba(30, 41, 59, 0.85)' : '#FFFFFF',
-          bordercolor: isDark ? '#334155' : '#CBD5E1',
-          borderwidth: 1,
-          borderpad: 6,
-          font: {
-            family: 'Source Sans 3, Source Sans Pro, sans-serif',
-            size: 12,
-            color: isDark ? '#F8FAFC' : '#0F172A',
-          },
-        },
-      ],
     };
 
     const config = {
@@ -162,8 +134,35 @@ export default function QQPlot({ qqData = [], lambdaGc = 1.024 }) {
   }, [qqData, lambdaGc, theme]);
 
   return (
-    <div className="w-full overflow-hidden rounded-2xl figma-card p-2 sm:p-4">
-      <div ref={containerRef} className="h-[380px] w-full" />
+    <div className="w-full overflow-hidden rounded-3xl figma-card p-3.5 sm:p-5">
+      {/* ── Custom HTML/Tailwind Legend Pills Bar (100% Bebas Clipping) ── */}
+      <div className="flex flex-wrap items-center justify-between gap-2.5 pb-3.5 border-b border-slate-200/80 dark:border-white/10 mb-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Badge Observasi SNP */}
+          <div className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium bg-blue-50/90 dark:bg-blue-950/40 text-blue-800 dark:text-blue-300 border border-blue-300/80 dark:border-blue-600/40 shadow-xs">
+            <span className="h-2.5 w-2.5 rounded-full bg-[#2563EB] dark:bg-[#38BDF8]" />
+            <span className="font-semibold">Observasi SNP (-log₁₀ P)</span>
+          </div>
+
+          {/* Badge Garis Ekspektasi Teoritis */}
+          <div className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium bg-amber-50/90 dark:bg-amber-950/40 text-amber-900 dark:text-amber-300 border border-amber-300/80 dark:border-amber-600/40 shadow-xs">
+            <span className="w-3.5 border-t-2 border-dashed border-[#D97706] dark:border-[#F59E0B]" />
+            <span className="font-semibold">Garis Ekspektasi Teoritis (y = x)</span>
+          </div>
+        </div>
+
+        {/* Badge Metrik Inflasi Genomik λ_GC */}
+        <div className="inline-flex items-center gap-2 rounded-full px-3.5 py-1 text-xs font-semibold bg-slate-100/90 dark:bg-slate-800/90 text-slate-800 dark:text-slate-200 border border-slate-300/80 dark:border-slate-700 shadow-xs">
+          <span className="font-mono font-bold text-slate-900 dark:text-white">
+            λ_GC = {Number(lambdaGc).toFixed(3)}
+          </span>
+          <span className="text-xs text-emerald-700 dark:text-emerald-400 font-bold">
+            (Terkontrol Baik &lt; 1.05)
+          </span>
+        </div>
+      </div>
+
+      <div ref={containerRef} className="h-[430px] w-full" />
     </div>
   );
 }

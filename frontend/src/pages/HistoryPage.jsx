@@ -18,7 +18,7 @@ import ErrorMessageArea from '../components/common/ErrorMessageArea.jsx';
 import AccessDeniedState from '../components/common/AccessDeniedState.jsx';
 
 /**
- * S-10: HistoryPage (Riwayat Analisis Pengguna - Figma Aligned)
+ * HistoryPage (Riwayat Analisis Pengguna - Figma Aligned)
  * Acuan: 10 — Riwayat Analisis.png, 10b — Riwayat_ Kosong.png, 10c — Riwayat_ Akses Ditolak.png
  */
 export default function HistoryPage() {
@@ -84,11 +84,11 @@ export default function HistoryPage() {
               <History className="h-5 w-5" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
+              <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
                 Riwayat Analisis GWAS
               </h1>
-              <p className="mt-0.5 text-xs text-slate-600 dark:text-slate-400">
-                Daftar seluruh sesi komputasi dan eksplorasi asosiasi genomik milik akun Anda (FR-12).
+              <p className="mt-0.5 text-sm text-slate-700 dark:text-slate-300 font-medium">
+                Daftar seluruh sesi komputasi dan eksplorasi asosiasi genomik milik akun Anda.
               </p>
             </div>
           </div>
@@ -99,7 +99,7 @@ export default function HistoryPage() {
             type="button"
             onClick={loadHistory}
             disabled={isLoading}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 dark:border-white/10 bg-slate-100 dark:bg-[#162142] px-3.5 py-2 text-xs font-semibold text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-[#1E2C58] hover:-translate-y-[1px] active:scale-[0.97] active:brightness-95 transition-all duration-100 disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 dark:border-white/10 bg-white/90 dark:bg-[#162142] px-4 py-2 text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#1E2C58] hover:-translate-y-[1px] active:scale-[0.97] transition-all duration-100 disabled:opacity-50 shadow-sm"
             title="Muat Ulang Riwayat"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`} />
@@ -108,7 +108,7 @@ export default function HistoryPage() {
 
           <Link
             to="/dashboard"
-            className="inline-flex items-center gap-1.5 rounded-xl bg-[#5B4DFE] px-4 py-2 text-xs font-bold text-white shadow-lg shadow-[#5B4DFE]/30 hover:bg-[#4F46E5] hover:-translate-y-[1px] hover:shadow-xl active:scale-[0.97] active:brightness-95 transition-all duration-100"
+            className="figma-btn-primary"
           >
             <PlusCircle className="h-4 w-4" />
             <span>+ Analisis Baru</span>
@@ -192,8 +192,8 @@ export default function HistoryPage() {
         /* Tabel Riwayat (Figma 10 — Riwayat Analisis.png) */
         <div className="overflow-hidden figma-card">
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="border-b border-slate-200 dark:border-white/10 bg-slate-100/95 dark:bg-[#0F172E]/90 text-slate-700 dark:text-slate-300 font-semibold uppercase tracking-wider font-sans">
+            <table className="w-full text-left text-sm">
+              <thead className="border-b border-slate-200 dark:border-white/10 bg-slate-100/95 dark:bg-[#0F172E]/90 text-slate-800 dark:text-slate-200 font-bold uppercase tracking-wider font-sans text-xs">
                 <tr>
                   <th className="py-3.5 px-4 w-20">ID</th>
                   <th className="py-3.5 px-4">Nama Sesi Analisis</th>
@@ -221,37 +221,32 @@ export default function HistoryPage() {
                   return (
                     <tr
                       key={item.analysis_id}
-                      className="hover:bg-slate-50 dark:hover:bg-white/5 transition-colors group"
+                      className="hover:bg-slate-50/80 dark:hover:bg-white/5 transition-colors group"
                     >
                       {/* ID Sesi */}
-                      <td className="py-3.5 px-4 font-mono font-bold text-[#5B4DFE] dark:text-[#06B6D4] tabular-nums">
+                      <td className="py-3.5 px-4 font-mono font-bold text-[#0284C7] dark:text-[#06B6D4] tabular-nums">
                         #{item.analysis_id}
                       </td>
 
                       {/* Nama Analisis */}
-                      <td className="py-3.5 px-4 font-medium text-slate-900 dark:text-white">
+                      <td className="py-3.5 px-4 font-semibold text-slate-900 dark:text-white">
                         <div className="flex items-center gap-2.5">
-                          <FileText className="h-4 w-4 text-slate-400 shrink-0" />
-                          <span className="font-semibold text-sm group-hover:text-[#5B4DFE] dark:group-hover:text-[#06B6D4] transition-colors line-clamp-1 font-sans">
+                          <FileText className="h-4 w-4 text-slate-500 shrink-0" />
+                          <span className="font-bold text-sm sm:text-[15px] group-hover:text-[#0284C7] dark:group-hover:text-[#06B6D4] transition-colors line-clamp-1 font-sans">
                             {item.analysis_name}
                           </span>
                         </div>
                       </td>
 
-                      {/* Organisme (Neuton Serif Italic) */}
-                      <td className="py-3.5 px-4 hidden md:table-cell text-slate-700 dark:text-slate-300 font-serif italic text-sm">
-                        {item.organism || 'Allium sativum L.'}
-                      </td>
-
                       {/* Organisme */}
-                      <td className="py-3.5 px-4 hidden md:table-cell italic text-slate-600 dark:text-slate-400">
-                        {item.organism || 'Allium sativum'}
+                      <td className="py-3.5 px-4 hidden md:table-cell text-slate-800 dark:text-slate-200 font-serif italic text-sm">
+                        {item.organism || 'Genomic Pipeline'}
                       </td>
 
                       {/* Waktu Sesi */}
-                      <td className="py-3.5 px-4 hidden sm:table-cell text-slate-600 dark:text-slate-400 font-mono tabular-nums">
+                      <td className="py-3.5 px-4 hidden sm:table-cell text-slate-700 dark:text-slate-300 font-mono tabular-nums text-xs sm:text-sm">
                         <div className="flex items-center gap-1.5">
-                          <Calendar className="h-3.5 w-3.5 text-slate-400" />
+                          <Calendar className="h-3.5 w-3.5 text-slate-500" />
                           <span>{formattedDate}</span>
                         </div>
                       </td>
@@ -259,7 +254,7 @@ export default function HistoryPage() {
                       {/* Status Badge */}
                       <td className="py-3.5 px-4">
                         <span
-                          className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${statusConfig.badgeClass}`}
+                          className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-bold ${statusConfig.badgeClass}`}
                         >
                           <span
                             className="h-1.5 w-1.5 rounded-full"
@@ -274,10 +269,10 @@ export default function HistoryPage() {
                         <button
                           type="button"
                           onClick={() => navigate(`/analyses/${item.analysis_id}`)}
-                          className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 dark:border-white/10 bg-slate-100 dark:bg-[#162142] px-3.5 py-1.5 text-xs font-semibold text-slate-800 dark:text-slate-200 hover:border-[#5B4DFE] hover:text-[#5B4DFE] dark:hover:text-white hover:bg-slate-200 dark:hover:bg-[#1E2C58] hover:-translate-y-[1px] active:scale-[0.97] active:brightness-95 transition-all duration-100"
+                          className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 dark:border-white/10 bg-white/90 dark:bg-[#162142] px-3.5 py-1.5 text-xs font-bold text-slate-800 dark:text-slate-200 hover:border-[#0284C7] hover:text-[#0284C7] dark:hover:text-white hover:bg-slate-100 dark:hover:bg-[#1E2C58] hover:-translate-y-[1px] active:scale-[0.97] transition-all duration-100 shadow-sm"
                         >
                           <span>Buka Analisis</span>
-                          <ArrowRight className="h-3 w-3" />
+                          <ArrowRight className="h-3.5 w-3.5" />
                         </button>
                       </td>
                     </tr>

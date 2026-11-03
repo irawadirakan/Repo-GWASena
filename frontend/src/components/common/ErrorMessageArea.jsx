@@ -51,7 +51,7 @@ export default function ErrorMessageArea({
 
         {details.length > 0 && (
           <div className="mt-2.5 rounded-xl bg-black/5 dark:bg-black/35 p-3 border border-black/10 dark:border-white/10">
-            <span className="text-[11px] font-semibold uppercase tracking-wider opacity-80">
+            <span className="text-xs font-bold uppercase tracking-wider opacity-90">
               Rincian Masalah ({details.length}):
             </span>
             <ul className="mt-1.5 max-h-48 space-y-1 overflow-y-auto pl-4 text-xs font-mono opacity-90 list-disc">

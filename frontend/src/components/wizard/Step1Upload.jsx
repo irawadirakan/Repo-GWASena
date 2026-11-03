@@ -13,11 +13,11 @@ import {
 } from 'lucide-react';
 import { analysisService } from '../../services/analysisService.js';
 import { useAnalysisStore, MOCK_GARLIC_DATASET_SUMMARY } from '../../store/useAnalysisStore.js';
+import { getExampleDatasetFiles } from '../../services/exampleDataset.js';
 import ErrorMessageArea from '../common/ErrorMessageArea.jsx';
 
 /**
- * S-04: Step1Upload (Unggah & Validasi Data Genomik - Figma Aligned)
- * Modul: M-02 (FR-02, FR-11, BR-01, BR-02)
+ * Step1Upload (Unggah & Validasi Data Genomik - Figma Aligned)
  * Acuan: 04 — Unggah Berkas & Validasi (Kosong).png & 04c — Unggah_ Valid (Boleh Lanjut).png
  */
 export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
@@ -93,35 +93,26 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
     setUploadResult(null);
   };
 
-  // 1-Klik Instan: Gunakan Dataset Contoh (Allium sativum L.)
-  const handleUseSampleData = () => {
+  // 1-Klik Instan: Gunakan Dataset Contoh Benchmark (40 sampel x 500 SNP, 100% lolos QC)
+  const handleUseSampleData = async () => {
     setError(null);
 
-    const dummyVcf = new File(
-      ['#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO'],
-      'garlic_benchmark.vcf',
-      { type: 'text/plain', lastModified: Date.now() }
-    );
-    Object.defineProperty(dummyVcf, 'size', { value: 2.45 * 1024 * 1024 });
+    try {
+      const { vcfFile, csvFile } = await getExampleDatasetFiles();
+      setGenotypeFile(vcfFile);
+      setPhenotypeFile(csvFile);
 
-    const dummyCsv = new File(
-      ['sample_id,bobot_umbi_g,diameter_umbi_mm,jumlah_siung'],
-      'phenotype_weight.csv',
-      { type: 'text/csv', lastModified: Date.now() }
-    );
-    Object.defineProperty(dummyCsv, 'size', { value: 14.2 * 1024 });
+      const mockSummary = loadMockGarlicDataset
+        ? loadMockGarlicDataset()
+        : { ...MOCK_GARLIC_DATASET_SUMMARY };
 
-    setGenotypeFile(dummyVcf);
-    setPhenotypeFile(dummyCsv);
-
-    const mockSummary = loadMockGarlicDataset
-      ? loadMockGarlicDataset()
-      : { ...MOCK_GARLIC_DATASET_SUMMARY };
-
-    setUploadResult(mockSummary);
-    setUploadSummary(mockSummary);
-    setIsSimulated(true);
-    onUploadSuccess?.(mockSummary);
+      setUploadResult(mockSummary);
+      setUploadSummary(mockSummary);
+      setIsSimulated(true);
+      onUploadSuccess?.(mockSummary);
+    } catch (err) {
+      console.error('Gagal menyiapkan dataset contoh:', err);
+    }
   };
 
   const handleUploadAndValidate = async (e) => {
@@ -212,41 +203,41 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
       {/* ── Header Langkah ── */}
       <div className="border-b border-slate-200 dark:border-white/10 pb-4">
         <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">
-          1. Unggah & Validasi Dataset Bawang Putih
+          1. Unggah & Validasi Dataset Genomik
         </h2>
         <p className="mt-1 text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
-          Unggah data genotipe (varian SNP) dan data fenotipe (pengamatan sifat agronomi). Sistem
-          akan memeriksa integritas format dan mencocokkan kesamaan 100% <em>Sample ID</em> (BR-02).
+          Unggah berkas varian genotipe (SNP) dan data pengamatan fenotipe. Sistem secara otomatis
+          memvalidasi struktur berkas dan mencocokkan Sample ID antar dataset.
         </p>
       </div>
 
       <ErrorMessageArea error={error} onDismiss={() => setError(null)} />
 
       {/* ── Banner Pintasan Data Contoh Benchmark (1-Klik Cepat) ── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-3xl border border-cyan-300/80 dark:border-[#06B6D4]/30 bg-gradient-to-r from-cyan-50/90 via-white/70 to-indigo-50/60 dark:from-[#06B6D4]/10 dark:via-[#0F172E]/80 dark:to-[#121B38] p-4 sm:p-5 backdrop-blur-md shadow-sm">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-3xl border border-white/85 dark:border-[#06B6D4]/30 bg-gradient-to-r from-white/70 via-sky-50/60 to-cyan-50/45 dark:from-[#06B6D4]/10 dark:via-[#0F172E]/80 dark:to-[#121B38] p-4 sm:p-5 backdrop-blur-xl shadow-xs">
         <div className="flex items-start sm:items-center gap-3.5">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[#06B6D4]/15 text-[#06B6D4] shadow-inner">
             <Sparkles className="h-5 w-5" />
           </div>
           <div className="space-y-0.5">
-            <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <h4 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
               <span>Ingin mencoba alur tanpa mengunggah berkas sendiri?</span>
-              <span className="inline-flex items-center rounded-full bg-cyan-100 dark:bg-[#06B6D4]/20 px-2 py-0.5 text-[10px] font-semibold text-cyan-800 dark:text-[#06B6D4]">
+              <span className="inline-flex items-center rounded-full bg-cyan-100 dark:bg-[#06B6D4]/20 px-2.5 py-0.5 text-xs font-bold text-cyan-900 dark:text-[#06B6D4]">
                 1-Klik Cepat
               </span>
             </h4>
-            <p className="text-[11px] sm:text-xs text-slate-600 dark:text-slate-400">
-              Muat dataset benchmark bawang putih (<span className="italic font-serif">Allium sativum</span> L. 25 sampel, 500 SNP, 3 sifat agronomi).
+            <p className="text-xs sm:text-sm text-slate-700 dark:text-slate-300 font-medium">
+              Gunakan dataset contoh terstandarisasi (Mini-VCF & CSV Fenotipe) untuk menguji coba alur kerja pipeline secara instan.
             </p>
           </div>
         </div>
         <button
           type="button"
           onClick={handleUseSampleData}
-          className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#06B6D4] to-[#5B4DFE] px-4 py-2.5 text-xs font-bold text-white hover:brightness-110 active:scale-95 shadow-md shadow-[#06B6D4]/20 transition-all duration-100 whitespace-nowrap self-stretch sm:self-auto cursor-pointer"
+          className="figma-btn-primary cursor-pointer whitespace-nowrap self-stretch sm:self-auto"
         >
-          <Sparkles className="h-3.5 w-3.5" />
-          <span>Gunakan Dataset Contoh (Allium sativum L.)</span>
+          <Sparkles className="h-4 w-4" />
+          <span>Gunakan Dataset Contoh</span>
         </button>
       </div>
 
@@ -270,7 +261,7 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
                 ? 'border-[#06B6D4] bg-[#06B6D4]/10 scale-[1.005]'
                 : genotypeFile
                 ? 'border-emerald-500/50 bg-emerald-500/5'
-                : 'border-slate-300 dark:border-white/15 bg-slate-50 dark:bg-[#0F172E]/60 hover:border-[#5B4DFE] hover:bg-indigo-50/30 dark:hover:bg-white/5'
+                : 'border-white/80 dark:border-white/15 bg-white/50 dark:bg-[#0F172E]/60 backdrop-blur-md shadow-xs hover:border-[#0284C7] hover:bg-sky-50/40 dark:hover:bg-white/5'
             }`}
           >
             <div>
@@ -279,17 +270,17 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
                   <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#06B6D4]/15 text-[#06B6D4]">
                     <Dna className="h-4 w-4" />
                   </div>
-                  <span className="text-sm font-bold text-slate-900 dark:text-white">
+                  <span className="text-sm sm:text-base font-bold text-slate-900 dark:text-white">
                     Berkas Genotipe (VCF)
                   </span>
                 </div>
-                <span className="text-[11px] font-mono rounded-lg border border-slate-300 dark:border-white/10 bg-slate-100 dark:bg-[#162142] px-2.5 py-0.5 text-slate-700 dark:text-slate-300">
+                <span className="text-xs font-mono font-bold rounded-lg border border-slate-300 dark:border-white/10 bg-slate-100 dark:bg-[#162142] px-2.5 py-0.5 text-slate-800 dark:text-slate-200">
                   .vcf / .vcf.gz
                 </span>
               </div>
 
-              <p className="text-xs text-slate-600 dark:text-slate-400 mb-4 leading-relaxed">
-                Format VCF standar (bialelik) berisi varian penanda SNP genom bawang putih (8 kromosom).
+              <p className="text-xs sm:text-sm text-slate-700 dark:text-slate-300 mb-4 leading-relaxed font-medium">
+                Format VCF standar (.vcf / .vcf.gz) atau biner PLINK yang memuat informasi varian penanda SNP multi-sampel.
               </p>
 
               {genotypeFile ? (
@@ -297,10 +288,10 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
                   <div className="flex items-center gap-2.5 truncate">
                     <FileCheck2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
                     <div className="truncate">
-                      <div className="text-xs font-semibold text-slate-900 dark:text-white truncate">
+                      <div className="text-sm font-bold text-slate-900 dark:text-white truncate">
                         {genotypeFile.name}
                       </div>
-                      <div className="text-[11px] font-mono text-slate-600 dark:text-slate-400">
+                      <div className="text-xs font-mono font-bold text-slate-700 dark:text-slate-300">
                         {(genotypeFile.size / (1024 * 1024)).toFixed(2)} MB
                       </div>
                     </div>
@@ -311,7 +302,7 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
                       setGenotypeFile(null);
                       setUploadResult(null);
                     }}
-                    className="p-1 rounded-lg text-slate-400 hover:bg-slate-200 dark:hover:bg-white/10 hover:text-slate-700 dark:hover:text-white active:scale-95 transition-all"
+                    className="p-1 rounded-lg text-slate-500 hover:bg-slate-200 dark:hover:bg-white/10 hover:text-slate-800 dark:hover:text-white active:scale-95 transition-all"
                   >
                     <X className="h-4 w-4" />
                   </button>
@@ -319,13 +310,13 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
               ) : (
                 <div
                   onClick={() => genoInputRef.current?.click()}
-                  className="flex flex-col items-center justify-center p-6 rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-[#0F172E]/50 cursor-pointer hover:bg-slate-50 dark:hover:bg-white/5 active:scale-[0.99] transition-all text-center group"
+                  className="flex flex-col items-center justify-center p-6 rounded-2xl border border-white/80 dark:border-white/10 bg-white/60 dark:bg-[#0F172E]/50 backdrop-blur-md cursor-pointer hover:bg-white/80 dark:hover:bg-white/5 active:scale-[0.99] transition-all text-center group shadow-xs"
                 >
-                  <UploadCloud className="h-8 w-8 text-[#06B6D4] mb-2 group-hover:scale-110 transition-transform" />
-                  <span className="text-xs font-semibold text-slate-800 dark:text-white">
+                  <UploadCloud className="h-8 w-8 text-[#0284C7] dark:text-[#06B6D4] mb-2 group-hover:scale-110 transition-transform" />
+                  <span className="text-sm font-bold text-slate-900 dark:text-white">
                     Pilih atau Seret Berkas VCF ke Sini
                   </span>
-                  <span className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">Maksimal 200 MB</span>
+                  <span className="mt-1 text-xs text-slate-600 dark:text-slate-300 font-medium">Maksimal 200 MB</span>
                 </div>
               )}
 
@@ -340,8 +331,8 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
               />
             </div>
 
-            <div className="mt-4 pt-3 border-t border-slate-200 dark:border-white/10 text-[11px] text-slate-600 dark:text-slate-400 flex items-center gap-1.5">
-              <Info className="h-3.5 w-3.5 shrink-0 text-[#06B6D4]" />
+            <div className="mt-4 pt-3 border-t border-slate-200 dark:border-white/10 text-xs sm:text-sm text-slate-700 dark:text-slate-300 flex items-center gap-1.5 font-medium">
+              <Info className="h-4 w-4 shrink-0 text-[#0284C7] dark:text-[#06B6D4]" />
               <span>Format PLINK biner (.bed/.bim/.fam) belum didukung pada rilis ini.</span>
             </div>
           </div>
@@ -360,10 +351,10 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
             }}
             className={`flex flex-col justify-between rounded-3xl border-2 border-dashed p-6 transition-all ${
               isDraggingPheno
-                ? 'border-[#5B4DFE] bg-[#5B4DFE]/10 scale-[1.005]'
+                ? 'border-[#0284C7] bg-[#0284C7]/10 scale-[1.005]'
                 : phenotypeFile
                 ? 'border-emerald-500/50 bg-emerald-500/5'
-                : 'border-slate-300 dark:border-white/15 bg-slate-50 dark:bg-[#0F172E]/60 hover:border-[#5B4DFE] hover:bg-indigo-50/30 dark:hover:bg-white/5'
+                : 'border-white/80 dark:border-white/15 bg-white/50 dark:bg-[#0F172E]/60 backdrop-blur-md shadow-xs hover:border-[#0284C7] hover:bg-sky-50/40 dark:hover:bg-white/5'
             }`}
           >
             <div>
@@ -372,17 +363,17 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
                   <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#5B4DFE]/15 text-[#5B4DFE]">
                     <FileText className="h-4 w-4" />
                   </div>
-                  <span className="text-sm font-bold text-slate-900 dark:text-white">
+                  <span className="text-sm sm:text-base font-bold text-slate-900 dark:text-white">
                     Berkas Fenotipe (CSV)
                   </span>
                 </div>
-                <span className="text-[11px] font-mono rounded-lg border border-slate-300 dark:border-white/10 bg-slate-100 dark:bg-[#162142] px-2.5 py-0.5 text-slate-700 dark:text-slate-300">
+                <span className="text-xs font-mono font-bold rounded-lg border border-slate-300 dark:border-white/10 bg-slate-100 dark:bg-[#162142] px-2.5 py-0.5 text-slate-800 dark:text-slate-200">
                   .csv
                 </span>
               </div>
 
-              <p className="text-xs text-slate-600 dark:text-slate-400 mb-4 leading-relaxed">
-                Tabel CSV memuat kolom ID sampel (<code>sample_id</code>) dan minimal 1 kolom sifat numerik (mis. <code>bobot_umbi_g</code>).
+              <p className="text-xs sm:text-sm text-slate-700 dark:text-slate-300 mb-4 leading-relaxed font-medium">
+                Tabel CSV yang memuat kolom identitas sampel (<code>sample_id</code>) beserta satu atau lebih kolom nilai fenotipe kuantitatif/kualitatif.
               </p>
 
               {phenotypeFile ? (
@@ -390,10 +381,10 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
                   <div className="flex items-center gap-2.5 truncate">
                     <FileCheck2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
                     <div className="truncate">
-                      <div className="text-xs font-semibold text-slate-900 dark:text-white truncate">
+                      <div className="text-sm font-bold text-slate-900 dark:text-white truncate">
                         {phenotypeFile.name}
                       </div>
-                      <div className="text-[11px] font-mono text-slate-600 dark:text-slate-400">
+                      <div className="text-xs font-mono font-bold text-slate-700 dark:text-slate-300">
                         {(phenotypeFile.size / 1024).toFixed(1)} KB
                       </div>
                     </div>
@@ -404,7 +395,7 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
                       setPhenotypeFile(null);
                       setUploadResult(null);
                     }}
-                    className="p-1 rounded-lg text-slate-400 hover:bg-slate-200 dark:hover:bg-white/10 hover:text-slate-700 dark:hover:text-white active:scale-95 transition-all"
+                    className="p-1 rounded-lg text-slate-500 hover:bg-slate-200 dark:hover:bg-white/10 hover:text-slate-800 dark:hover:text-white active:scale-95 transition-all"
                   >
                     <X className="h-4 w-4" />
                   </button>
@@ -412,13 +403,13 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
               ) : (
                 <div
                   onClick={() => phenoInputRef.current?.click()}
-                  className="flex flex-col items-center justify-center p-6 rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-[#0F172E]/50 cursor-pointer hover:bg-slate-50 dark:hover:bg-white/5 active:scale-[0.99] transition-all text-center group"
+                  className="flex flex-col items-center justify-center p-6 rounded-2xl border border-white/80 dark:border-white/10 bg-white/60 dark:bg-[#0F172E]/50 backdrop-blur-md cursor-pointer hover:bg-white/80 dark:hover:bg-white/5 active:scale-[0.99] transition-all text-center group shadow-xs"
                 >
-                  <UploadCloud className="h-8 w-8 text-[#5B4DFE] mb-2 group-hover:scale-110 transition-transform" />
-                  <span className="text-xs font-semibold text-slate-800 dark:text-white">
+                  <UploadCloud className="h-8 w-8 text-[#0284C7] dark:text-[#06B6D4] mb-2 group-hover:scale-110 transition-transform" />
+                  <span className="text-sm font-bold text-slate-900 dark:text-white">
                     Pilih atau Seret Berkas CSV ke Sini
                   </span>
-                  <span className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">Encoding UTF-8</span>
+                  <span className="mt-1 text-xs text-slate-600 dark:text-slate-300 font-medium">Encoding UTF-8</span>
                 </div>
               )}
 
@@ -433,9 +424,9 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
               />
             </div>
 
-            <div className="mt-4 pt-3 border-t border-slate-200 dark:border-white/10 text-[11px] text-slate-600 dark:text-slate-400 flex items-center gap-1.5">
-              <Info className="h-3.5 w-3.5 shrink-0 text-[#5B4DFE]" />
-              <span>Contoh kolom sifat: bobot_umbi_g, diameter_umbi_mm, jumlah_siung.</span>
+            <div className="mt-4 pt-3 border-t border-slate-200 dark:border-white/10 text-xs sm:text-sm text-slate-700 dark:text-slate-300 flex items-center gap-1.5 font-medium">
+              <Info className="h-4 w-4 shrink-0 text-[#0284C7] dark:text-[#06B6D4]" />
+              <span>Contoh kolom sifat: trait_yield, disease_resistance, plant_height.</span>
             </div>
           </div>
         </div>
@@ -445,16 +436,16 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
           <button
             type="submit"
             disabled={isUploading || !genotypeFile || !phenotypeFile}
-            className="inline-flex items-center gap-2 rounded-xl bg-[#5B4DFE] px-7 py-3.5 text-sm font-bold text-white shadow-lg shadow-[#5B4DFE]/30 hover:bg-[#4F46E5] hover:-translate-y-[1px] hover:shadow-xl active:scale-[0.97] active:brightness-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none transition-all duration-100 cursor-pointer"
+            className="figma-btn-primary px-8 py-3.5 text-sm sm:text-base cursor-pointer"
           >
             {isUploading ? (
               <>
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Loader2 className="h-5 w-5 animate-spin" />
                 <span>Memvalidasi Format & Mencocokkan Sample ID...</span>
               </>
             ) : (
               <>
-                <UploadCloud className="h-4 w-4" />
+                <UploadCloud className="h-5 w-5" />
                 <span>Unggah & Validasi Berkas Sekarang</span>
               </>
             )}
@@ -462,7 +453,7 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
         </div>
       </form>
 
-      {/* ── Panel Hasil Validasi Sukses (200 OK - AC-02.1 with Reveal Animation) ── */}
+      {/* ── Panel Hasil Validasi Sukses ── */}
       {uploadResult && (
         <div className="rounded-3xl border border-emerald-300 dark:border-emerald-500/40 bg-emerald-50 dark:bg-emerald-500/10 p-5 sm:p-7 shadow-xl backdrop-blur-md animate-pop-in space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-emerald-200 dark:border-emerald-500/20 pb-3.5">
@@ -485,50 +476,54 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
           {/* Grid Metrik Dataset (Hero Stats dengan Neuton Serif) */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="glass-subcard p-3.5 text-center">
-              <span className="text-[11px] text-slate-500 dark:text-slate-400 uppercase font-sans font-medium">
+              <span className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase font-sans tracking-wide">
                 Sampel Cocok
               </span>
-              <div className="font-serif text-2xl font-bold text-[#5B4DFE] dark:text-[#06B6D4] tabular-nums mt-1">
-                {uploadResult.genotipe?.jumlah_sampel || uploadResult.kecocokan_sample_id?.jumlah_sampel_cocok || 25}
+              <div className="font-serif text-2xl font-bold text-[#0284C7] dark:text-[#06B6D4] tabular-nums mt-1">
+                {uploadResult.kecocokan_sample_id?.jumlah_cocok ??
+                  uploadResult.genotipe?.n_sampel ??
+                  uploadResult.genotipe?.jumlah_sampel ??
+                  uploadResult.kecocokan_sample_id?.jumlah_sampel_cocok ??
+                  25}
               </div>
             </div>
 
             <div className="glass-subcard p-3.5 text-center">
-              <span className="text-[11px] text-slate-500 dark:text-slate-400 uppercase font-sans font-medium">
+              <span className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase font-sans tracking-wide">
                 Jumlah SNP
               </span>
               <div className="font-serif text-2xl font-bold text-slate-900 dark:text-white tabular-nums mt-1">
-                {uploadResult.genotipe?.jumlah_snp || 500}
+                {uploadResult.genotipe?.n_snp ?? uploadResult.genotipe?.jumlah_snp ?? 500}
               </div>
             </div>
 
             <div className="glass-subcard p-3.5 text-center">
-              <span className="text-[11px] text-slate-500 dark:text-slate-400 uppercase font-sans font-medium">
+              <span className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase font-sans tracking-wide">
                 Varian Dilewati
               </span>
-              <div className="font-mono text-xs font-semibold text-slate-600 dark:text-slate-400 mt-2">
-                {uploadResult.genotipe?.varian_dilewati?.multialelik || 12} Multialelik
+              <div className="font-mono text-xs font-bold text-slate-700 dark:text-slate-300 mt-2">
+                {uploadResult.genotipe?.varian_dilewati?.multialelik ?? 0} Multialelik
               </div>
             </div>
 
             <div className="glass-subcard p-3.5 text-center">
-              <span className="text-[11px] text-slate-500 dark:text-slate-400 uppercase font-sans font-medium">
-                Varietas Tercatat
+              <span className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase font-sans tracking-wide">
+                Sampel Fenotipe
               </span>
-              <div className="font-serif text-2xl font-bold text-[#5B4DFE] dark:text-[#38BDF8] tabular-nums mt-1">
-                {uploadResult.fenotipe?.varietas_tercatat || 25}
+              <div className="font-serif text-2xl font-bold text-[#0284C7] dark:text-[#38BDF8] tabular-nums mt-1">
+                {uploadResult.fenotipe?.n_sampel ?? uploadResult.fenotipe?.varietas_tercatat ?? 25}
               </div>
             </div>
           </div>
 
           {/* Sifat Fenotipe Tersedia */}
-          {uploadResult.fenotipe?.sifat_tersedia && (
+          {(uploadResult.fenotipe?.daftar_sifat || uploadResult.fenotipe?.sifat_tersedia) && (
             <div className="glass-subcard p-4 space-y-2">
               <span className="text-xs font-semibold font-sans text-slate-700 dark:text-slate-300 block">
                 Sifat Fenotipe yang Terdeteksi dalam CSV:
               </span>
               <div className="flex flex-wrap gap-2">
-                {uploadResult.fenotipe.sifat_tersedia.map((trait) => (
+                {(uploadResult.fenotipe.daftar_sifat || uploadResult.fenotipe.sifat_tersedia).map((trait) => (
                   <span
                     key={trait}
                     className="inline-flex items-center gap-1 rounded-xl border border-cyan-300 dark:border-[#06B6D4]/30 bg-cyan-50 dark:bg-[#06B6D4]/10 px-3 py-1 text-xs font-serif italic font-medium text-cyan-900 dark:text-[#06B6D4]"
@@ -545,7 +540,7 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
             <button
               type="button"
               onClick={handleProceedToStep2}
-              className="inline-flex items-center gap-2 rounded-xl bg-[#5B4DFE] px-7 py-3.5 text-sm font-bold text-white shadow-lg shadow-[#5B4DFE]/30 hover:bg-[#4F46E5] hover:-translate-y-[1px] hover:shadow-xl active:scale-[0.97] active:brightness-95 transition-all duration-100 cursor-pointer"
+              className="inline-flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 px-7 py-3 text-sm font-semibold text-white shadow-sm hover:-translate-y-[1px] hover:shadow-md active:scale-[0.98] transition-all duration-100 cursor-pointer"
             >
               <span>Lanjut ke Konfigurasi QC (Langkah 2)</span>
               <ArrowRight className="h-4 w-4" />

@@ -12,9 +12,10 @@ import {
 } from 'lucide-react';
 import { useAnalysisStore } from '../../store/useAnalysisStore.js';
 import { generateBenchmarkResults } from '../../services/mockResults.js';
+import { analysisService } from '../../services/analysisService.js';
 
 /**
- * S-09 (Langkah 6): Ekspor Data & Laporan Analisis (Figma Aligned)
+ * Step6Export (Langkah 6): Ekspor Data & Laporan Analisis (Figma Aligned)
  * Acuan: 09 — Ekspor & Laporan.png & 09d — Ekspor_ Laporan Tanpa Kandidat Gen.png
  */
 export default function Step6Export({ analysisId, onNavigateStep }) {
@@ -30,9 +31,21 @@ export default function Step6Export({ analysisId, onNavigateStep }) {
   const [downloadSuccess, setDownloadSuccess] = useState(null);
   const [showReportModal, setShowReportModal] = useState(false);
 
-  // 1. Unduh CSV Hasil Asosiasi (AC-09.1)
-  function handleDownloadCsv() {
+  // 1. Unduh CSV Hasil Asosiasi
+  async function handleDownloadCsv() {
     setDownloadingCsv(true);
+
+    if (analysisId && !activeResults?.is_simulated) {
+      try {
+        await analysisService.downloadCsv(analysisId);
+        setDownloadingCsv(false);
+        setDownloadSuccess('csv');
+        setTimeout(() => setDownloadSuccess(null), 4000);
+        return;
+      } catch (err) {
+        console.warn('Gagal mengunduh CSV langsung dari backend, membuat CSV di browser:', err);
+      }
+    }
 
     const headers = [
       'snp_id',
@@ -119,7 +132,7 @@ export default function Step6Export({ analysisId, onNavigateStep }) {
           </button>
           <button
             type="button"
-            className="rounded-xl bg-[#5B4DFE] px-3.5 py-1.5 text-xs font-sans font-bold text-white shadow-sm"
+            className="rounded-xl bg-blue-600 dark:bg-blue-500 px-3.5 py-1.5 text-xs font-sans font-semibold text-white shadow-sm"
           >
             Langkah 6: Ekspor & Laporan
           </button>
@@ -137,23 +150,23 @@ export default function Step6Export({ analysisId, onNavigateStep }) {
         </div>
       </div>
 
-      {/* ── Grid 3 Kartu Ekspor (Figma 09 with Hover Lift & Tactile Press) ── */}
+      {/* ── Grid 3 Kartu Ekspor ── */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-        {/* Kartu 1: Unduh CSV Asosiasi (AC-09.1) */}
+        {/* Kartu 1: Unduh CSV Asosiasi */}
         <div className="rounded-3xl figma-card p-6 space-y-4 hover:border-emerald-500/40 hover:-translate-y-1 active:scale-[0.985] transition-all duration-150 flex flex-col justify-between">
           <div className="space-y-3">
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400">
               <FileSpreadsheet className="h-6 w-6" />
             </div>
             <div>
-              <h4 className="text-base font-sans font-bold text-slate-900 dark:text-white">
+              <h4 className="text-base sm:text-lg font-sans font-bold text-slate-900 dark:text-white">
                 Tabel Hasil Asosiasi (CSV)
               </h4>
-              <span className="inline-block mt-1 rounded-full bg-emerald-100 dark:bg-emerald-500/20 px-2.5 py-0.5 font-mono text-[10px] font-bold text-emerald-800 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-500/30">
-                Must Have (AC-09.1)
+              <span className="inline-block mt-1 rounded-full bg-emerald-100 dark:bg-emerald-500/20 px-2.5 py-0.5 font-mono text-xs font-bold text-emerald-800 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-500/30">
+                Format Data Terstandarisasi
               </span>
             </div>
-            <p className="text-xs font-serif leading-relaxed text-slate-700 dark:text-slate-300">
+            <p className="text-xs sm:text-sm font-serif leading-relaxed text-slate-800 dark:text-slate-200">
               Unduh seluruh {snps.length} baris data statistik asosiasi genomik lengkap: SNP ID,
               posisi kromosom, p-value, q-value FDR, beta effect size, standard error, dan alel.
             </p>
@@ -163,7 +176,7 @@ export default function Step6Export({ analysisId, onNavigateStep }) {
             type="button"
             onClick={handleDownloadCsv}
             disabled={downloadingCsv}
-            className="w-full mt-4 inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 py-3 text-xs font-sans font-bold text-white shadow-lg shadow-emerald-500/30 hover:bg-emerald-600 hover:-translate-y-[1px] hover:shadow-xl active:scale-[0.97] active:brightness-95 transition-all duration-100 disabled:opacity-50 disabled:transform-none disabled:shadow-none"
+            className="w-full mt-4 figma-btn-primary"
           >
             {downloadSuccess === 'csv' ? (
               <>
@@ -186,15 +199,15 @@ export default function Step6Export({ analysisId, onNavigateStep }) {
               <Image className="h-6 w-6" />
             </div>
             <div>
-              <h4 className="text-base font-sans font-bold text-slate-900 dark:text-white">
+              <h4 className="text-base sm:text-lg font-sans font-bold text-slate-900 dark:text-white">
                 Visualisasi Plot Resolusi Tinggi
               </h4>
-              <span className="inline-block mt-1 rounded-full bg-cyan-100 dark:bg-[#06B6D4]/20 px-2.5 py-0.5 font-mono text-[10px] font-bold text-cyan-800 dark:text-[#06B6D4] border border-cyan-300 dark:border-[#06B6D4]/30">
-                Must Have (PNG)
+              <span className="inline-block mt-1 rounded-full bg-cyan-100 dark:bg-[#06B6D4]/20 px-2.5 py-0.5 font-mono text-xs font-bold text-cyan-800 dark:text-[#06B6D4] border border-cyan-300 dark:border-[#06B6D4]/30">
+                Format Grafis Publikasi
               </span>
             </div>
-            <p className="text-xs font-serif leading-relaxed text-slate-700 dark:text-slate-300">
-              Ekspor gambar Manhattan Plot (8 kromosom) dan QQ Plot beresolusi tinggi (format PNG)
+            <p className="text-xs sm:text-sm font-serif leading-relaxed text-slate-800 dark:text-slate-200">
+              Ekspor gambar Manhattan Plot dan QQ Plot beresolusi tinggi (format PNG)
               siap publikasi ilmiah jurnal bereputasi.
             </p>
           </div>
@@ -203,17 +216,17 @@ export default function Step6Export({ analysisId, onNavigateStep }) {
             <button
               type="button"
               onClick={() => handleDownloadPlot('Manhattan Plot')}
-              className="w-full inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 dark:border-white/10 bg-slate-100 dark:bg-[#0F172E]/70 px-4 py-2.5 text-xs font-semibold text-slate-800 dark:text-white hover:border-[#5B4DFE] dark:hover:border-[#06B6D4] hover:text-[#5B4DFE] dark:hover:text-[#06B6D4] hover:-translate-y-[1px] hover:shadow-md active:scale-[0.97] active:brightness-95 transition-all duration-100"
+              className="w-full figma-btn-secondary"
             >
-              <Download className="h-3.5 w-3.5" />
+              <Download className="h-4 w-4" />
               <span>Unduh Manhattan Plot (PNG)</span>
             </button>
             <button
               type="button"
               onClick={() => handleDownloadPlot('QQ Plot')}
-              className="w-full inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 dark:border-white/10 bg-slate-100 dark:bg-[#0F172E]/70 px-4 py-2.5 text-xs font-semibold text-slate-800 dark:text-white hover:border-[#5B4DFE] dark:hover:border-[#06B6D4] hover:text-[#5B4DFE] dark:hover:text-[#06B6D4] hover:-translate-y-[1px] hover:shadow-md active:scale-[0.97] active:brightness-95 transition-all duration-100"
+              className="w-full figma-btn-secondary"
             >
-              <Download className="h-3.5 w-3.5" />
+              <Download className="h-4 w-4" />
               <span>Unduh QQ Plot (PNG)</span>
             </button>
           </div>
@@ -226,14 +239,14 @@ export default function Step6Export({ analysisId, onNavigateStep }) {
               <FileText className="h-6 w-6" />
             </div>
             <div>
-              <h4 className="text-base font-sans font-bold text-slate-900 dark:text-white">
+              <h4 className="text-base sm:text-lg font-sans font-bold text-slate-900 dark:text-white">
                 Laporan Interpretasi Ilmiah
               </h4>
-              <span className="inline-block mt-1 rounded-full bg-indigo-100 dark:bg-[#5B4DFE]/20 px-2.5 py-0.5 font-mono text-[10px] font-bold text-indigo-800 dark:text-[#A5B4FC] border border-indigo-200 dark:border-[#5B4DFE]/30">
-                PDF & Web Report (AC-09.2)
+              <span className="inline-block mt-1 rounded-full bg-indigo-100 dark:bg-[#5B4DFE]/20 px-2.5 py-0.5 font-mono text-xs font-bold text-indigo-800 dark:text-[#A5B4FC] border border-indigo-200 dark:border-[#5B4DFE]/30">
+                Format Laporan Eksekutif
               </span>
             </div>
-            <p className="text-xs font-serif leading-relaxed text-slate-700 dark:text-slate-300">
+            <p className="text-xs sm:text-sm font-serif leading-relaxed text-slate-800 dark:text-slate-200">
               Hasilkan laporan ringkasan eksekutif komprehensif berisi parameter QC, model asosiasi,
               daftar SNP signifikan, kandidat gen, dan metrik reprodusibilitas riset.
             </p>
@@ -242,7 +255,7 @@ export default function Step6Export({ analysisId, onNavigateStep }) {
           <button
             type="button"
             onClick={() => setShowReportModal(true)}
-            className="w-full mt-4 inline-flex items-center justify-center gap-2 rounded-xl bg-[#5B4DFE] px-4 py-3 text-xs font-sans font-bold text-white shadow-lg shadow-[#5B4DFE]/30 hover:bg-[#4F46E5] hover:-translate-y-[1px] hover:shadow-xl active:scale-[0.97] active:brightness-95 transition-all duration-100"
+            className="w-full mt-4 figma-btn-primary"
           >
             <Printer className="h-4 w-4" />
             <span>Buka Laporan Riset Lengkap</span>
@@ -250,7 +263,7 @@ export default function Step6Export({ analysisId, onNavigateStep }) {
         </div>
       </div>
 
-      {/* ── Modal Laporan Ilmiah Siap Cetak (AC-09.2 with Modal Scale-in Animation) ── */}
+      {/* ── Modal Laporan Ilmiah Siap Cetak ── */}
       {showReportModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm animate-fade-in overflow-y-auto">
           <div className="relative my-8 w-full max-w-4xl rounded-3xl figma-card p-6 sm:p-8 shadow-2xl text-slate-900 dark:text-white max-h-[90vh] overflow-y-auto animate-modal-in">
@@ -259,14 +272,14 @@ export default function Step6Export({ analysisId, onNavigateStep }) {
               <div className="flex items-center gap-2.5">
                 <Dna className="h-5 w-5 text-cyan-600 dark:text-[#06B6D4]" />
                 <h3 className="text-base sm:text-lg font-sans font-bold">
-                  Laporan Analisis Asosiasi Genomik — GWASena 2.0
+                  Laporan Analisis Asosiasi Genomik — GWASena
                 </h3>
               </div>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => window.print()}
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-[#5B4DFE] px-3.5 py-1.5 text-xs font-sans font-bold text-white shadow-md hover:bg-[#4F46E5] hover:-translate-y-[1px] hover:shadow-lg active:scale-[0.97] active:brightness-95 transition-all duration-100"
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 px-3.5 py-1.5 text-xs font-sans font-semibold text-white shadow-sm hover:-translate-y-[1px] hover:shadow-md active:scale-[0.98] transition-all duration-100"
                 >
                   <Printer className="h-3.5 w-3.5" />
                   <span>Cetak / Simpan PDF</span>
@@ -286,72 +299,72 @@ export default function Step6Export({ analysisId, onNavigateStep }) {
               {/* Metadata Sesi */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 rounded-2xl glass-subcard p-4">
                 <div>
-                  <span className="text-[10px] font-sans text-slate-500 dark:text-slate-400 block uppercase tracking-wider">ID Sesi Analisis</span>
-                  <span className="font-mono font-bold text-cyan-700 dark:text-[#06B6D4]">#{analysisId || '1'}</span>
+                  <span className="text-xs font-sans text-slate-800 dark:text-slate-200 block uppercase tracking-wider font-bold">ID Sesi Analisis</span>
+                  <span className="font-mono font-bold text-[#0284C7] dark:text-[#06B6D4] text-sm">#{analysisId || '1'}</span>
                 </div>
                 <div>
-                  <span className="text-[10px] font-sans text-slate-500 dark:text-slate-400 block uppercase tracking-wider">Organisme Target</span>
-                  <span className="font-serif font-bold italic text-slate-900 dark:text-white">Allium sativum L.</span>
+                  <span className="text-xs font-sans text-slate-800 dark:text-slate-200 block uppercase tracking-wider font-bold">Organisme Target</span>
+                  <span className="font-serif font-bold italic text-slate-900 dark:text-white text-sm">{summary.organism || 'Genomic Cohort'}</span>
                 </div>
                 <div>
-                  <span className="text-[10px] font-sans text-slate-500 dark:text-slate-400 block uppercase tracking-wider">Sifat Fenotipe</span>
-                  <span className="font-mono font-semibold text-slate-900 dark:text-white">
-                    {summary.trait || 'bobot_umbi_g'}
+                  <span className="text-xs font-sans text-slate-800 dark:text-slate-200 block uppercase tracking-wider font-bold">Sifat Fenotipe</span>
+                  <span className="font-mono font-bold text-slate-900 dark:text-white text-sm">
+                    {summary.trait || 'trait_target'}
                   </span>
                 </div>
                 <div>
-                  <span className="text-[10px] font-sans text-slate-500 dark:text-slate-400 block uppercase tracking-wider">Waktu Analisis</span>
-                  <span className="text-slate-700 dark:text-slate-300 font-sans">{new Date().toLocaleDateString('id-ID')}</span>
+                  <span className="text-xs font-sans text-slate-800 dark:text-slate-200 block uppercase tracking-wider font-bold">Waktu Analisis</span>
+                  <span className="text-slate-800 dark:text-slate-200 font-sans font-medium text-sm">{new Date().toLocaleDateString('id-ID')}</span>
                 </div>
               </div>
 
               {/* Ringkasan Konfigurasi QC & Pipeline */}
               <div className="space-y-2">
-                <h4 className="text-xs font-sans font-bold uppercase tracking-wider text-slate-700 dark:text-slate-400">
+                <h4 className="text-xs sm:text-sm font-sans font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">
                   1. Parameter Quality Control & Pemodelan
                 </h4>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 font-mono text-[11px]">
-                  <div className="p-2.5 rounded-xl glass-subcard">
-                    <span className="text-slate-500 dark:text-slate-400 block font-sans text-[10px]">Missingness Sampel (mind):</span>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 font-mono text-xs sm:text-sm">
+                  <div className="p-3 rounded-xl glass-subcard">
+                    <span className="text-slate-700 dark:text-slate-300 block font-sans text-xs font-medium">Missingness Sampel (mind):</span>
                     <span className="font-bold text-slate-900 dark:text-white">{configParams.mind || 0.10}</span>
                   </div>
-                  <div className="p-2.5 rounded-xl glass-subcard">
-                    <span className="text-slate-500 dark:text-slate-400 block font-sans text-[10px]">Missingness SNP (geno):</span>
+                  <div className="p-3 rounded-xl glass-subcard">
+                    <span className="text-slate-700 dark:text-slate-300 block font-sans text-xs font-medium">Missingness SNP (geno):</span>
                     <span className="font-bold text-slate-900 dark:text-white">{configParams.geno || 0.10}</span>
                   </div>
-                  <div className="p-2.5 rounded-xl glass-subcard">
-                    <span className="text-slate-500 dark:text-slate-400 block font-sans text-[10px]">Minor Allele Freq (MAF):</span>
+                  <div className="p-3 rounded-xl glass-subcard">
+                    <span className="text-slate-700 dark:text-slate-300 block font-sans text-xs font-medium">Minor Allele Freq (MAF):</span>
                     <span className="font-bold text-slate-900 dark:text-white">{configParams.maf || 0.05}</span>
                   </div>
-                  <div className="p-2.5 rounded-xl glass-subcard">
-                    <span className="text-slate-500 dark:text-slate-400 block font-sans text-[10px]">Model Statistik:</span>
-                    <span className="font-bold text-cyan-700 dark:text-[#06B6D4]">{summary.model || 'MLM'}</span>
+                  <div className="p-3 rounded-xl glass-subcard">
+                    <span className="text-slate-700 dark:text-slate-300 block font-sans text-xs font-medium">Model Statistik:</span>
+                    <span className="font-bold text-[#0284C7] dark:text-[#06B6D4]">{summary.model || 'MLM'}</span>
                   </div>
                 </div>
               </div>
 
               {/* Ringkasan Metrik Temuan */}
               <div className="space-y-2">
-                <h4 className="text-xs font-sans font-bold uppercase tracking-wider text-slate-700 dark:text-slate-400">
+                <h4 className="text-xs sm:text-sm font-sans font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">
                   2. Ringkasan Metrik Hasil Uji Asosiasi
                 </h4>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 font-mono text-[11px]">
-                  <div className="p-2.5 rounded-xl glass-subcard">
-                    <span className="text-slate-500 dark:text-slate-400 block font-sans text-[10px]">Total SNP Dianalisis:</span>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 font-mono text-xs sm:text-sm">
+                  <div className="p-3 rounded-xl glass-subcard">
+                    <span className="text-slate-700 dark:text-slate-300 block font-sans text-xs font-medium">Total SNP Dianalisis:</span>
                     <span className="font-bold text-slate-900 dark:text-white">{summary.total_snps_tested || 482}</span>
                   </div>
-                  <div className="p-2.5 rounded-xl glass-subcard">
-                    <span className="text-slate-500 dark:text-slate-400 block font-sans text-[10px]">SNP Signifikan (Bonferroni):</span>
+                  <div className="p-3 rounded-xl glass-subcard">
+                    <span className="text-slate-700 dark:text-slate-300 block font-sans text-xs font-medium">SNP Signifikan (Bonferroni):</span>
                     <span className="font-bold text-emerald-600 dark:text-emerald-400">{significantSnps.length}</span>
                   </div>
-                  <div className="p-2.5 rounded-xl glass-subcard">
-                    <span className="text-slate-500 dark:text-slate-400 block font-sans text-[10px]">Ambang -log₁₀(P):</span>
-                    <span className="font-bold text-cyan-700 dark:text-[#06B6D4]">
+                  <div className="p-3 rounded-xl glass-subcard">
+                    <span className="text-slate-700 dark:text-slate-300 block font-sans text-xs font-medium">Ambang -log₁₀(P):</span>
+                    <span className="font-bold text-[#0284C7] dark:text-[#06B6D4]">
                       {summary.neg_log10_threshold || 3.98}
                     </span>
                   </div>
-                  <div className="p-2.5 rounded-xl glass-subcard">
-                    <span className="text-slate-500 dark:text-slate-400 block font-sans text-[10px]">Genomic Inflation (λ_GC):</span>
+                  <div className="p-3 rounded-xl glass-subcard">
+                    <span className="text-slate-700 dark:text-slate-300 block font-sans text-xs font-medium">Genomic Inflation (λ_GC):</span>
                     <span className="font-bold text-slate-900 dark:text-white">{summary.lambda_gc || 1.024}</span>
                   </div>
                 </div>
@@ -359,19 +372,19 @@ export default function Step6Export({ analysisId, onNavigateStep }) {
 
               {/* Tabel Kandidat Gen & SNP Signifikan Terpilih */}
               <div className="space-y-2">
-                <h4 className="text-xs font-sans font-bold uppercase tracking-wider text-slate-700 dark:text-slate-400">
+                <h4 className="text-xs sm:text-sm font-sans font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">
                   3. Daftar SNP Signifikan & Kandidat Gen Fungsional
                 </h4>
                 <div className="overflow-x-auto rounded-2xl border border-slate-200/80 dark:border-white/10">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-slate-100/90 dark:bg-[#0B132C]/90 text-[11px] text-slate-600 dark:text-slate-400 uppercase font-sans font-semibold">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-slate-100/95 dark:bg-[#0B132C]/90 text-xs text-slate-800 dark:text-slate-200 uppercase font-sans font-bold">
                       <tr>
-                        <th className="py-2.5 px-3">SNP ID</th>
-                        <th className="py-2.5 px-3">Kromosom</th>
-                        <th className="py-2.5 px-3">p-value</th>
-                        <th className="py-2.5 px-3">Beta</th>
-                        <th className="py-2.5 px-3">Kandidat Gen</th>
-                        <th className="py-2.5 px-3">Anotasi / Deskripsi</th>
+                        <th className="py-3 px-3.5">SNP ID</th>
+                        <th className="py-3 px-3.5">Kromosom</th>
+                        <th className="py-3 px-3.5">p-value</th>
+                        <th className="py-3 px-3.5">Beta</th>
+                        <th className="py-3 px-3.5">Kandidat Gen</th>
+                        <th className="py-3 px-3.5">Anotasi / Deskripsi</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-white/5 font-mono">
@@ -402,8 +415,8 @@ export default function Step6Export({ analysisId, onNavigateStep }) {
               </div>
 
               <div className="pt-4 border-t border-slate-200 dark:border-white/10 text-center font-serif italic text-xs text-slate-500 dark:text-slate-400">
-                Laporan ini dibuat otomatis oleh Sistem GWASena 2.0 untuk keperluan analisis ilmiah
-                dan pemuliaan tanaman bawang putih (<em>Allium sativum</em> L.).
+                Laporan ini dibuat secara otomatis oleh GWASena untuk keperluan analisis asosiasi genomik
+                dan penelitian ilmiah terstandarisasi.
               </div>
             </div>
           </div>

@@ -10,28 +10,28 @@ import { analysisService } from '../services/analysisService.js';
 
 export const MOCK_GARLIC_DATASET_SUMMARY = {
   status: 'valid',
-  pesan: 'Validasi dataset berhasil! 100% Sample ID cocok (25 sampel Allium sativum lolos).',
+  pesan: 'Validasi dataset berhasil! 100% Sample ID cocok (40 sampel lolos).',
   genotipe: {
-    nama_berkas: 'garlic_benchmark.vcf',
+    nama_berkas: 'genotipe_bawang_putih_mini.vcf',
     format: 'VCF v4.2',
-    jumlah_sampel: 25,
+    jumlah_sampel: 40,
     jumlah_snp: 500,
-    varian_dilewati: { multialelik: 12 },
+    varian_dilewati: { multialelik: 0 },
   },
   fenotipe: {
-    nama_berkas: 'phenotype_weight.csv',
-    jumlah_sampel: 25,
-    varietas_tercatat: 25,
+    nama_berkas: 'fenotipe_bawang_putih_mini.csv',
+    jumlah_sampel: 40,
+    varietas_tercatat: 40,
     sifat_tersedia: ['bobot_umbi_g', 'diameter_umbi_mm', 'jumlah_siung'],
   },
   kecocokan_sample_id: {
     persentase_kecocokan: 100,
-    jumlah_sampel_cocok: 25,
+    jumlah_sampel_cocok: 40,
     status: 'cocok',
   },
   integritas: {
     kesamaan_sampel: '100%',
-    sampel_cocok: 25,
+    sampel_cocok: 40,
     kelengkapan: '100%',
     vcf_valid: true,
     csv_valid: true,
@@ -78,21 +78,23 @@ export const useAnalysisStore = create((set, get) => ({
   setUploadSummary: (summary) =>
     set((state) => ({
       uploadSummary: summary,
+      isSimulated: summary?.simulated ? true : false,
       currentAnalysis: {
         ...(state.currentAnalysis || {
-          id: 'sim-garlic-01',
-          analysis_name: 'Simulasi GWAS Allium sativum L.',
-          organism: 'Allium sativum L.',
+          id: 'sim-benchmark-01',
+          analysis_name: 'Simulasi GWAS Benchmark Cohort',
+          organism: 'Genomic Reference Cohort',
         }),
         status: summary ? 'tervalidasi' : state.currentAnalysis?.status || 'draft',
         sifat_tersedia:
+          summary?.fenotipe?.daftar_sifat ||
           summary?.fenotipe?.sifat_tersedia ||
           state.currentAnalysis?.sifat_tersedia ||
-          ['bobot_umbi_g', 'diameter_umbi_mm', 'jumlah_siung'],
+          ['trait_yield', 'disease_resistance', 'plant_height'],
       },
     })),
 
-  // Memuat data contoh benchmark Allium sativum L. secara instan 1-klik
+  // Memuat data contoh benchmark secara instan 1-klik
   loadMockGarlicDataset: () => {
     const summary = { ...MOCK_GARLIC_DATASET_SUMMARY };
     set((state) => ({
@@ -100,9 +102,9 @@ export const useAnalysisStore = create((set, get) => ({
       isSimulated: true,
       currentAnalysis: {
         ...(state.currentAnalysis || {
-          id: 'sim-garlic-01',
-          analysis_name: 'Simulasi GWAS Allium sativum L.',
-          organism: 'Allium sativum L.',
+          id: 'sim-benchmark-01',
+          analysis_name: 'Simulasi GWAS Benchmark Cohort',
+          organism: 'Genomic Reference Cohort',
         }),
         status: 'tervalidasi',
         sifat_tersedia: summary.fenotipe.sifat_tersedia,
@@ -118,7 +120,11 @@ export const useAnalysisStore = create((set, get) => ({
 
   setJobStatus: (status) => set({ jobStatus: status }),
 
-  setResults: (results) => set({ results }),
+  setResults: (results) =>
+    set({
+      results,
+      isSimulated: results?.is_simulated ? true : false,
+    }),
 
   setIsSimulated: (val) => set({ isSimulated: val }),
 
@@ -149,9 +155,9 @@ export const useAnalysisStore = create((set, get) => ({
       error: null,
       currentAnalysis: {
         ...(get().currentAnalysis || {
-          id: 'sim-garlic-01',
-          analysis_name: 'Simulasi GWAS Allium sativum L.',
-          organism: 'Allium sativum L.',
+          id: 'sim-benchmark-01',
+          analysis_name: 'Simulasi GWAS Benchmark Cohort',
+          organism: 'Genomic Reference Cohort',
         }),
         status: 'berjalan',
       },

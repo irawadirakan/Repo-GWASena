@@ -50,7 +50,7 @@ export const useAuthStore = create((set, get) => ({
   },
 
   /**
-   * Login pengguna (S-01)
+   * Login pengguna
    */
   login: async (username, password) => {
     set({ isLoading: true, error: null });
@@ -70,7 +70,7 @@ export const useAuthStore = create((set, get) => ({
   },
 
   /**
-   * Registrasi akun baru (S-02)
+   * Registrasi akun baru
    */
   register: async (username, email, password) => {
     set({ isLoading: true, error: null });

@@ -17,7 +17,7 @@ import QQPlot from '../charts/QQPlot.jsx';
 import { generateBenchmarkResults } from '../../services/mockResults.js';
 
 /**
- * S-07 (Langkah 4): Hasil Uji Asosiasi & Visualisasi Plot Interaktif (Figma Aligned)
+ * Langkah 4: Hasil Uji Asosiasi & Visualisasi Plot Interaktif (Figma Aligned)
  * Acuan: 07 — Hasil & Visualisasi.png & 07b — Hasil_ Titik SNP Terpilih.png
  */
 export default function Step4Results({ onNavigateStep }) {
@@ -39,7 +39,7 @@ export default function Step4Results({ onNavigateStep }) {
   const qqData = activeResults.qq_data || [];
   const threshold = summary.neg_log10_threshold || 3.98;
 
-  // Selected SNP State (AC-08.2)
+  // Selected SNP State
   const [selectedSnp, setSelectedSnp] = useState(
     significantSnps.length > 0 ? significantSnps[0] : null
   );
@@ -140,55 +140,55 @@ export default function Step4Results({ onNavigateStep }) {
       {/* ── Bar Ringkasan Eksekusi ── */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         <div className="glass-subcard p-3.5">
-          <span className="text-[10px] font-sans font-semibold text-slate-500 dark:text-slate-400 block uppercase tracking-wider">Model Asosiasi</span>
-          <span className="font-serif text-base font-bold text-slate-900 dark:text-white block mt-0.5">
+          <span className="text-xs font-sans font-bold text-slate-800 dark:text-slate-200 block uppercase tracking-wider">Model Asosiasi</span>
+          <span className="font-serif text-lg font-bold text-slate-900 dark:text-white block mt-0.5">
             {summary.model || configParams.model || 'MLM'}
           </span>
-          <span className="text-[10px] text-slate-500 dark:text-slate-400 block truncate font-sans">
+          <span className="text-xs text-slate-700 dark:text-slate-300 block truncate font-sans font-medium">
             Sifat: {summary.trait || configParams.trait || 'bobot_umbi_g'}
           </span>
         </div>
 
         <div className="glass-subcard p-3.5">
-          <span className="text-[10px] font-sans font-semibold text-slate-500 dark:text-slate-400 block uppercase tracking-wider">Total SNP Teruji</span>
-          <span className="font-serif text-base font-bold text-slate-900 dark:text-white tabular-nums block mt-0.5">
+          <span className="text-xs font-sans font-bold text-slate-800 dark:text-slate-200 block uppercase tracking-wider">Total SNP Teruji</span>
+          <span className="font-serif text-lg font-bold text-slate-900 dark:text-white tabular-nums block mt-0.5">
             {summary.total_snps_tested?.toLocaleString('id-ID') || snps.length}
           </span>
-          <span className="text-[10px] text-slate-500 dark:text-slate-400 block font-sans">8 Kromosom</span>
+          <span className="text-xs text-slate-700 dark:text-slate-300 block font-sans font-medium">8 Kromosom</span>
         </div>
 
         <div className="glass-subcard p-3.5">
-          <span className="text-[10px] font-sans font-semibold text-slate-500 dark:text-slate-400 block uppercase tracking-wider">Koreksi Berganda</span>
-          <span className="font-serif text-base font-bold text-cyan-700 dark:text-[#06B6D4] truncate block mt-0.5">
+          <span className="text-xs font-sans font-bold text-slate-800 dark:text-slate-200 block uppercase tracking-wider">Koreksi Berganda</span>
+          <span className="font-serif text-lg font-bold text-[#0284C7] dark:text-[#06B6D4] truncate block mt-0.5">
             Bonferroni & FDR
           </span>
-          <span className="text-[10px] text-slate-500 dark:text-slate-400 block font-sans">Alpha: {summary.alpha || 0.05}</span>
+          <span className="text-xs text-slate-700 dark:text-slate-300 block font-sans font-medium">Alpha: {summary.alpha || 0.05}</span>
         </div>
 
         <div className="glass-subcard p-3.5">
-          <span className="text-[10px] font-sans font-semibold text-slate-500 dark:text-slate-400 block uppercase tracking-wider">Ambang Signifikansi</span>
-          <span className="font-serif text-base font-bold text-cyan-700 dark:text-[#06B6D4] tabular-nums block mt-0.5">
+          <span className="text-xs font-sans font-bold text-slate-800 dark:text-slate-200 block uppercase tracking-wider">Ambang Signifikansi</span>
+          <span className="font-serif text-lg font-bold text-[#0284C7] dark:text-[#06B6D4] tabular-nums block mt-0.5">
             -log₁₀P = {threshold.toFixed(2)}
           </span>
-          <span className="text-[10px] text-slate-500 dark:text-slate-400 block font-mono">
+          <span className="text-xs text-slate-700 dark:text-slate-300 block font-mono font-bold">
             p &lt; {summary.bonferroni_threshold || '1.04e-4'}
           </span>
         </div>
 
         <div className="glass-subcard p-3.5">
-          <span className="text-[10px] font-sans font-semibold text-slate-500 dark:text-slate-400 block uppercase tracking-wider">SNP Signifikan</span>
-          <span className="font-serif text-base font-bold text-emerald-600 dark:text-emerald-400 tabular-nums block mt-0.5">
+          <span className="text-xs font-sans font-bold text-slate-800 dark:text-slate-200 block uppercase tracking-wider">SNP Signifikan</span>
+          <span className="font-serif text-lg font-bold text-emerald-600 dark:text-emerald-400 tabular-nums block mt-0.5">
             {significantSnps.length} SNP
           </span>
-          <span className="text-[10px] text-emerald-600 dark:text-emerald-400 block font-sans font-semibold">Lolos Ambang</span>
+          <span className="text-xs text-emerald-700 dark:text-emerald-400 block font-sans font-bold">Lolos Ambang</span>
         </div>
 
         <div className="glass-subcard p-3.5">
-          <span className="text-[10px] font-sans font-semibold text-slate-500 dark:text-slate-400 block uppercase tracking-wider">Inflasi Genomik (λ)</span>
-          <span className="font-serif text-base font-bold text-slate-900 dark:text-white tabular-nums block mt-0.5">
+          <span className="text-xs font-sans font-bold text-slate-800 dark:text-slate-200 block uppercase tracking-wider">Inflasi Genomik (λ)</span>
+          <span className="font-serif text-lg font-bold text-slate-900 dark:text-white tabular-nums block mt-0.5">
             {summary.lambda_gc || 1.024}
           </span>
-          <span className="text-[10px] text-emerald-600 dark:text-emerald-400 block font-sans font-semibold">Terkontrol (&lt; 1.05)</span>
+          <span className="text-xs text-emerald-700 dark:text-emerald-400 block font-sans font-bold">Terkontrol (&lt; 1.05)</span>
         </div>
       </div>
 
@@ -237,7 +237,7 @@ export default function Step4Results({ onNavigateStep }) {
               selectedSnpId={selectedSnp?.snp_id}
               onSelectSnp={(snp) => setSelectedSnp(snp)}
             />
-            <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
+            <p className="mt-2 text-xs sm:text-[13px] text-slate-700 dark:text-slate-300 font-medium">
               Petunjuk: Klik salah satu titik SNP pada Manhattan Plot untuk membuka kartu detail dan
               meninjau gen kandidat terkait.
             </p>
@@ -245,7 +245,7 @@ export default function Step4Results({ onNavigateStep }) {
         ) : (
           <div>
             <QQPlot qqData={qqData} lambdaGc={summary.lambda_gc || 1.024} />
-            <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
+            <p className="mt-2 text-xs sm:text-[13px] text-slate-700 dark:text-slate-300 font-medium">
               QQ Plot membandingkan distribusi p-value observasi dengan ekspektasi teoritis (null
               hypothesis). Nilai lambda GC = {summary.lambda_gc || 1.024} menunjukkan tidak adanya
               inflasi populasi palsu.
@@ -254,11 +254,11 @@ export default function Step4Results({ onNavigateStep }) {
         )}
       </div>
 
-      {/* ── Panel Detail SNP Terpilih (AC-08.2 - Figma 07b with Spring Pop-in & Highlight Glow) ── */}
+      {/* ── Panel Detail SNP Terpilih ── */}
       {selectedSnp && (
         <div
           key={selectedSnp.snp_id}
-          className="rounded-3xl figma-card border-cyan-300/80 dark:border-[#06B6D4]/50 bg-white/95 dark:bg-[#0F2238]/95 p-5 sm:p-6 relative animate-pop-in animate-glow-brief"
+          className="rounded-3xl figma-card border-white/80 dark:border-[#06B6D4]/50 p-5 sm:p-6 relative animate-pop-in animate-glow-brief"
         >
           <button
             type="button"
@@ -280,7 +280,7 @@ export default function Step4Results({ onNavigateStep }) {
                     {selectedSnp.snp_id}
                   </h4>
                   {selectedSnp.is_significant && (
-                    <span className="rounded-full bg-emerald-100 dark:bg-emerald-500/20 border border-emerald-300 dark:border-emerald-500/40 px-2.5 py-0.5 text-[10px] font-sans font-bold text-emerald-800 dark:text-emerald-400">
+                    <span className="rounded-full bg-emerald-100 dark:bg-emerald-500/20 border border-emerald-300 dark:border-emerald-500/40 px-2.5 py-0.5 text-xs font-sans font-bold text-emerald-800 dark:text-emerald-400">
                       Signifikan
                     </span>
                   )}
@@ -304,8 +304,8 @@ export default function Step4Results({ onNavigateStep }) {
 
           <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3 pt-3.5 text-xs">
             <div className="glass-subcard p-3">
-              <span className="text-[10px] font-sans text-slate-500 dark:text-slate-400 block uppercase tracking-wider">p-value</span>
-              <span className="font-mono font-bold text-slate-900 dark:text-white tabular-nums">
+              <span className="text-xs font-sans font-bold text-slate-800 dark:text-slate-200 block uppercase tracking-wider">p-value</span>
+              <span className="font-mono font-bold text-slate-900 dark:text-white tabular-nums text-sm">
                 {selectedSnp.p_value < 0.0001
                   ? Number(selectedSnp.p_value).toExponential(3)
                   : Number(selectedSnp.p_value).toFixed(6)}
@@ -313,40 +313,40 @@ export default function Step4Results({ onNavigateStep }) {
             </div>
 
             <div className="glass-subcard p-3">
-              <span className="text-[10px] font-sans text-slate-500 dark:text-slate-400 block uppercase tracking-wider">-log₁₀(p)</span>
-              <span className="font-mono font-bold text-cyan-700 dark:text-[#06B6D4] tabular-nums">
+              <span className="text-xs font-sans font-bold text-slate-800 dark:text-slate-200 block uppercase tracking-wider">-log₁₀(p)</span>
+              <span className="font-mono font-bold text-[#0284C7] dark:text-[#06B6D4] tabular-nums text-sm">
                 {selectedSnp.neg_log10_p?.toFixed(3) ||
                   (-Math.log10(selectedSnp.p_value)).toFixed(3)}
               </span>
             </div>
 
             <div className="glass-subcard p-3">
-              <span className="text-[10px] font-sans text-slate-500 dark:text-slate-400 block uppercase tracking-wider">q-value (FDR)</span>
-              <span className="font-mono font-bold text-slate-900 dark:text-white tabular-nums">
+              <span className="text-xs font-sans font-bold text-slate-800 dark:text-slate-200 block uppercase tracking-wider">q-value (FDR)</span>
+              <span className="font-mono font-bold text-slate-900 dark:text-white tabular-nums text-sm">
                 {selectedSnp.q_value ? Number(selectedSnp.q_value).toExponential(3) : '-'}
               </span>
             </div>
 
             <div className="glass-subcard p-3">
-              <span className="text-[10px] font-sans text-slate-500 dark:text-slate-400 block uppercase tracking-wider">Effect Size (Beta)</span>
-              <span className="font-mono font-bold text-slate-900 dark:text-white tabular-nums">
+              <span className="text-xs font-sans font-bold text-slate-800 dark:text-slate-200 block uppercase tracking-wider">Effect Size (Beta)</span>
+              <span className="font-mono font-bold text-slate-900 dark:text-white tabular-nums text-sm">
                 {selectedSnp.effect_size >= 0 ? '+' : ''}
                 {selectedSnp.effect_size}
               </span>
             </div>
 
             <div className="glass-subcard p-3">
-              <span className="text-[10px] font-sans text-slate-500 dark:text-slate-400 block uppercase tracking-wider">Std Error (SE)</span>
-              <span className="font-mono font-bold text-slate-900 dark:text-white tabular-nums">
+              <span className="text-xs font-sans font-bold text-slate-800 dark:text-slate-200 block uppercase tracking-wider">Std Error (SE)</span>
+              <span className="font-mono font-bold text-slate-900 dark:text-white tabular-nums text-sm">
                 {selectedSnp.std_error}
               </span>
             </div>
 
             <div className="glass-subcard p-3">
-              <span className="text-[10px] font-sans text-slate-500 dark:text-slate-400 block uppercase tracking-wider">Alel & MAF</span>
-              <span className="font-mono font-bold text-slate-900 dark:text-white">
+              <span className="text-xs font-sans font-bold text-slate-800 dark:text-slate-200 block uppercase tracking-wider">Alel & MAF</span>
+              <span className="font-mono font-bold text-slate-900 dark:text-white text-sm">
                 {selectedSnp.allele_ref || 'A'}/{selectedSnp.allele_alt || 'T'}{' '}
-                <span className="text-[10px] font-sans font-normal text-slate-500 dark:text-slate-400">
+                <span className="text-xs font-sans font-semibold text-slate-600 dark:text-slate-300">
                   ({selectedSnp.maf || 0.05})
                 </span>
               </span>
@@ -355,13 +355,13 @@ export default function Step4Results({ onNavigateStep }) {
         </div>
       )}
 
-      {/* ── Tabel 1: SNP Signifikan (AC-06.2) ── */}
+      {/* ── Tabel 1: SNP Signifikan ── */}
       <div className="rounded-3xl figma-card p-5 sm:p-6 space-y-3.5">
         <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-3">
           <div className="flex items-center gap-2">
             <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
             <h4 className="text-sm font-sans font-bold text-slate-900 dark:text-white">
-              Daftar SNP Signifikan Lolos Ambang (AC-06.2)
+              Daftar SNP Signifikan Lolos Ambang
             </h4>
           </div>
           <span className="rounded-full bg-emerald-100 dark:bg-emerald-500/20 px-3 py-0.5 font-mono text-xs font-bold text-emerald-800 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-500/30">
@@ -382,17 +382,17 @@ export default function Step4Results({ onNavigateStep }) {
           </div>
         ) : (
           <div className="overflow-x-auto rounded-2xl border border-slate-200/80 dark:border-white/10">
-            <table className="w-full text-left text-xs">
-              <thead className="border-b border-slate-200 dark:border-white/10 text-[11px] text-slate-600 dark:text-slate-400 uppercase font-sans font-semibold bg-slate-100/90 dark:bg-[#0B132C]/90">
+            <table className="w-full text-left text-sm">
+              <thead className="border-b border-slate-200 dark:border-white/10 text-xs text-slate-800 dark:text-slate-200 uppercase font-sans font-bold bg-slate-100/95 dark:bg-[#0B132C]/90">
                 <tr>
-                  <th className="py-2.5 px-3">SNP ID</th>
-                  <th className="py-2.5 px-3">Kromosom</th>
-                  <th className="py-2.5 px-3">Posisi (bp)</th>
-                  <th className="py-2.5 px-3">p-value</th>
-                  <th className="py-2.5 px-3">-log₁₀(P)</th>
-                  <th className="py-2.5 px-3">q-value (FDR)</th>
-                  <th className="py-2.5 px-3">Effect Size (Beta)</th>
-                  <th className="py-2.5 px-3 text-right">Aksi</th>
+                  <th className="py-3 px-3.5">SNP ID</th>
+                  <th className="py-3 px-3.5">Kromosom</th>
+                  <th className="py-3 px-3.5">Posisi (bp)</th>
+                  <th className="py-3 px-3.5">p-value</th>
+                  <th className="py-3 px-3.5">-log₁₀(P)</th>
+                  <th className="py-3 px-3.5">q-value (FDR)</th>
+                  <th className="py-3 px-3.5">Effect Size (Beta)</th>
+                  <th className="py-3 px-3.5 text-right">Aksi</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-white/5 font-mono">
@@ -403,27 +403,27 @@ export default function Step4Results({ onNavigateStep }) {
                       selectedSnp?.snp_id === snp.snp_id ? 'bg-cyan-50/80 dark:bg-[#06B6D4]/15' : ''
                     }`}
                   >
-                    <td className="py-2.5 px-3 font-bold text-slate-900 dark:text-white">{snp.snp_id}</td>
-                    <td className="py-2.5 px-3 text-slate-700 dark:text-slate-300 font-sans">Chr {snp.chromosome}</td>
-                    <td className="py-2.5 px-3 text-slate-700 dark:text-slate-300">{Number(snp.position).toLocaleString('id-ID')}</td>
-                    <td className="py-2.5 px-3 font-bold text-emerald-700 dark:text-emerald-400">
+                    <td className="py-3 px-3.5 font-bold text-slate-900 dark:text-white">{snp.snp_id}</td>
+                    <td className="py-3 px-3.5 text-slate-800 dark:text-slate-200 font-sans font-semibold">Chr {snp.chromosome}</td>
+                    <td className="py-3 px-3.5 text-slate-800 dark:text-slate-200 font-medium">{Number(snp.position).toLocaleString('id-ID')}</td>
+                    <td className="py-3 px-3.5 font-bold text-emerald-700 dark:text-emerald-400">
                       {Number(snp.p_value).toExponential(3)}
                     </td>
-                    <td className="py-2.5 px-3 font-bold text-cyan-700 dark:text-[#06B6D4]">
+                    <td className="py-3 px-3.5 font-bold text-[#0284C7] dark:text-[#06B6D4]">
                       {snp.neg_log10_p?.toFixed(2) || (-Math.log10(snp.p_value)).toFixed(2)}
                     </td>
-                    <td className="py-2.5 px-3 text-slate-700 dark:text-slate-300">
+                    <td className="py-3 px-3.5 text-slate-800 dark:text-slate-200 font-medium">
                       {snp.q_value ? Number(snp.q_value).toExponential(3) : '-'}
                     </td>
-                    <td className="py-2.5 px-3 text-slate-700 dark:text-slate-300">
+                    <td className="py-3 px-3.5 text-slate-800 dark:text-slate-200 font-medium">
                       {snp.effect_size >= 0 ? '+' : ''}
                       {snp.effect_size}
                     </td>
-                    <td className="py-2.5 px-3 text-right">
+                    <td className="py-3 px-3.5 text-right">
                       <button
                         type="button"
                         onClick={() => setSelectedSnp(snp)}
-                        className="rounded-xl border border-slate-300 dark:border-white/10 bg-slate-100 dark:bg-[#162142] px-2.5 py-1 text-[11px] font-sans font-semibold text-slate-800 dark:text-[#06B6D4] hover:bg-[#5B4DFE] hover:text-white hover:-translate-y-[1px] active:scale-[0.97] active:brightness-95 transition-all duration-100"
+                        className="rounded-full border border-slate-300 dark:border-white/10 bg-white/90 dark:bg-[#162142] px-3.5 py-1 text-xs font-sans font-bold text-slate-800 dark:text-slate-200 hover:bg-[#0284C7] hover:text-white dark:hover:bg-[#06B6D4] dark:hover:text-[#0B132C] hover:-translate-y-[1px] active:scale-[0.97] transition-all duration-100 shadow-sm"
                       >
                         Pilih
                       </button>
@@ -436,14 +436,14 @@ export default function Step4Results({ onNavigateStep }) {
         )}
       </div>
 
-      {/* ── Tabel 2: Hasil Asosiasi Terkoreksi Lengkap (AC-06.1) ── */}
+      {/* ── Tabel 2: Hasil Asosiasi Terkoreksi Lengkap ── */}
       <div className="rounded-3xl figma-card p-5 sm:p-6 space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 dark:border-white/10 pb-3.5">
           <div>
             <h4 className="text-sm font-sans font-bold text-slate-900 dark:text-white">
-              Hasil Asosiasi Terkoreksi Lengkap (AC-06.1)
+              Hasil Asosiasi Terkoreksi Lengkap
             </h4>
-            <p className="text-[11px] font-sans text-slate-500 dark:text-slate-400">
+            <p className="text-xs sm:text-[13px] font-sans text-slate-700 dark:text-slate-300 font-medium">
               Menampilkan {filteredSnps.length} SNP dari total {snps.length} SNP teruji.
             </p>
           </div>
@@ -498,8 +498,8 @@ export default function Step4Results({ onNavigateStep }) {
         </div>
 
         <div className="overflow-x-auto rounded-2xl border border-slate-200/80 dark:border-white/10">
-          <table className="w-full text-left text-xs">
-            <thead className="border-b border-slate-200 dark:border-white/10 text-[11px] text-slate-600 dark:text-slate-400 uppercase font-sans font-semibold bg-slate-100/90 dark:bg-[#0B132C]/90">
+          <table className="w-full text-left text-sm">
+            <thead className="border-b border-slate-200 dark:border-white/10 text-xs text-slate-800 dark:text-slate-200 uppercase font-sans font-bold bg-slate-100/95 dark:bg-[#0B132C]/90">
               <tr>
                 <th
                   onClick={() => handleSort('snp_id')}
@@ -597,10 +597,10 @@ export default function Step4Results({ onNavigateStep }) {
                   <td className="py-2.5 px-3 font-semibold text-cyan-700 dark:text-[#06B6D4]">
                     {snp.neg_log10_p?.toFixed(2) || (-Math.log10(snp.p_value)).toFixed(2)}
                   </td>
-                  <td className="py-2.5 px-3 text-slate-700 dark:text-slate-300">
+                  <td className="py-2.5 px-3 text-slate-800 dark:text-slate-200 font-medium">
                     {snp.q_value ? Number(snp.q_value).toExponential(3) : '-'}
                   </td>
-                  <td className="py-2.5 px-3 text-slate-700 dark:text-slate-300">
+                  <td className="py-2.5 px-3 text-slate-800 dark:text-slate-200 font-medium">
                     {snp.effect_size >= 0 ? '+' : ''}
                     {snp.effect_size}
                   </td>
@@ -608,7 +608,7 @@ export default function Step4Results({ onNavigateStep }) {
                     <button
                       type="button"
                       onClick={() => setSelectedSnp(snp)}
-                      className="rounded-xl border border-slate-300 dark:border-white/10 bg-slate-100 dark:bg-[#162142] px-2.5 py-1 text-[11px] font-sans font-semibold text-slate-800 dark:text-slate-200 hover:text-[#5B4DFE] dark:hover:text-[#06B6D4] hover:-translate-y-[1px] active:scale-[0.97] active:brightness-95 transition-all duration-100"
+                      className="rounded-full border border-slate-300 dark:border-white/10 bg-white/90 dark:bg-[#162142] px-3.5 py-1 text-xs font-sans font-bold text-slate-800 dark:text-slate-200 hover:text-[#0284C7] dark:hover:text-[#06B6D4] hover:-translate-y-[1px] active:scale-[0.97] transition-all duration-100 shadow-sm"
                     >
                       Pilih
                     </button>
@@ -620,8 +620,8 @@ export default function Step4Results({ onNavigateStep }) {
         </div>
 
         {/* Pagination Footer */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-t border-slate-200 dark:border-white/10 pt-3 text-xs font-sans">
-          <span className="text-slate-600 dark:text-slate-400">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-t border-slate-200 dark:border-white/10 pt-3 text-xs sm:text-sm font-sans">
+          <span className="text-slate-700 dark:text-slate-300 font-medium">
             Halaman {page} dari {totalPages} ({filteredSnps.length} total SNP)
           </span>
 
@@ -630,19 +630,19 @@ export default function Step4Results({ onNavigateStep }) {
               type="button"
               disabled={page <= 1}
               onClick={() => setPage((p) => Math.max(p - 1, 1))}
-              className="inline-flex items-center gap-1 rounded-xl border border-slate-300 dark:border-white/10 bg-slate-100 dark:bg-[#162142] px-3 py-1 font-semibold text-slate-800 dark:text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-200 dark:hover:bg-[#1E2C58] active:scale-95 transition-all"
+              className="inline-flex items-center gap-1 rounded-full border border-slate-300 dark:border-white/10 bg-white/90 dark:bg-[#162142] px-3.5 py-1.5 text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-[#1E2C58] active:scale-95 transition-all shadow-sm"
             >
-              <ChevronLeft className="h-3.5 w-3.5" />
+              <ChevronLeft className="h-4 w-4" />
               <span>Sebelumnya</span>
             </button>
             <button
               type="button"
               disabled={page >= totalPages}
               onClick={() => setPage((p) => Math.min(p + 1, totalPages))}
-              className="inline-flex items-center gap-1 rounded-xl border border-slate-300 dark:border-white/10 bg-slate-100 dark:bg-[#162142] px-3 py-1 font-semibold text-slate-800 dark:text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-200 dark:hover:bg-[#1E2C58] active:scale-95 transition-all"
+              className="inline-flex items-center gap-1 rounded-full border border-slate-300 dark:border-white/10 bg-white/90 dark:bg-[#162142] px-3.5 py-1.5 text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-[#1E2C58] active:scale-95 transition-all shadow-sm"
             >
               <span>Berikutnya</span>
-              <ChevronRight className="h-3.5 w-3.5" />
+              <ChevronRight className="h-4 w-4" />
             </button>
           </div>
         </div>
