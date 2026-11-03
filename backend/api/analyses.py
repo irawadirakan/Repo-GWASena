@@ -12,13 +12,15 @@ Urutan pemakaian:
 import csv
 import io
 import time
+from pathlib import Path
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.api.deps import get_current_user, owned_analysis
+from backend.core.config import settings
 from backend.core.database import get_db
 from backend.models import (
     SNP,
@@ -35,9 +37,10 @@ from backend.models import (
 from backend.schemas import AnalysisCreate, ParameterIn
 from backend.services import dataset_service as ds
 from backend.services.analysis_runner import dispatch
+from pipeline.annotation import annotate_from_gff3
 from pipeline.errors import ValidationError
 from pipeline.runner import STAGES
-from pipeline.validation import match_sample_ids, read_phenotype_csv, read_vcf
+from pipeline.validation import match_sample_ids, read_genotype, read_phenotype_csv
 
 router = APIRouter(prefix="/api/analyses", tags=["2. analisis (alur utama)"])
 
@@ -132,26 +135,38 @@ def get_analysis(a: Analysis = Depends(owned_analysis), db: Session = Depends(ge
 
 
 # ------------------------------------------------------------------ 2. unggah & validasi
-@router.post("/{analysis_id}/upload", summary="2. Unggah VCF + CSV dan validasi")
+@router.post("/{analysis_id}/upload", summary="2. Unggah genotipe (VCF atau PLINK biner) + CSV dan validasi")
 def upload(
     a: Analysis = Depends(owned_analysis),
-    genotipe: UploadFile = File(..., description="Berkas genotipe .vcf atau .vcf.gz"),
+    genotipe: UploadFile = File(..., description="Berkas genotipe .vcf, .vcf.gz, atau .bed (PLINK biner)"),
     fenotipe: UploadFile = File(..., description="Berkas fenotipe .csv (kolom sample_id + sifat)"),
+    bim: UploadFile | None = File(None, description="Wajib bila genotipe berupa .bed: berkas .bim"),
+    fam: UploadFile | None = File(None, description="Wajib bila genotipe berupa .bed: berkas .fam"),
     db: Session = Depends(get_db),
 ):
     if a.status in LOCKED:
         raise HTTPException(status.HTTP_409_CONFLICT,
                             _detail("Analisis sedang berjalan; unggahan dikunci sampai selesai."))
     folder = ds.analysis_dir(a.analysis_id)
+    # field berkas opsional yang dikirim kosong dianggap tidak diunggah
+    bim = bim if bim is not None and bim.filename else None
+    fam = fam if fam is not None and fam.filename else None
     try:
-        ds.check_extensions(genotipe.filename, fenotipe.filename)
+        plink = ds.is_plink(genotipe.filename)
+        ds.check_extensions(genotipe.filename, fenotipe.filename,
+                            bim.filename if bim else None, fam.filename if fam else None)
         ds.remove_dir(a.analysis_id)
         folder.mkdir(parents=True, exist_ok=True)
-        g_path = folder / ("genotipe.vcf.gz" if genotipe.filename.lower().endswith(".gz") else "genotipe.vcf")
+        if plink:
+            g_path = folder / "genotipe.bed"
+            ds.save_upload(bim, folder / "genotipe.bim")
+            ds.save_upload(fam, folder / "genotipe.fam")
+        else:
+            g_path = folder / ("genotipe.vcf.gz" if genotipe.filename.lower().endswith(".gz") else "genotipe.vcf")
         p_path = folder / "fenotipe.csv"
         ds.save_upload(genotipe, g_path)
         ds.save_upload(fenotipe, p_path)
-        geno = read_vcf(g_path)
+        geno = read_genotype(g_path)
         pheno = read_phenotype_csv(p_path)
         match = match_sample_ids(geno.samples, pheno.samples)
     except ValidationError as exc:
@@ -165,7 +180,8 @@ def upload(
 
     ds.clear_analysis_data(db, a.analysis_id)
     info = ds.store_datasets(db, a.analysis_id, genotipe.filename, g_path,
-                             fenotipe.filename, p_path, geno, pheno)
+                             fenotipe.filename, p_path, geno, pheno,
+                             genotype_type="plink_bed" if plink else "vcf")
     a.status = AnalysisStatus.TERVALIDASI
     db.add(AnalysisLog(analysis_id=a.analysis_id, stage="validasi", status="selesai",
                        message=f"{geno.n_samples} sampel, {geno.n_snps} SNP; Sample ID cocok"))
@@ -314,6 +330,77 @@ def get_plot(jenis: str, a: Analysis = Depends(owned_analysis), db: Session = De
         raise HTTPException(status.HTTP_404_NOT_FOUND, _detail("Jenis plot: manhattan, qq, atau pca."))
     _require_done(a)
     return _get_cache(db, a.analysis_id, jenis) or {}
+
+
+@router.get("/{analysis_id}/plots/{jenis}/png", summary="Unduh Manhattan atau QQ plot (PNG)",
+            response_class=Response,
+            responses={200: {"content": {"image/png": {}}, "description": "Berkas gambar PNG"}})
+def get_plot_png(jenis: str, a: Analysis = Depends(owned_analysis), db: Session = Depends(get_db)):
+    if jenis not in ("manhattan", "qq"):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, _detail("Jenis plot PNG: manhattan atau qq."))
+    _require_done(a)
+    row = db.scalar(select(VisualizationResult).where(
+        VisualizationResult.analysis_id == a.analysis_id, VisualizationResult.plot_type == jenis))
+    if row is None or not row.plot_cache:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, _detail("Data plot tidak ditemukan untuk analisis ini."))
+
+    # PNG dibuat sekali lalu disimpan; lokasinya dicatat di visualization_results.file_path (AC-08.1).
+    # Bila analisis dijalankan ulang, baris lama dihapus sehingga gambar dibuat ulang.
+    path = Path(row.file_path) if row.file_path else None
+    if path is not None and path.is_file():
+        png = path.read_bytes()
+    else:
+        # matplotlib dimuat di sini, bukan di awal berkas, supaya backend tetap bisa menyala
+        # walaupun paket matplotlib belum terpasang (hanya fitur PNG yang tidak tersedia).
+        try:
+            from pipeline.visualization import manhattan_png, qq_png
+        except ImportError:
+            raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, _detail(
+                "Ekspor PNG belum tersedia karena paket matplotlib belum terpasang.",
+                ["Jalankan: pip install -r backend/requirements.txt"]))
+        ringkasan = _get_cache(db, a.analysis_id, "ringkasan") or {}
+        nama = "Manhattan plot" if jenis == "manhattan" else "QQ plot"
+        judul = f"{nama} - {ringkasan.get('trait', '')} ({ringkasan.get('model', '')})"
+        png = manhattan_png(row.plot_cache, judul) if jenis == "manhattan" else qq_png(row.plot_cache, judul)
+        folder = ds.analysis_dir(a.analysis_id) / "plot"
+        folder.mkdir(parents=True, exist_ok=True)
+        path = folder / f"{jenis}.png"
+        path.write_bytes(png)
+        row.file_path = str(path)
+        db.commit()
+    return Response(content=png, media_type="image/png", headers={
+        "Content-Disposition": f'attachment; filename="gwasena_sesi{a.analysis_id}_{jenis}.png"'})
+
+
+# ------------------------------------------------------------------ anotasi gen (FR-07)
+@router.get("/{analysis_id}/annotation", summary="Anotasi gen kandidat untuk SNP signifikan")
+def get_annotation(
+    a: Analysis = Depends(owned_analysis),
+    sertakan_teratas: bool = Query(
+        False, description="Ikut menganotasi 10 SNP dengan nilai p terkecil, berguna bila tidak ada "
+                           "SNP yang signifikan"),
+    db: Session = Depends(get_db),
+):
+    """Mencocokkan SNP signifikan dengan gen yang tumpang tindih atau terdekat (AC-07.1).
+
+    Bila sumber anotasi tidak dapat dipakai, respons tetap 200 dengan status
+    "tidak_tersedia" dan pesan, tanpa mengganggu hasil analisis lain (AC-07.2).
+    """
+    _require_done(a)
+    ringkasan = _get_cache(db, a.analysis_id, "ringkasan") or {}
+    snps = list(ringkasan.get("snp_signifikan") or [])
+    signifikan = {s["snp_id"] for s in snps}
+    label = "SNP signifikan"
+    if sertakan_teratas:
+        snps += [s for s in ringkasan.get("snp_teratas") or [] if s["snp_id"] not in signifikan]
+        label = "SNP (signifikan dan teratas)"
+    hasil = annotate_from_gff3(snps, settings.ANNOTATION_GFF3, settings.ANNOTATION_WINDOW_BP, label)
+    for k in hasil["kandidat"]:
+        k["signifikan"] = k["snp_id"] in signifikan
+    if hasil["status"] == "tersedia" and not snps:
+        hasil["pesan"] += " Gunakan sertakan_teratas=true untuk melihat kandidat gen di sekitar SNP teratas."
+    return {"analysis_id": a.analysis_id, "trait": ringkasan.get("trait"),
+            "model": ringkasan.get("model"), **hasil}
 
 
 # ------------------------------------------------------------------ 7. unduh CSV

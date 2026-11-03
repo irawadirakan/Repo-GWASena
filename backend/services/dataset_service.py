@@ -22,20 +22,36 @@ from pipeline.validation import GenotypeData, PhenotypeData
 
 GENOTYPE_EXT = (".vcf", ".vcf.gz")
 PLINK_EXT = (".bed", ".bim", ".fam")
+GENOTYPE_TYPES = ("vcf", "plink_bed")  # nilai datasets.file_type untuk berkas genotipe
 
 
 def analysis_dir(analysis_id: int) -> Path:
     return settings.UPLOAD_DIR / f"analysis_{analysis_id}"
 
 
-def check_extensions(genotype_name: str, phenotype_name: str) -> None:
+def is_plink(genotype_name: str | None) -> bool:
+    return (genotype_name or "").lower().endswith(".bed")
+
+
+def check_extensions(genotype_name: str, phenotype_name: str,
+                     bim_name: str | None = None, fam_name: str | None = None) -> None:
     g, p = (genotype_name or "").lower(), (phenotype_name or "").lower()
     errors = []
-    if g.endswith(PLINK_EXT):
-        errors.append("Format PLINK biner (.bed/.bim/.fam) belum didukung pada versi ini; "
-                      "gunakan berkas VCF (.vcf atau .vcf.gz).")
+    if g.endswith(".bed"):
+        if not bim_name:
+            errors.append("Berkas .bim belum diunggah; format PLINK biner membutuhkan .bed, .bim, dan .fam.")
+        elif not bim_name.lower().endswith(".bim"):
+            errors.append(f"Berkas '{bim_name}' pada field bim harus berformat .bim.")
+        if not fam_name:
+            errors.append("Berkas .fam belum diunggah; format PLINK biner membutuhkan .bed, .bim, dan .fam.")
+        elif not fam_name.lower().endswith(".fam"):
+            errors.append(f"Berkas '{fam_name}' pada field fam harus berformat .fam.")
+    elif g.endswith((".bim", ".fam")):
+        errors.append("Untuk format PLINK biner, unggah berkas .bed pada field genotipe, "
+                      "lalu .bim dan .fam pada field bim dan fam.")
     elif not g.endswith(GENOTYPE_EXT):
-        errors.append(f"Berkas genotipe '{genotype_name}' harus berformat .vcf atau .vcf.gz.")
+        errors.append(f"Berkas genotipe '{genotype_name}' harus berformat .vcf, .vcf.gz, "
+                      "atau PLINK biner (.bed + .bim + .fam).")
     if not p.endswith(".csv"):
         errors.append(f"Berkas fenotipe '{phenotype_name}' harus berformat .csv.")
     if errors:
@@ -84,8 +100,9 @@ def store_datasets(
     phenotype_path: Path,
     geno: GenotypeData,
     pheno: PhenotypeData,
+    genotype_type: str = "vcf",
 ) -> dict:
-    ds_geno = Dataset(analysis_id=analysis_id, file_name=genotype_name, file_type="vcf",
+    ds_geno = Dataset(analysis_id=analysis_id, file_name=genotype_name, file_type=genotype_type,
                       file_path=str(genotype_path), validation_status="valid")
     ds_pheno = Dataset(analysis_id=analysis_id, file_name=phenotype_name, file_type="phenotype_csv",
                        file_path=str(phenotype_path), validation_status="valid")
@@ -123,6 +140,7 @@ def store_datasets(
     return {
         "genotipe": {
             "nama_berkas": genotype_name,
+            "format": "PLINK biner" if genotype_type == "plink_bed" else "VCF",
             "jumlah_sampel": geno.n_samples,
             "jumlah_snp": geno.n_snps,
             "varian_dilewati": geno.skipped,
@@ -150,7 +168,7 @@ def available_traits(db: Session, analysis_id: int) -> list[str]:
 
 def dataset_paths(db: Session, analysis_id: int) -> tuple[str | None, str | None]:
     rows = db.scalars(select(Dataset).where(Dataset.analysis_id == analysis_id)).all()
-    geno = next((d.file_path for d in rows if d.file_type == "vcf"), None)
+    geno = next((d.file_path for d in rows if d.file_type in GENOTYPE_TYPES), None)
     pheno = next((d.file_path for d in rows if d.file_type == "phenotype_csv"), None)
     return geno, pheno
 

@@ -1,0 +1,2 @@
+# Berkas biner PLINK jangan diubah akhir barisnya oleh Git (aman di Windows)
+*.bed binary

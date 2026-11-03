@@ -17,7 +17,7 @@ from pipeline.errors import PipelineError
 from pipeline.gwas import benjamini_hochberg, bonferroni, run_glm, run_mlm
 from pipeline.pca import run_pca
 from pipeline.quality_control import QCParams, run_qc
-from pipeline.validation import match_sample_ids, read_phenotype_csv, read_vcf
+from pipeline.validation import match_sample_ids, read_genotype, read_phenotype_csv
 
 STAGES = [
     ("validasi", "Validasi berkas"),
@@ -66,7 +66,7 @@ def run_pipeline(
 
     # 1. Validasi dan penyelarasan sampel
     notify("validasi", "berjalan", None)
-    geno = read_vcf(genotype_path)
+    geno = read_genotype(genotype_path)
     pheno = read_phenotype_csv(phenotype_path)
     match_sample_ids(geno.samples, pheno.samples)
     trait = params.get("trait")
