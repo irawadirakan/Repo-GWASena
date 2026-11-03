@@ -216,12 +216,14 @@ export default function AnalysisWizardPage() {
 
         {activeStep === 4 && (
           <Step4Results
+            analysisId={id}
             onNavigateStep={(stepNum) => setActiveStep(stepNum)}
           />
         )}
 
         {activeStep === 5 && (
           <Step5Annotation
+            analysisId={id}
             onNavigateStep={(stepNum) => setActiveStep(stepNum)}
           />
         )}

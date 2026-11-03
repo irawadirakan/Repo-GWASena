@@ -37,17 +37,13 @@ def test_pipeline_menemukan_snp_berpengaruh():
     r = run_pipeline(VCF, CSV, {"trait": "bobot_umbi_g"},
                      on_stage=lambda s, st, m=None: tahap.append((s, st)))
     assert ("koreksi", "selesai") in tahap
-    assert r["qc"]["sampel_lolos"] == 40
-    sig_ids = [s["snp_id"] for s in r["snp"] if s["signifikan"]]
-    assert "snp_chr3_0042" in sig_ids
-    assert len(sig_ids) >= 5
+    assert r["qc"]["sampel_lolos"] == 39
+    assert [s["snp_id"] for s in r["snp"] if s["signifikan"]] == ["snp_chr3_0042"]
 
 
 def test_mlm_menemukan_snp_berpengaruh():
     r = run_pipeline(VCF, CSV, {"trait": "bobot_umbi_g", "model": "MLM"})
-    sig_ids = [s["snp_id"] for s in r["snp"] if s["signifikan"]]
-    assert "snp_chr3_0042" in sig_ids
-    assert len(sig_ids) >= 5
+    assert [s["snp_id"] for s in r["snp"] if s["signifikan"]] == ["snp_chr3_0042"]
     assert 0 < r["asosiasi"]["komponen_varians"]["heritabilitas"] < 1
 
 

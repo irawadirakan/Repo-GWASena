@@ -54,6 +54,48 @@ export async function getExampleDatasetFiles() {
 }
 
 /**
+ * Mengambil berkas contoh PLINK biner (.bed, .bim, .fam) dan CSV fenotipe
+ */
+export async function getExamplePlinkFiles() {
+  const [bedRes, bimRes, famRes, csvRes] = await Promise.all([
+    fetch('/assets/example/genotipe_bawang_putih_mini.bed'),
+    fetch('/assets/example/genotipe_bawang_putih_mini.bim'),
+    fetch('/assets/example/genotipe_bawang_putih_mini.fam'),
+    fetch('/assets/example/fenotipe_bawang_putih_mini.csv'),
+  ]);
+
+  if (!bedRes.ok || !bimRes.ok || !famRes.ok || !csvRes.ok) {
+    throw new Error('Berkas contoh PLINK tidak lengkap pada server.');
+  }
+
+  const [bedBlob, bimBlob, famBlob, csvBlob] = await Promise.all([
+    bedRes.blob(),
+    bimRes.blob(),
+    famRes.blob(),
+    csvRes.blob(),
+  ]);
+
+  const bedFile = new File([bedBlob], 'genotipe_bawang_putih_mini.bed', {
+    type: 'application/octet-stream',
+    lastModified: Date.now(),
+  });
+  const bimFile = new File([bimBlob], 'genotipe_bawang_putih_mini.bim', {
+    type: 'text/plain',
+    lastModified: Date.now(),
+  });
+  const famFile = new File([famBlob], 'genotipe_bawang_putih_mini.fam', {
+    type: 'text/plain',
+    lastModified: Date.now(),
+  });
+  const csvFile = new File([csvBlob], 'fenotipe_bawang_putih_mini.csv', {
+    type: 'text/csv',
+    lastModified: Date.now(),
+  });
+
+  return { bedFile, bimFile, famFile, csvFile };
+}
+
+/**
  * Generator lokal deterministik (Seed 44) jika berjalan di lingkungan tanpa static file server.
  */
 function generateLocalExampleFiles() {

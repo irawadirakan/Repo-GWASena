@@ -10,15 +10,16 @@ import {
   Info,
   X,
   Sparkles,
+  Layers,
 } from 'lucide-react';
 import { analysisService } from '../../services/analysisService.js';
 import { useAnalysisStore, MOCK_GARLIC_DATASET_SUMMARY } from '../../store/useAnalysisStore.js';
-import { getExampleDatasetFiles } from '../../services/exampleDataset.js';
+import { getExampleDatasetFiles, getExamplePlinkFiles } from '../../services/exampleDataset.js';
 import ErrorMessageArea from '../common/ErrorMessageArea.jsx';
 
 /**
- * Step1Upload (Unggah & Validasi Data Genomik - Figma Aligned)
- * Acuan: 04 — Unggah Berkas & Validasi (Kosong).png & 04c — Unggah_ Valid (Boleh Lanjut).png
+ * Step1Upload (Unggah & Validasi Data Genomik - Dukung VCF & PLINK Biner)
+ * Acuan: PR #24 (Dukungan Format PLINK Biner .bed/.bim/.fam) & FR-02
  */
 export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
   const {
@@ -29,6 +30,10 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
     loadMockGarlicDataset,
   } = useAnalysisStore();
 
+  const [formatMode, setFormatMode] = useState(
+    uploadSummary?.genotipe?.format?.toLowerCase()?.includes('plink') ? 'plink' : 'vcf'
+  );
+
   const [genotypeFile, setGenotypeFile] = useState(
     uploadSummary?.genotipe
       ? {
@@ -37,6 +42,9 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
         }
       : null
   );
+  const [bimFile, setBimFile] = useState(null);
+  const [famFile, setFamFile] = useState(null);
+
   const [phenotypeFile, setPhenotypeFile] = useState(
     uploadSummary?.fenotipe
       ? {
@@ -51,28 +59,75 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
   const [error, setError] = useState(null);
 
   const [isDraggingGeno, setIsDraggingGeno] = useState(false);
+  const [isDraggingBim, setIsDraggingBim] = useState(false);
+  const [isDraggingFam, setIsDraggingFam] = useState(false);
   const [isDraggingPheno, setIsDraggingPheno] = useState(false);
 
   const genoInputRef = useRef(null);
+  const bimInputRef = useRef(null);
+  const famInputRef = useRef(null);
   const phenoInputRef = useRef(null);
 
-  // Validasi ekstensi genotipe (.vcf, .vcf.gz)
+  // Validasi & seleksi berkas genotipe VCF / BED
   const handleGenotypeSelect = (file) => {
     if (!file) return;
     const name = file.name.toLowerCase();
-    if (!name.endsWith('.vcf') && !name.endsWith('.vcf.gz') && !name.endsWith('.gz')) {
+
+    // Auto-deteksi jika berkas yang dipilih adalah .bed
+    if (name.endsWith('.bed')) {
+      setFormatMode('plink');
+      setGenotypeFile(file);
+      setError(null);
+      setUploadResult(null);
+      return;
+    }
+
+    if (name.endsWith('.vcf') || name.endsWith('.vcf.gz') || name.endsWith('.gz')) {
+      setFormatMode('vcf');
+      setGenotypeFile(file);
+      setError(null);
+      setUploadResult(null);
+      return;
+    }
+
+    setError({
+      message: 'Format berkas genotipe tidak didukung.',
+      details: [
+        `Berkas '${file.name}' harus berformat .vcf / .vcf.gz (VCF) atau .bed (PLINK biner).`,
+      ],
+    });
+    setGenotypeFile(null);
+  };
+
+  const handleBimSelect = (file) => {
+    if (!file) return;
+    const name = file.name.toLowerCase();
+    if (!name.endsWith('.bim')) {
       setError({
-        message: 'Format berkas genotipe tidak didukung.',
-        details: [
-          `Berkas '${file.name}' harus berformat .vcf atau .vcf.gz.`,
-          'Catatan: Format PLINK biner (.bed/.bim/.fam) belum didukung pada versi ini.',
-        ],
+        message: 'Format berkas peta varian tidak valid.',
+        details: [`Berkas '${file.name}' harus berekstensi .bim.`],
       });
-      setGenotypeFile(null);
+      setBimFile(null);
       return;
     }
     setError(null);
-    setGenotypeFile(file);
+    setBimFile(file);
+    setUploadResult(null);
+  };
+
+  const handleFamSelect = (file) => {
+    if (!file) return;
+    const name = file.name.toLowerCase();
+    if (!name.endsWith('.fam')) {
+      setError({
+        message: 'Format berkas sampel/pedigree tidak valid.',
+        details: [`Berkas '${file.name}' harus berekstensi .fam.`],
+      });
+      setFamFile(null);
+      return;
+    }
+    setError(null);
+    setFamFile(file);
     setUploadResult(null);
   };
 
@@ -93,33 +148,80 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
     setUploadResult(null);
   };
 
-  // 1-Klik Instan: Gunakan Dataset Contoh Benchmark (40 sampel x 500 SNP, 100% lolos QC)
-  const handleUseSampleData = async () => {
+  // 1-Klik Instan: Gunakan Dataset Contoh Benchmark (VCF atau PLINK)
+  const handleUseSampleData = async (mode = 'vcf') => {
     setError(null);
 
     try {
-      const { vcfFile, csvFile } = await getExampleDatasetFiles();
-      setGenotypeFile(vcfFile);
-      setPhenotypeFile(csvFile);
+      if (mode === 'plink') {
+        const { bedFile, bimFile: bFile, famFile: fFile, csvFile } = await getExamplePlinkFiles();
+        setFormatMode('plink');
+        setGenotypeFile(bedFile);
+        setBimFile(bFile);
+        setFamFile(fFile);
+        setPhenotypeFile(csvFile);
 
-      const mockSummary = loadMockGarlicDataset
-        ? loadMockGarlicDataset()
-        : { ...MOCK_GARLIC_DATASET_SUMMARY };
+        const mockSummary = {
+          ...MOCK_GARLIC_DATASET_SUMMARY,
+          genotipe: {
+            nama_berkas: 'genotipe_bawang_putih_mini.bed',
+            format: 'PLINK biner',
+            jumlah_sampel: 40,
+            jumlah_snp: 500,
+            varian_dilewati: { multialelik: 0 },
+          },
+        };
+        setUploadResult(mockSummary);
+        setUploadSummary(mockSummary);
+        setIsSimulated(true);
+        onUploadSuccess?.(mockSummary);
+      } else {
+        const { vcfFile, csvFile } = await getExampleDatasetFiles();
+        setFormatMode('vcf');
+        setGenotypeFile(vcfFile);
+        setBimFile(null);
+        setFamFile(null);
+        setPhenotypeFile(csvFile);
 
-      setUploadResult(mockSummary);
-      setUploadSummary(mockSummary);
-      setIsSimulated(true);
-      onUploadSuccess?.(mockSummary);
+        const mockSummary = loadMockGarlicDataset
+          ? loadMockGarlicDataset()
+          : { ...MOCK_GARLIC_DATASET_SUMMARY };
+
+        setUploadResult(mockSummary);
+        setUploadSummary(mockSummary);
+        setIsSimulated(true);
+        onUploadSuccess?.(mockSummary);
+      }
     } catch (err) {
       console.error('Gagal menyiapkan dataset contoh:', err);
+      setError({
+        message: 'Gagal memuat dataset contoh.',
+        details: [err.message || String(err)],
+      });
     }
   };
 
   const handleUploadAndValidate = async (e) => {
     e.preventDefault();
-    if (!genotypeFile || !phenotypeFile) {
-      setError('Mohon pilih kedua berkas (Genotipe dan Fenotipe) terlebih dahulu.');
-      return;
+
+    if (formatMode === 'plink') {
+      if (!genotypeFile || !bimFile || !famFile || !phenotypeFile) {
+        setError({
+          message: 'Berkas PLINK biner belum lengkap.',
+          details: [
+            !genotypeFile ? 'Berkas genotipe .bed belum dipilih.' : null,
+            !bimFile ? 'Berkas peta varian .bim belum dipilih.' : null,
+            !famFile ? 'Berkas sampel .fam belum dipilih.' : null,
+            !phenotypeFile ? 'Berkas fenotipe .csv belum dipilih.' : null,
+          ].filter(Boolean),
+        });
+        return;
+      }
+    } else {
+      if (!genotypeFile || !phenotypeFile) {
+        setError('Mohon pilih kedua berkas (Genotipe VCF dan Fenotipe CSV) terlebih dahulu.');
+        return;
+      }
     }
 
     setIsUploading(true);
@@ -128,6 +230,10 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
     const formData = new FormData();
     formData.append('genotipe', genotypeFile);
     formData.append('fenotipe', phenotypeFile);
+    if (formatMode === 'plink') {
+      if (bimFile) formData.append('bim', bimFile);
+      if (famFile) formData.append('fam', famFile);
+    }
 
     try {
       const res = await analysisService.uploadDataset(analysisId, formData);
@@ -221,23 +327,70 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
           </div>
           <div className="space-y-0.5">
             <h4 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-              <span>Ingin mencoba alur tanpa mengunggah berkas sendiri?</span>
-              <span className="inline-flex items-center rounded-full bg-cyan-100 dark:bg-[#06B6D4]/20 px-2.5 py-0.5 text-xs font-bold text-cyan-900 dark:text-[#06B6D4]">
-                1-Klik Cepat
+              <span>Coba Dataset Contoh Benchmark (Bawang Putih)</span>
+              <span className="inline-flex items-center rounded-full bg-emerald-100 dark:bg-emerald-500/20 px-2.5 py-0.5 text-xs font-bold text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-500/30">
+                100% Lolos QC
               </span>
             </h4>
             <p className="text-xs sm:text-sm text-slate-700 dark:text-slate-300 font-medium">
-              Gunakan dataset contoh terstandarisasi (Mini-VCF & CSV Fenotipe) untuk menguji coba alur kerja pipeline secara instan.
+              40 sampel &times; 500 SNP (chr1-chr8) dengan sifat bobot umbi &amp; diameter umbi. Tersedia format VCF dan PLINK biner.
             </p>
           </div>
         </div>
+        <div className="flex items-center gap-2 self-stretch sm:self-auto">
+          <button
+            type="button"
+            onClick={() => handleUseSampleData('vcf')}
+            className="figma-btn-primary cursor-pointer whitespace-nowrap text-xs sm:text-sm px-4 py-2"
+          >
+            <Dna className="h-4 w-4" />
+            <span>Contoh VCF</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => handleUseSampleData('plink')}
+            className="rounded-2xl border border-cyan-400/80 dark:border-cyan-500/30 bg-cyan-50 dark:bg-[#06B6D4]/15 px-4 py-2 text-xs sm:text-sm font-sans font-bold text-cyan-900 dark:text-[#06B6D4] hover:bg-cyan-100 dark:hover:bg-[#06B6D4]/25 transition-all shadow-xs cursor-pointer whitespace-nowrap"
+          >
+            <Layers className="h-4 w-4 inline mr-1" />
+            <span>Contoh PLINK (.bed)</span>
+          </button>
+        </div>
+      </div>
+
+      {/* ── Format Selector Toggle (VCF vs PLINK Biner) ── */}
+      <div className="flex items-center gap-2 p-1.5 rounded-2xl glass-subcard w-fit">
+        <span className="text-xs font-bold text-slate-700 dark:text-slate-300 px-3">
+          Format Genotipe:
+        </span>
         <button
           type="button"
-          onClick={handleUseSampleData}
-          className="figma-btn-primary cursor-pointer whitespace-nowrap self-stretch sm:self-auto"
+          onClick={() => {
+            setFormatMode('vcf');
+            if (genotypeFile?.name?.endsWith('.bed')) setGenotypeFile(null);
+            setError(null);
+          }}
+          className={`rounded-xl px-4 py-2 text-xs font-sans font-bold transition-all cursor-pointer ${
+            formatMode === 'vcf'
+              ? 'bg-[#5B4DFE] text-white shadow-md shadow-[#5B4DFE]/30'
+              : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
+          }`}
         >
-          <Sparkles className="h-4 w-4" />
-          <span>Gunakan Dataset Contoh</span>
+          VCF (Standar)
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setFormatMode('plink');
+            if (genotypeFile?.name && !genotypeFile.name.endsWith('.bed')) setGenotypeFile(null);
+            setError(null);
+          }}
+          className={`rounded-xl px-4 py-2 text-xs font-sans font-bold transition-all cursor-pointer ${
+            formatMode === 'plink'
+              ? 'bg-[#5B4DFE] text-white shadow-md shadow-[#5B4DFE]/30'
+              : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
+          }`}
+        >
+          PLINK Biner (.bed + .bim + .fam)
         </button>
       </div>
 
@@ -246,22 +399,16 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* ── Dropzone 1: Genotipe ── */}
           <div
-            onDragOver={(e) => {
-              e.preventDefault();
-              setIsDraggingGeno(true);
-            }}
-            onDragLeave={() => setIsDraggingGeno(false)}
-            onDrop={(e) => {
-              e.preventDefault();
-              setIsDraggingGeno(false);
-              if (e.dataTransfer.files?.[0]) handleGenotypeSelect(e.dataTransfer.files[0]);
-            }}
             className={`flex flex-col justify-between rounded-3xl border-2 border-dashed p-6 transition-all ${
-              isDraggingGeno
-                ? 'border-[#06B6D4] bg-[#06B6D4]/10 scale-[1.005]'
-                : genotypeFile
+              formatMode === 'vcf'
+                ? isDraggingGeno
+                  ? 'border-[#06B6D4] bg-[#06B6D4]/10 scale-[1.005]'
+                  : genotypeFile
+                  ? 'border-emerald-500/50 bg-emerald-500/5'
+                  : 'border-white/80 dark:border-white/15 bg-white/50 dark:bg-[#0F172E]/60 backdrop-blur-md shadow-xs hover:border-[#0284C7]'
+                : genotypeFile && bimFile && famFile
                 ? 'border-emerald-500/50 bg-emerald-500/5'
-                : 'border-white/80 dark:border-white/15 bg-white/50 dark:bg-[#0F172E]/60 backdrop-blur-md shadow-xs hover:border-[#0284C7] hover:bg-sky-50/40 dark:hover:bg-white/5'
+                : 'border-white/80 dark:border-white/15 bg-white/50 dark:bg-[#0F172E]/60 backdrop-blur-md shadow-xs hover:border-[#0284C7]'
             }`}
           >
             <div>
@@ -271,69 +418,210 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
                     <Dna className="h-4 w-4" />
                   </div>
                   <span className="text-sm sm:text-base font-bold text-slate-900 dark:text-white">
-                    Berkas Genotipe (VCF)
+                    {formatMode === 'plink' ? 'Genotipe PLINK Biner' : 'Berkas Genotipe (VCF)'}
                   </span>
                 </div>
                 <span className="text-xs font-mono font-bold rounded-lg border border-slate-300 dark:border-white/10 bg-slate-100 dark:bg-[#162142] px-2.5 py-0.5 text-slate-800 dark:text-slate-200">
-                  .vcf / .vcf.gz
+                  {formatMode === 'plink' ? '.bed + .bim + .fam' : '.vcf / .vcf.gz'}
                 </span>
               </div>
 
               <p className="text-xs sm:text-sm text-slate-700 dark:text-slate-300 mb-4 leading-relaxed font-medium">
-                Format VCF standar (.vcf / .vcf.gz) atau biner PLINK yang memuat informasi varian penanda SNP multi-sampel.
+                {formatMode === 'plink'
+                  ? 'Format biner PLINK 1.9 / 2.0 membutuhkan berkas .bed (genotipe), .bim (peta varian), dan .fam (sampel).'
+                  : 'Format VCF standar (.vcf / .vcf.gz) yang memuat informasi varian penanda SNP multi-sampel.'}
               </p>
 
-              {genotypeFile ? (
-                <div className="flex items-center justify-between rounded-2xl border border-emerald-300 dark:border-emerald-500/30 bg-emerald-50 dark:bg-[#121B38] p-3.5 shadow-sm animate-pop-in">
-                  <div className="flex items-center gap-2.5 truncate">
-                    <FileCheck2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                    <div className="truncate">
-                      <div className="text-sm font-bold text-slate-900 dark:text-white truncate">
-                        {genotypeFile.name}
+              {formatMode === 'vcf' ? (
+                <>
+                  {genotypeFile ? (
+                    <div className="flex items-center justify-between rounded-2xl border border-emerald-300 dark:border-emerald-500/30 bg-emerald-50 dark:bg-[#121B38] p-3.5 shadow-sm animate-pop-in">
+                      <div className="flex items-center gap-2.5 truncate">
+                        <FileCheck2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                        <div className="truncate">
+                          <div className="text-sm font-bold text-slate-900 dark:text-white truncate">
+                            {genotypeFile.name}
+                          </div>
+                          <div className="text-xs font-mono font-bold text-slate-700 dark:text-slate-300">
+                            {(genotypeFile.size / (1024 * 1024)).toFixed(2)} MB
+                          </div>
+                        </div>
                       </div>
-                      <div className="text-xs font-mono font-bold text-slate-700 dark:text-slate-300">
-                        {(genotypeFile.size / (1024 * 1024)).toFixed(2)} MB
-                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setGenotypeFile(null);
+                          setUploadResult(null);
+                        }}
+                        className="p-1 rounded-lg text-slate-500 hover:bg-slate-200 dark:hover:bg-white/10 hover:text-slate-800 dark:hover:text-white active:scale-95 transition-all cursor-pointer"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        setIsDraggingGeno(true);
+                      }}
+                      onDragLeave={() => setIsDraggingGeno(false)}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        setIsDraggingGeno(false);
+                        if (e.dataTransfer.files?.[0]) handleGenotypeSelect(e.dataTransfer.files[0]);
+                      }}
+                      onClick={() => genoInputRef.current?.click()}
+                      className="flex flex-col items-center justify-center p-6 rounded-2xl border border-white/80 dark:border-white/10 bg-white/60 dark:bg-[#0F172E]/50 backdrop-blur-md cursor-pointer hover:bg-white/80 dark:hover:bg-white/5 active:scale-[0.99] transition-all text-center group shadow-xs"
+                    >
+                      <UploadCloud className="h-8 w-8 text-[#0284C7] dark:text-[#06B6D4] mb-2 group-hover:scale-110 transition-transform" />
+                      <span className="text-sm font-bold text-slate-900 dark:text-white">
+                        Pilih atau Seret Berkas VCF ke Sini
+                      </span>
+                      <span className="mt-1 text-xs text-slate-600 dark:text-slate-300 font-medium">Maksimal 200 MB</span>
+                    </div>
+                  )}
+
+                  <input
+                    ref={genoInputRef}
+                    type="file"
+                    accept=".vcf,.gz,.bed"
+                    className="hidden"
+                    onChange={(e) => {
+                      if (e.target.files?.[0]) handleGenotypeSelect(e.target.files[0]);
+                    }}
+                  />
+                </>
+              ) : (
+                /* Mode PLINK Biner: 3 Berkas */
+                <div className="space-y-2.5">
+                  <div className="rounded-2xl border border-slate-200 dark:border-white/10 p-2.5 bg-white/50 dark:bg-white/5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                        1. Berkas .bed (Genotipe) <span className="text-red-500">*</span>
+                      </span>
+                      {genotypeFile ? (
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400 truncate max-w-[140px]">
+                            {genotypeFile.name}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setGenotypeFile(null)}
+                            className="p-0.5 text-slate-400 hover:text-red-500"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => genoInputRef.current?.click()}
+                          className="text-xs font-sans font-bold text-[#0284C7] dark:text-[#06B6D4] hover:underline cursor-pointer"
+                        >
+                          + Pilih .bed
+                        </button>
+                      )}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setGenotypeFile(null);
-                      setUploadResult(null);
+
+                  <div className="rounded-2xl border border-slate-200 dark:border-white/10 p-2.5 bg-white/50 dark:bg-white/5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                        2. Berkas .bim (Peta Varian) <span className="text-red-500">*</span>
+                      </span>
+                      {bimFile ? (
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400 truncate max-w-[140px]">
+                            {bimFile.name}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setBimFile(null)}
+                            className="p-0.5 text-slate-400 hover:text-red-500"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => bimInputRef.current?.click()}
+                          className="text-xs font-sans font-bold text-[#0284C7] dark:text-[#06B6D4] hover:underline cursor-pointer"
+                        >
+                          + Pilih .bim
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-200 dark:border-white/10 p-2.5 bg-white/50 dark:bg-white/5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                        3. Berkas .fam (Sampel/Pedigree) <span className="text-red-500">*</span>
+                      </span>
+                      {famFile ? (
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400 truncate max-w-[140px]">
+                            {famFile.name}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setFamFile(null)}
+                            className="p-0.5 text-slate-400 hover:text-red-500"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => famInputRef.current?.click()}
+                          className="text-xs font-sans font-bold text-[#0284C7] dark:text-[#06B6D4] hover:underline cursor-pointer"
+                        >
+                          + Pilih .fam
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <input
+                    ref={genoInputRef}
+                    type="file"
+                    accept=".bed"
+                    className="hidden"
+                    onChange={(e) => {
+                      if (e.target.files?.[0]) handleGenotypeSelect(e.target.files[0]);
                     }}
-                    className="p-1 rounded-lg text-slate-500 hover:bg-slate-200 dark:hover:bg-white/10 hover:text-slate-800 dark:hover:text-white active:scale-95 transition-all"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-              ) : (
-                <div
-                  onClick={() => genoInputRef.current?.click()}
-                  className="flex flex-col items-center justify-center p-6 rounded-2xl border border-white/80 dark:border-white/10 bg-white/60 dark:bg-[#0F172E]/50 backdrop-blur-md cursor-pointer hover:bg-white/80 dark:hover:bg-white/5 active:scale-[0.99] transition-all text-center group shadow-xs"
-                >
-                  <UploadCloud className="h-8 w-8 text-[#0284C7] dark:text-[#06B6D4] mb-2 group-hover:scale-110 transition-transform" />
-                  <span className="text-sm font-bold text-slate-900 dark:text-white">
-                    Pilih atau Seret Berkas VCF ke Sini
-                  </span>
-                  <span className="mt-1 text-xs text-slate-600 dark:text-slate-300 font-medium">Maksimal 200 MB</span>
+                  />
+                  <input
+                    ref={bimInputRef}
+                    type="file"
+                    accept=".bim"
+                    className="hidden"
+                    onChange={(e) => {
+                      if (e.target.files?.[0]) handleBimSelect(e.target.files[0]);
+                    }}
+                  />
+                  <input
+                    ref={famInputRef}
+                    type="file"
+                    accept=".fam"
+                    className="hidden"
+                    onChange={(e) => {
+                      if (e.target.files?.[0]) handleFamSelect(e.target.files[0]);
+                    }}
+                  />
                 </div>
               )}
-
-              <input
-                ref={genoInputRef}
-                type="file"
-                accept=".vcf,.gz"
-                className="hidden"
-                onChange={(e) => {
-                  if (e.target.files?.[0]) handleGenotypeSelect(e.target.files[0]);
-                }}
-              />
             </div>
 
             <div className="mt-4 pt-3 border-t border-slate-200 dark:border-white/10 text-xs sm:text-sm text-slate-700 dark:text-slate-300 flex items-center gap-1.5 font-medium">
               <Info className="h-4 w-4 shrink-0 text-[#0284C7] dark:text-[#06B6D4]" />
-              <span>Format PLINK biner (.bed/.bim/.fam) belum didukung pada rilis ini.</span>
+              <span>
+                {formatMode === 'plink'
+                  ? 'Format PLINK biner didukung penuh untuk komputasi asosiasi berskala besar.'
+                  : 'Format VCF didukung dalam bentuk teks biasa (.vcf) maupun kompresi (.vcf.gz).'}
+              </span>
             </div>
           </div>
 
@@ -426,7 +714,7 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
 
             <div className="mt-4 pt-3 border-t border-slate-200 dark:border-white/10 text-xs sm:text-sm text-slate-700 dark:text-slate-300 flex items-center gap-1.5 font-medium">
               <Info className="h-4 w-4 shrink-0 text-[#0284C7] dark:text-[#06B6D4]" />
-              <span>Contoh kolom sifat: trait_yield, disease_resistance, plant_height.</span>
+              <span>Contoh kolom sifat: bobot_umbi_g, diameter_umbi_mm, jumlah_siung.</span>
             </div>
           </div>
         </div>
@@ -435,18 +723,23 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
         <div className="flex justify-center pt-2">
           <button
             type="submit"
-            disabled={isUploading || !genotypeFile || !phenotypeFile}
-            className="figma-btn-primary px-8 py-3.5 text-sm sm:text-base cursor-pointer"
+            disabled={
+              isUploading ||
+              !genotypeFile ||
+              !phenotypeFile ||
+              (formatMode === 'plink' && (!bimFile || !famFile))
+            }
+            className="figma-btn-primary px-8 py-3.5 text-sm sm:text-base cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isUploading ? (
               <>
                 <Loader2 className="h-5 w-5 animate-spin" />
-                <span>Memvalidasi Format & Mencocokkan Sample ID...</span>
+                <span>Memvalidasi Format &amp; Mencocokkan Sample ID...</span>
               </>
             ) : (
               <>
                 <UploadCloud className="h-5 w-5" />
-                <span>Unggah & Validasi Berkas Sekarang</span>
+                <span>Unggah &amp; Validasi Berkas Sekarang</span>
               </>
             )}
           </button>
@@ -460,8 +753,11 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
             <div className="flex items-center gap-3">
               <CheckCircle2 className="h-6 w-6 text-emerald-600 dark:text-emerald-400 shrink-0" />
               <div>
-                <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                  Validasi Dataset Berhasil! (100% Sample ID Cocok)
+                <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <span>Validasi Dataset Berhasil! (100% Sample ID Cocok)</span>
+                  <span className="rounded-full bg-cyan-100 dark:bg-cyan-500/20 px-2.5 py-0.5 text-xs font-mono font-bold text-cyan-800 dark:text-cyan-300 border border-cyan-300 dark:border-cyan-500/30">
+                    Format: {uploadResult.genotipe?.format || (formatMode === 'plink' ? 'PLINK biner' : 'VCF')}
+                  </span>
                 </h3>
                 <span className="text-xs text-emerald-800 dark:text-emerald-400 font-medium">
                   {uploadResult.pesan || 'Berkas valid dan siap dikonfigurasi.'}
@@ -481,10 +777,9 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
               </span>
               <div className="font-serif text-2xl font-bold text-[#0284C7] dark:text-[#06B6D4] tabular-nums mt-1">
                 {uploadResult.kecocokan_sample_id?.jumlah_cocok ??
-                  uploadResult.genotipe?.n_sampel ??
                   uploadResult.genotipe?.jumlah_sampel ??
                   uploadResult.kecocokan_sample_id?.jumlah_sampel_cocok ??
-                  25}
+                  40}
               </div>
             </div>
 
@@ -493,16 +788,16 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
                 Jumlah SNP
               </span>
               <div className="font-serif text-2xl font-bold text-slate-900 dark:text-white tabular-nums mt-1">
-                {uploadResult.genotipe?.n_snp ?? uploadResult.genotipe?.jumlah_snp ?? 500}
+                {uploadResult.genotipe?.jumlah_snp ?? 500}
               </div>
             </div>
 
             <div className="glass-subcard p-3.5 text-center">
               <span className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase font-sans tracking-wide">
-                Varian Dilewati
+                Format Terdeteksi
               </span>
-              <div className="font-mono text-xs font-bold text-slate-700 dark:text-slate-300 mt-2">
-                {uploadResult.genotipe?.varian_dilewati?.multialelik ?? 0} Multialelik
+              <div className="font-mono text-xs font-bold text-[#0284C7] dark:text-[#06B6D4] mt-2">
+                {uploadResult.genotipe?.format || (formatMode === 'plink' ? 'PLINK biner' : 'VCF v4.2')}
               </div>
             </div>
 
@@ -511,7 +806,7 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
                 Sampel Fenotipe
               </span>
               <div className="font-serif text-2xl font-bold text-[#0284C7] dark:text-[#38BDF8] tabular-nums mt-1">
-                {uploadResult.fenotipe?.n_sampel ?? uploadResult.fenotipe?.varietas_tercatat ?? 25}
+                {uploadResult.fenotipe?.jumlah_sampel ?? uploadResult.fenotipe?.varietas_tercatat ?? 40}
               </div>
             </div>
           </div>

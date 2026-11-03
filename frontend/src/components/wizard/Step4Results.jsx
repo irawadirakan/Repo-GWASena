@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   BarChart3,
   Search,
@@ -10,8 +10,11 @@ import {
   X,
   Dna,
   ArrowRight,
+  Loader2,
+  Sparkles,
 } from 'lucide-react';
 import { useAnalysisStore } from '../../store/useAnalysisStore.js';
+import { analysisService } from '../../services/analysisService.js';
 import ManhattanPlot from '../charts/ManhattanPlot.jsx';
 import QQPlot from '../charts/QQPlot.jsx';
 import { generateBenchmarkResults } from '../../services/mockResults.js';
@@ -20,29 +23,79 @@ import { generateBenchmarkResults } from '../../services/mockResults.js';
  * Langkah 4: Hasil Uji Asosiasi & Visualisasi Plot Interaktif (Figma Aligned)
  * Acuan: 07 — Hasil & Visualisasi.png & 07b — Hasil_ Titik SNP Terpilih.png
  */
-export default function Step4Results({ onNavigateStep }) {
+export default function Step4Results({ analysisId, onNavigateStep }) {
   const { results, setResults, configParams, uploadSummary, isSimulated } = useAnalysisStore();
+  const [isLoadingBackend, setIsLoadingBackend] = useState(false);
+  const [fetchError, setFetchError] = useState(null);
 
-  // Pastikan ada data hasil (jika belum ada, gunakan benchmark simulasi)
+  useEffect(() => {
+    let isMounted = true;
+    async function fetchResults() {
+      // Jika data hasil belum ada dan memiliki analysisId serta bukan mode simulasi murni, ambil dari backend
+      if (!results && analysisId && !isSimulated) {
+        setIsLoadingBackend(true);
+        try {
+          const data = await analysisService.getFullAnalysisResults(analysisId);
+          if (isMounted) {
+            setResults(data);
+          }
+        } catch (err) {
+          console.warn('Gagal memuat hasil dari backend:', err);
+          if (isMounted) {
+            setFetchError(err.message || 'Gagal memuat hasil dari backend.');
+          }
+        } finally {
+          if (isMounted) setIsLoadingBackend(false);
+        }
+      }
+    }
+    fetchResults();
+    return () => {
+      isMounted = false;
+    };
+  }, [analysisId, results, isSimulated, setResults]);
+
+  // Ambil data hasil (utamakan hasil backend asli; jangan pernah menimpa hasil backend dengan benchmark simulasi)
   const activeResults = useMemo(() => {
-    if (results && results.association_results) {
+    if (results && (results.association_results || results.raw_backend_results)) {
       return results;
     }
-    const benchmark = generateBenchmarkResults(configParams, uploadSummary);
-    setResults(benchmark);
-    return benchmark;
-  }, [results, configParams, uploadSummary, setResults]);
+    if (isSimulated) {
+      const benchmark = generateBenchmarkResults(configParams, uploadSummary);
+      setResults(benchmark);
+      return benchmark;
+    }
+    return results || null;
+  }, [results, configParams, uploadSummary, setResults, isSimulated]);
 
-  const snps = activeResults.association_results || [];
-  const significantSnps = activeResults.significant_snps || [];
-  const summary = activeResults.summary || {};
-  const qqData = activeResults.qq_data || [];
+  const rawBackend = activeResults?.raw_backend_results || {};
+  const qc = activeResults?.summary?.qc || rawBackend?.qc || {};
+  const asosiasi = activeResults?.summary?.asosiasi || rawBackend?.asosiasi || {};
+  const snps = activeResults?.association_results || [];
+  const significantSnps = activeResults?.significant_snps || [];
+  const topSnps = activeResults?.top_snps || [];
+  const summary = activeResults?.summary || {};
+  const qqData = activeResults?.qq_data || [];
   const threshold = summary.neg_log10_threshold || 3.98;
 
   // Selected SNP State
   const [selectedSnp, setSelectedSnp] = useState(
-    significantSnps.length > 0 ? significantSnps[0] : null
+    significantSnps.length > 0
+      ? significantSnps[0]
+      : topSnps.length > 0
+      ? topSnps[0]
+      : snps.length > 0
+      ? snps[0]
+      : null
   );
+
+  useEffect(() => {
+    if (!selectedSnp) {
+      if (significantSnps.length > 0) setSelectedSnp(significantSnps[0]);
+      else if (topSnps.length > 0) setSelectedSnp(topSnps[0]);
+      else if (snps.length > 0) setSelectedSnp(snps[0]);
+    }
+  }, [significantSnps, topSnps, snps, selectedSnp]);
 
   // Filter & Search State untuk Tabel Lengkap
   const [searchQuery, setSearchQuery] = useState('');
@@ -89,6 +142,17 @@ export default function Step4Results({ onNavigateStep }) {
       setSortField(field);
       setSortOrder('asc');
     }
+  }
+
+  if (isLoadingBackend || (!activeResults && !fetchError)) {
+    return (
+      <div className="flex min-h-[40vh] flex-col items-center justify-center p-8 space-y-3">
+        <Loader2 className="h-8 w-8 animate-spin text-[#06B6D4]" />
+        <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+          Memuat hasil analisis asosiasi dan plot ilmiah dari server...
+        </p>
+      </div>
+    );
   }
 
   return (
@@ -142,27 +206,31 @@ export default function Step4Results({ onNavigateStep }) {
         <div className="glass-subcard p-3.5">
           <span className="text-xs font-sans font-bold text-slate-800 dark:text-slate-200 block uppercase tracking-wider">Model Asosiasi</span>
           <span className="font-serif text-lg font-bold text-slate-900 dark:text-white block mt-0.5">
-            {summary.model || configParams.model || 'MLM'}
+            {asosiasi.model || summary.model || configParams.model || 'MLM'}
           </span>
           <span className="text-xs text-slate-700 dark:text-slate-300 block truncate font-sans font-medium">
-            Sifat: {summary.trait || configParams.trait || 'bobot_umbi_g'}
+            Sifat: {asosiasi.trait || summary.trait || configParams.trait || 'bobot_umbi'}
           </span>
         </div>
 
         <div className="glass-subcard p-3.5">
-          <span className="text-xs font-sans font-bold text-slate-800 dark:text-slate-200 block uppercase tracking-wider">Total SNP Teruji</span>
+          <span className="text-xs font-sans font-bold text-slate-800 dark:text-slate-200 block uppercase tracking-wider">Sampel Lolos QC</span>
           <span className="font-serif text-lg font-bold text-slate-900 dark:text-white tabular-nums block mt-0.5">
-            {summary.total_snps_tested?.toLocaleString('id-ID') || snps.length}
+            {qc.sampel_lolos ?? summary.samples_passed_qc ?? '-'}
           </span>
-          <span className="text-xs text-slate-700 dark:text-slate-300 block font-sans font-medium">8 Kromosom</span>
+          <span className="text-xs text-slate-700 dark:text-slate-300 block font-sans font-medium">
+            dari {qc.sampel_total ?? summary.total_samples_analyzed ?? '-'} total
+          </span>
         </div>
 
         <div className="glass-subcard p-3.5">
-          <span className="text-xs font-sans font-bold text-slate-800 dark:text-slate-200 block uppercase tracking-wider">Koreksi Berganda</span>
-          <span className="font-serif text-lg font-bold text-[#0284C7] dark:text-[#06B6D4] truncate block mt-0.5">
-            Bonferroni & FDR
+          <span className="text-xs font-sans font-bold text-slate-800 dark:text-slate-200 block uppercase tracking-wider">SNP Lolos QC</span>
+          <span className="font-serif text-lg font-bold text-slate-900 dark:text-white tabular-nums block mt-0.5">
+            {(qc.snp_lolos ?? summary.snps_passed_qc ?? snps.length)?.toLocaleString('id-ID')}
           </span>
-          <span className="text-xs text-slate-700 dark:text-slate-300 block font-sans font-medium">Alpha: {summary.alpha || 0.05}</span>
+          <span className="text-xs text-slate-700 dark:text-slate-300 block font-sans font-medium">
+            Teruji pada 8 Kromosom
+          </span>
         </div>
 
         <div className="glass-subcard p-3.5">
@@ -171,14 +239,14 @@ export default function Step4Results({ onNavigateStep }) {
             -log₁₀P = {threshold.toFixed(2)}
           </span>
           <span className="text-xs text-slate-700 dark:text-slate-300 block font-mono font-bold">
-            p &lt; {summary.bonferroni_threshold || '1.04e-4'}
+            p &lt; {summary.bonferroni_threshold ? (Number(summary.bonferroni_threshold) < 0.001 ? Number(summary.bonferroni_threshold).toExponential(2) : Number(summary.bonferroni_threshold).toFixed(5)) : '1.04e-4'}
           </span>
         </div>
 
         <div className="glass-subcard p-3.5">
           <span className="text-xs font-sans font-bold text-slate-800 dark:text-slate-200 block uppercase tracking-wider">SNP Signifikan</span>
           <span className="font-serif text-lg font-bold text-emerald-600 dark:text-emerald-400 tabular-nums block mt-0.5">
-            {significantSnps.length} SNP
+            {asosiasi.jumlah_signifikan ?? significantSnps.length} SNP
           </span>
           <span className="text-xs text-emerald-700 dark:text-emerald-400 block font-sans font-bold">Lolos Ambang</span>
         </div>
@@ -186,9 +254,11 @@ export default function Step4Results({ onNavigateStep }) {
         <div className="glass-subcard p-3.5">
           <span className="text-xs font-sans font-bold text-slate-800 dark:text-slate-200 block uppercase tracking-wider">Inflasi Genomik (λ)</span>
           <span className="font-serif text-lg font-bold text-slate-900 dark:text-white tabular-nums block mt-0.5">
-            {summary.lambda_gc || 1.024}
+            {Number(asosiasi.lambda_gc ?? summary.lambda_gc ?? 1.04).toFixed(3)}
           </span>
-          <span className="text-xs text-emerald-700 dark:text-emerald-400 block font-sans font-bold">Terkontrol (&lt; 1.05)</span>
+          <span className="text-xs text-emerald-700 dark:text-emerald-400 block font-sans font-bold">
+            {Number(asosiasi.lambda_gc ?? summary.lambda_gc ?? 1.04) <= 1.05 ? 'Terkontrol (≤ 1.05)' : 'Tingkat Inflasi Moderat'}
+          </span>
         </div>
       </div>
 
@@ -370,15 +440,78 @@ export default function Step4Results({ onNavigateStep }) {
         </div>
 
         {significantSnps.length === 0 ? (
-          <div className="py-8 text-center text-xs text-slate-600 dark:text-slate-400 font-sans">
-            <Info className="h-6 w-6 mx-auto mb-2 text-slate-400" />
-            <p className="font-semibold text-slate-800 dark:text-white">
-              Tidak ditemukan penanda SNP yang melewati ambang signifikansi.
-            </p>
-            <p className="max-w-md mx-auto mt-1 text-slate-500 dark:text-slate-400 font-serif italic text-xs">
-              Cobalah meninjau kembali kriteria seleksi MAF, melonggarkan ambang signifikansi alpha,
-              atau menggunakan koreksi FDR yang lebih adaptif.
-            </p>
+          <div className="space-y-4">
+            <div className="py-4 px-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-xs text-slate-700 dark:text-slate-300 font-sans flex items-start gap-3">
+              <Info className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-bold text-slate-900 dark:text-white">
+                  Tidak ada penanda SNP yang melewati ambang signifikansi Bonferroni (-log₁₀P ≥ {threshold.toFixed(2)}).
+                </p>
+                <p className="mt-1 text-slate-600 dark:text-slate-400 font-medium">
+                  {topSnps.length > 0
+                    ? `Berikut adalah ${topSnps.length} SNP dengan nilai p terendah (kandidat asosiasi terkuat) yang dapat ditinjau lebih lanjut.`
+                    : 'Cobalah meninjau kembali kriteria seleksi MAF, melonggarkan ambang signifikansi alpha, atau menggunakan koreksi FDR yang lebih adaptif.'}
+                </p>
+              </div>
+            </div>
+
+            {topSnps.length > 0 && (
+              <div className="overflow-x-auto rounded-2xl border border-slate-200/80 dark:border-white/10">
+                <table className="w-full text-left text-sm">
+                  <thead className="border-b border-slate-200 dark:border-white/10 text-xs text-slate-800 dark:text-slate-200 uppercase font-sans font-bold bg-slate-100/95 dark:bg-[#0B132C]/90">
+                    <tr>
+                      <th className="py-3 px-3.5">SNP ID (Kandidat Teratas)</th>
+                      <th className="py-3 px-3.5">Kromosom</th>
+                      <th className="py-3 px-3.5">Posisi (bp)</th>
+                      <th className="py-3 px-3.5">p-value</th>
+                      <th className="py-3 px-3.5">-log₁₀(P)</th>
+                      <th className="py-3 px-3.5">q-value (FDR)</th>
+                      <th className="py-3 px-3.5">Effect Size (Beta)</th>
+                      <th className="py-3 px-3.5 text-right">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-white/5 font-mono">
+                    {topSnps.map((snp) => (
+                      <tr
+                        key={snp.snp_id}
+                        className={`hover:bg-slate-50/80 dark:hover:bg-white/5 transition-colors ${
+                          selectedSnp?.snp_id === snp.snp_id ? 'bg-cyan-50/80 dark:bg-[#06B6D4]/15' : ''
+                        }`}
+                      >
+                        <td className="py-3 px-3.5 font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                          <Sparkles className="h-3.5 w-3.5 text-amber-500" />
+                          <span>{snp.snp_id}</span>
+                        </td>
+                        <td className="py-3 px-3.5 text-slate-800 dark:text-slate-200 font-sans font-semibold">Chr {snp.chromosome}</td>
+                        <td className="py-3 px-3.5 text-slate-800 dark:text-slate-200 font-medium">{Number(snp.position).toLocaleString('id-ID')}</td>
+                        <td className="py-3 px-3.5 font-bold text-cyan-700 dark:text-cyan-400">
+                          {Number(snp.p_value) < 0.001 ? Number(snp.p_value).toExponential(3) : Number(snp.p_value).toFixed(5)}
+                        </td>
+                        <td className="py-3 px-3.5 font-bold text-[#0284C7] dark:text-[#06B6D4]">
+                          {snp.neg_log10_p?.toFixed(2) || (-Math.log10(snp.p_value)).toFixed(2)}
+                        </td>
+                        <td className="py-3 px-3.5 text-slate-800 dark:text-slate-200 font-medium">
+                          {snp.q_value ? Number(snp.q_value).toExponential(3) : '-'}
+                        </td>
+                        <td className="py-3 px-3.5 text-slate-800 dark:text-slate-200 font-medium">
+                          {snp.effect_size >= 0 ? '+' : ''}
+                          {snp.effect_size}
+                        </td>
+                        <td className="py-3 px-3.5 text-right">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedSnp(snp)}
+                            className="rounded-full border border-slate-300 dark:border-white/10 bg-white/90 dark:bg-[#162142] px-3.5 py-1 text-xs font-sans font-bold text-slate-800 dark:text-slate-200 hover:bg-[#0284C7] hover:text-white dark:hover:bg-[#06B6D4] dark:hover:text-[#0B132C] hover:-translate-y-[1px] active:scale-[0.97] transition-all duration-100 shadow-sm"
+                          >
+                            Pilih
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         ) : (
           <div className="overflow-x-auto rounded-2xl border border-slate-200/80 dark:border-white/10">
