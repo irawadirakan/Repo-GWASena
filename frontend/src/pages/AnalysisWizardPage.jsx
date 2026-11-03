@@ -104,6 +104,20 @@ export default function AnalysisWizardPage() {
     currentAnalysis?.sifat_tersedia ||
     [];
 
+  // TUGAS 5: Ringkasan data aktual dinamis di pojok kanan atas
+  const isBenchmark =
+    uploadSummary?.simulated ||
+    uploadSummary?.genotipe?.nama_berkas?.toLowerCase()?.includes('bawang') ||
+    uploadSummary?.genotipe?.nama_berkas?.toLowerCase()?.includes('garlic');
+
+  const datasetBadgeText = uploadSummary?.genotipe
+    ? isBenchmark
+      ? `Dataset Benchmark (Allium sativum) · ${uploadSummary.genotipe.jumlah_sampel || 40} Sampel`
+      : `${uploadSummary.genotipe.format?.split(' ')[0] || 'VCF'} · ${uploadSummary.genotipe.jumlah_sampel} Sampel · ${uploadSummary.genotipe.jumlah_snp} SNP`
+    : currentAnalysis?.status === 'selesai'
+    ? 'Dataset Selesai Diproses'
+    : 'Menunggu Unggah Data';
+
   return (
     <div className="space-y-6 pb-16 animate-fade-in">
       {/* ── Banner Mode Simulasi (Poin #2) ── */}
@@ -153,10 +167,11 @@ export default function AnalysisWizardPage() {
           </div>
         </div>
 
+        {/* TUGAS 5: Badge Dinamis Sesuai Dataset Aktual */}
         <div className="flex items-center gap-2 self-start sm:self-auto">
-          <div className="glass-subcard px-4 py-2 text-sm flex items-center gap-2 text-slate-800 dark:text-slate-100 font-bold shadow-sm">
-            <Dna className="h-4 w-4 text-[#0284C7] dark:text-[#06B6D4]" />
-            <span>{currentAnalysis?.organism || 'Genomic Association Suite'}</span>
+          <div className="glass-subcard px-4 py-2 text-xs sm:text-sm flex items-center gap-2 text-slate-800 dark:text-slate-100 font-bold shadow-sm">
+            <Dna className="h-4 w-4 text-[#0284C7] dark:text-[#06B6D4] shrink-0" />
+            <span className="font-sans">{datasetBadgeText}</span>
           </div>
         </div>
       </div>

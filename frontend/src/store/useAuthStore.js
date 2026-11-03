@@ -50,12 +50,32 @@ export const useAuthStore = create((set, get) => ({
   },
 
   /**
-   * Login pengguna
+   * Login pengguna manual
    */
   login: async (username, password) => {
     set({ isLoading: true, error: null });
     try {
       const res = await authService.login(username, password);
+      set({
+        token: res.access_token,
+        user: res.pengguna,
+        isAuthenticated: true,
+        isLoading: false,
+      });
+      return res;
+    } catch (err) {
+      set({ isLoading: false, error: err.message });
+      throw err;
+    }
+  },
+
+  /**
+   * Login atau Daftar dengan Google OAuth
+   */
+  googleLogin: async (payload) => {
+    set({ isLoading: true, error: null });
+    try {
+      const res = await authService.googleAuth(payload);
       set({
         token: res.access_token,
         user: res.pengguna,

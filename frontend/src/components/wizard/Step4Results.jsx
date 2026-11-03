@@ -171,21 +171,21 @@ export default function Step4Results({ analysisId, onNavigateStep }) {
             type="button"
             className="rounded-xl bg-[#5B4DFE] px-3.5 py-1.5 text-xs font-sans font-bold text-white shadow-sm"
           >
-            Langkah 4: Hasil & Visualisasi
+            Hasil & Visualisasi
           </button>
           <button
             type="button"
             onClick={() => onNavigateStep(5)}
             className="rounded-xl px-3.5 py-1.5 text-xs font-sans font-semibold text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors"
           >
-            Langkah 5: Anotasi Gen &rarr;
+            Anotasi Gen
           </button>
           <button
             type="button"
             onClick={() => onNavigateStep(6)}
             className="rounded-xl px-3.5 py-1.5 text-xs font-sans font-semibold text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors"
           >
-            Langkah 6: Ekspor & Laporan &rarr;
+            Ekspor & Laporan
           </button>
         </div>
 

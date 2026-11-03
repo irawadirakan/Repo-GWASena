@@ -3,11 +3,13 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, Lock, User, Mail, ArrowRight, Loader2, Sparkles } from 'lucide-react';
 import { useAuthStore } from '../store/useAuthStore.js';
 import ErrorMessageArea from '../components/common/ErrorMessageArea.jsx';
+import GoogleAccountChooserModal, { GoogleIcon } from '../components/common/GoogleAccountChooserModal.jsx';
 
 /**
- * RegisterPage (Pendaftaran Akun Peneliti - Figma Aligned)
+ * RegisterPage (Pendaftaran Akun Pengguna - Figma Aligned)
  * Acuan: 02 — Register.png, 02 — Register (Light).png
  * Kontrak Skema: RegisterIn (username: 3-50, email: max 120, password: min 8)
+ * Fitur: Registrasi Manual & Registrasi Instan via Akun Google OAuth E2E.
  */
 export default function RegisterPage() {
   const navigate = useNavigate();
@@ -19,6 +21,7 @@ export default function RegisterPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState(null);
+  const [isGoogleModalOpen, setIsGoogleModalOpen] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -64,13 +67,18 @@ export default function RegisterPage() {
     }
   };
 
+  const handleGoogleSuccess = () => {
+    setIsGoogleModalOpen(false);
+    navigate('/dashboard', { replace: true });
+  };
+
   return (
     <div className="w-full max-w-md animate-fade-in py-2">
       <div className="figma-card p-7 sm:p-9">
         {/* Header Form */}
         <div className="text-center mb-6">
           <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white font-sans">
-            Buat Akun Peneliti
+            Buat Akun Baru
           </h1>
           <p className="mt-1.5 font-serif text-sm text-slate-600 dark:text-slate-300">
             Bergabunglah dengan platform analisis asosiasi genomik terpadu GWASena
@@ -79,6 +87,28 @@ export default function RegisterPage() {
 
         {/* Kotak Galat Pesan Figma Message Banner */}
         <ErrorMessageArea error={error} onDismiss={() => setError(null)} className="mb-4" />
+
+        {/* Tombol Daftar Cepat dengan Google */}
+        <div className="mb-4">
+          <button
+            type="button"
+            disabled={isLoading}
+            onClick={() => setIsGoogleModalOpen(true)}
+            className="w-full flex items-center justify-center gap-3 py-2.5 px-4 rounded-xl border border-slate-300 dark:border-white/15 bg-white dark:bg-[#162142] hover:bg-slate-50 dark:hover:bg-[#1E2C58] text-slate-800 dark:text-white font-semibold text-sm shadow-sm hover:shadow transition-all active:scale-[0.985] cursor-pointer"
+          >
+            <GoogleIcon className="h-5 w-5" />
+            <span>Daftar dengan Google</span>
+          </button>
+        </div>
+
+        {/* Pemisah Garis 'atau' */}
+        <div className="relative flex py-1 items-center mb-4">
+          <div className="flex-grow border-t border-slate-200 dark:border-white/10"></div>
+          <span className="flex-shrink mx-3 text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 font-bold">
+            atau isi formulir pendaftaran
+          </span>
+          <div className="flex-grow border-t border-slate-200 dark:border-white/10"></div>
+        </div>
 
         {/* Form Registrasi */}
         <form onSubmit={handleSubmit} className="space-y-3.5">
@@ -104,7 +134,7 @@ export default function RegisterPage() {
                 maxLength={50}
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="peneliti_ipb"
+                placeholder="user_gwas"
                 className="w-full rounded-xl border border-slate-300 dark:border-white/10 bg-[#F1F4FD] dark:bg-[#0F172E] py-2 pl-10 pr-3 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:border-[#5B4DFE] focus:outline-none focus:ring-1 focus:ring-[#5B4DFE] transition-all font-medium"
               />
             </div>
@@ -134,7 +164,7 @@ export default function RegisterPage() {
                 maxLength={120}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="peneliti@apps.ipb.ac.id"
+                placeholder="user@email.com"
                 className="w-full rounded-xl border border-slate-300 dark:border-white/10 bg-[#F1F4FD] dark:bg-[#0F172E] py-2 pl-10 pr-3 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:border-[#5B4DFE] focus:outline-none focus:ring-1 focus:ring-[#5B4DFE] transition-all font-medium"
               />
             </div>
@@ -201,7 +231,7 @@ export default function RegisterPage() {
             </div>
           </div>
 
-          {/* Tombol Submit Registrasi (Figma Primary CTA #5B4DFE) */}
+          {/* Tombol Submit Registrasi */}
           <button
             type="submit"
             disabled={isLoading}
@@ -214,7 +244,7 @@ export default function RegisterPage() {
               </>
             ) : (
               <>
-                <span>Buat Akun Peneliti</span>
+                <span>Daftar Akun</span>
                 <ArrowRight className="h-4 w-4" />
               </>
             )}
@@ -235,7 +265,7 @@ export default function RegisterPage() {
             className="w-full figma-btn-secondary py-2.5 text-xs sm:text-sm font-bold cursor-pointer"
           >
             <Sparkles className="h-4 w-4 text-[#0284C7] dark:text-[#06B6D4]" />
-            <span>Gunakan Akun Peneliti Demo di Layar Masuk &rarr;</span>
+            <span>Gunakan Akun Demo di Layar Masuk &rarr;</span>
           </button>
         </form>
 
@@ -252,6 +282,13 @@ export default function RegisterPage() {
           </p>
         </div>
       </div>
+
+      {/* Modal Pemilih Akun Google Interaktif */}
+      <GoogleAccountChooserModal
+        isOpen={isGoogleModalOpen}
+        onClose={() => setIsGoogleModalOpen(false)}
+        onSuccess={handleGoogleSuccess}
+      />
     </div>
   );
 }

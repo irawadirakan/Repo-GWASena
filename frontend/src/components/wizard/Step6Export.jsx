@@ -200,7 +200,7 @@ export default function Step6Export({ analysisId, analysis, onNavigateStep }) {
       setTimeout(() => setDownloadSuccess(null), 4000);
     } else {
       alert(
-        `Dalam mode simulasi, grafik ${plotType.toUpperCase()} dapat diunduh langsung dari tombol kamera pada Langkah 4.`
+        `Dalam mode simulasi, grafik ${plotType.toUpperCase()} dapat diunduh langsung dari tombol kamera pada tahap Hasil & Visualisasi.`
       );
     }
   }
@@ -241,20 +241,20 @@ export default function Step6Export({ analysisId, analysis, onNavigateStep }) {
             onClick={() => onNavigateStep(4)}
             className="rounded-xl px-3.5 py-1.5 text-xs font-sans font-semibold text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors"
           >
-            &larr; Langkah 4: Hasil & Visualisasi
+            Hasil & Visualisasi
           </button>
           <button
             type="button"
             onClick={() => onNavigateStep(5)}
             className="rounded-xl px-3.5 py-1.5 text-xs font-sans font-semibold text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors"
           >
-            Langkah 5: Anotasi Gen
+            Anotasi Gen
           </button>
           <button
             type="button"
             className="rounded-xl bg-[#5B4DFE] px-3.5 py-1.5 text-xs font-sans font-bold text-white shadow-sm"
           >
-            Langkah 6: Ekspor & Laporan
+            Ekspor & Laporan
           </button>
         </div>
 

@@ -87,6 +87,10 @@ def _summary(a: Analysis) -> dict:
         "status": a.status,
         "organism": a.organism,
         "analysis_time": a.analysis_time,
+        "trait_name": a.trait_name,
+        "model_name": a.model_name,
+        "lambda_gc": a.lambda_gc,
+        "significant_count": a.significant_count,
     }
 
 
@@ -127,6 +131,7 @@ def get_analysis(a: Analysis = Depends(owned_analysis), db: Session = Depends(ge
     return {
         **_summary(a),
         "berkas": [{"nama_berkas": d.file_name, "jenis": d.file_type,
+                    "sample_count": d.sample_count, "snp_count": d.snp_count,
                     "status_validasi": d.validation_status, "diunggah": d.upload_time}
                    for d in datasets],
         "sifat_tersedia": ds.available_traits(db, a.analysis_id),
@@ -214,12 +219,34 @@ def set_parameters(data: ParameterIn, a: Analysis = Depends(owned_analysis),
                                     [f"Pilihan sifat: {', '.join(traits)}"]))
     model = db.scalar(select(AnalysisModel).where(AnalysisModel.model_name == data.model))
     a.model_id = model.model_id if model else None
+    a.model_name = data.model
+    a.trait_name = data.trait
+
     config = data.model_dump()
     param = db.scalar(select(AnalysisParameter).where(AnalysisParameter.analysis_id == a.analysis_id))
     if param is None:
-        db.add(AnalysisParameter(analysis_id=a.analysis_id, parameter_config=config))
+        param = AnalysisParameter(
+            analysis_id=a.analysis_id,
+            parameter_config=config,
+            maf_threshold=data.maf,
+            mind_threshold=data.mind,
+            geno_threshold=data.geno,
+            hwe_threshold=data.hwe,
+            kinship_threshold=data.king_cutoff,
+            alpha_threshold=data.alpha,
+            pca_components=data.n_pc,
+        )
+        db.add(param)
     else:
         param.parameter_config = config
+        param.maf_threshold = data.maf
+        param.mind_threshold = data.mind
+        param.geno_threshold = data.geno
+        param.hwe_threshold = data.hwe
+        param.kinship_threshold = data.king_cutoff
+        param.alpha_threshold = data.alpha
+        param.pca_components = data.n_pc
+
     if a.status in (AnalysisStatus.SELESAI, AnalysisStatus.GAGAL):
         a.status = AnalysisStatus.TERVALIDASI  # perlu dijalankan ulang dengan parameter baru
     db.commit()
@@ -345,13 +372,10 @@ def get_plot_png(jenis: str, a: Analysis = Depends(owned_analysis), db: Session 
         raise HTTPException(status.HTTP_404_NOT_FOUND, _detail("Data plot tidak ditemukan untuk analisis ini."))
 
     # PNG dibuat sekali lalu disimpan; lokasinya dicatat di visualization_results.file_path (AC-08.1).
-    # Bila analisis dijalankan ulang, baris lama dihapus sehingga gambar dibuat ulang.
     path = Path(row.file_path) if row.file_path else None
     if path is not None and path.is_file():
         png = path.read_bytes()
     else:
-        # matplotlib dimuat di sini, bukan di awal berkas, supaya backend tetap bisa menyala
-        # walaupun paket matplotlib belum terpasang (hanya fitur PNG yang tidak tersedia).
         try:
             from pipeline.visualization import manhattan_png, qq_png
         except ImportError:
@@ -381,11 +405,6 @@ def get_annotation(
                            "SNP yang signifikan"),
     db: Session = Depends(get_db),
 ):
-    """Mencocokkan SNP signifikan dengan gen yang tumpang tindih atau terdekat (AC-07.1).
-
-    Bila sumber anotasi tidak dapat dipakai, respons tetap 200 dengan status
-    "tidak_tersedia" dan pesan, tanpa mengganggu hasil analisis lain (AC-07.2).
-    """
     _require_done(a)
     ringkasan = _get_cache(db, a.analysis_id, "ringkasan") or {}
     snps = list(ringkasan.get("snp_signifikan") or [])
@@ -397,6 +416,15 @@ def get_annotation(
     hasil = annotate_from_gff3(snps, settings.ANNOTATION_GFF3, settings.ANNOTATION_WINDOW_BP, label)
     for k in hasil["kandidat"]:
         k["signifikan"] = k["snp_id"] in signifikan
+        db_res = db.scalar(select(AssociationResult).where(
+            AssociationResult.analysis_id == a.analysis_id,
+            AssociationResult.snp_code == k["snp_id"],
+        ))
+        if db_res:
+            db_res.candidate_gene = k.get("gene_id") or k.get("gene_name")
+            db_res.annotation_info = k
+    db.commit()
+
     if hasil["status"] == "tersedia" and not snps:
         hasil["pesan"] += " Gunakan sertakan_teratas=true untuk melihat kandidat gen di sekitar SNP teratas."
     return {"analysis_id": a.analysis_id, "trait": ringkasan.get("trait"),

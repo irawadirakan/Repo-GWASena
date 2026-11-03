@@ -10,6 +10,8 @@ import {
   AlertTriangle,
   Menu,
   X,
+  Wifi,
+  WifiOff,
 } from 'lucide-react';
 import BrandLogo from '../components/common/BrandLogo.jsx';
 import FigmaThemeToggle from '../components/common/FigmaThemeToggle.jsx';
@@ -18,7 +20,7 @@ import { analysisService } from '../services/analysisService.js';
 
 /**
  * AppLayout - Layout Aplikasi Terproteksi Sesuai Desain Figma
- * Menyediakan navigasi utama, status bar sistem, dan menu akun.
+ * Menyediakan navigasi utama, status bar sistem ramah pengguna, dan menu akun.
  */
 export default function AppLayout() {
   const navigate = useNavigate();
@@ -110,39 +112,47 @@ export default function AppLayout() {
             </nav>
           </div>
 
-          {/* Sisi Kanan: Health Indicator, Theme Switch Pill, & User Button Pill */}
+          {/* Sisi Kanan: Status Website ("Sistem Aktif"), Theme Switch Pill, & User Button Pill */}
           <div className="hidden md:flex items-center gap-4">
-            {/* Health Indicator Ringkas */}
+            {/* Status Website Indicator (TUGAS 4: Ramah Pengguna, bukan istilah "Backend Siap") */}
             <div className="relative">
               <button
                 type="button"
                 onClick={() => setIsHealthOpen(!isHealthOpen)}
                 className="flex items-center gap-2 rounded-full border border-slate-300 dark:border-white/10 bg-white/95 dark:bg-[#162142]/80 px-3 py-1.5 text-xs font-semibold text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#1E2C58] active:scale-95 transition-all duration-100 shadow-sm"
-                title="Status Koneksi Backend"
+                title="Status Koneksi Sistem"
               >
                 <span className="relative flex h-2 w-2">
                   <span
-                    className={`absolute inline-flex h-full w-full rounded-full opacity-75 animate-ping ${
-                      isHealthy ? 'bg-status-success' : isDegraded ? 'bg-status-warning' : 'bg-status-error'
+                    className={`absolute inline-flex h-full w-full rounded-full opacity-75 ${
+                      isHealthy
+                        ? 'bg-emerald-500 animate-ping'
+                        : isDegraded
+                        ? 'bg-amber-500 animate-ping'
+                        : 'bg-rose-500 animate-pulse'
                     }`}
                   />
                   <span
                     className={`relative inline-flex h-2 w-2 rounded-full ${
-                      isHealthy ? 'bg-status-success' : isDegraded ? 'bg-status-warning' : 'bg-status-error'
+                      isHealthy ? 'bg-emerald-500' : isDegraded ? 'bg-amber-500' : 'bg-rose-500'
                     }`}
                   />
                 </span>
                 <span className="hidden xl:inline font-semibold">
-                  {isHealthy ? 'Backend Siap' : isDegraded ? 'Degradasi' : 'Offline'}
+                  {isHealthy ? 'Sistem Aktif' : isDegraded ? 'Performa Terbatas' : 'Gangguan Koneksi'}
                 </span>
-                <Activity className="h-3.5 w-3.5 text-slate-500" />
+                {isHealthy ? (
+                  <Wifi className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                ) : (
+                  <WifiOff className="h-3.5 w-3.5 text-rose-500" />
+                )}
               </button>
 
-              {/* Popover Detail Kesehatan Sistem */}
+              {/* Popover Detail Status Sistem */}
               {isHealthOpen && (
-                <div className="absolute right-0 top-full mt-2 w-72 figma-card p-4 z-50 origin-top-right animate-dropdown-in text-xs text-slate-800 dark:text-slate-200">
+                <div className="absolute right-0 top-full mt-2 w-72 figma-card p-4 z-50 origin-top-right animate-dropdown-in text-xs text-slate-800 dark:text-slate-200 shadow-xl border border-slate-200 dark:border-white/10">
                   <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-2 mb-2 font-semibold text-slate-900 dark:text-white">
-                    <span>Status Komponen Backend</span>
+                    <span>Status Koneksi Sistem</span>
                     <button
                       type="button"
                       onClick={() => setIsHealthOpen(false)}
@@ -153,21 +163,29 @@ export default function AppLayout() {
                   </div>
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
-                      <span className="text-slate-600 dark:text-slate-400">FastAPI</span>
-                      <span className="flex items-center gap-1 text-status-success font-medium">
-                        <CheckCircle2 className="h-3.5 w-3.5" /> {isHealthy ? 'Aktif' : 'Simulasi UI'}
+                      <span className="text-slate-600 dark:text-slate-400">Server Komputasi</span>
+                      <span className="flex items-center gap-1 font-medium">
+                        {isHealthy ? (
+                          <span className="text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                            <CheckCircle2 className="h-3.5 w-3.5" /> Siap / Online
+                          </span>
+                        ) : (
+                          <span className="text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                            <AlertTriangle className="h-3.5 w-3.5" /> Mode Mandiri
+                          </span>
+                        )}
                       </span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-slate-600 dark:text-slate-400">PostgreSQL</span>
-                      <span className="flex items-center gap-1 text-slate-400 font-medium">
-                        {health?.components?.database?.ok ? (
-                          <span className="text-status-success flex items-center gap-1">
+                      <span className="text-slate-600 dark:text-slate-400">Penyimpanan Analisis</span>
+                      <span className="flex items-center gap-1 font-medium">
+                        {health?.components?.database?.ok || isHealthy ? (
+                          <span className="text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
                             <CheckCircle2 className="h-3.5 w-3.5" /> Terhubung
                           </span>
                         ) : (
-                          <span className="text-status-warning flex items-center gap-1">
-                            <AlertTriangle className="h-3.5 w-3.5" /> Standby
+                          <span className="text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                            <AlertTriangle className="h-3.5 w-3.5" /> Siaga Lokal
                           </span>
                         )}
                       </span>
@@ -194,7 +212,7 @@ export default function AppLayout() {
                 </span>
 
                 <span className="text-sm font-bold text-slate-900 dark:text-white">
-                  {user?.username || '[User]'}
+                  {user?.username || 'Pengguna'}
                 </span>
 
                 {accountMenuOpen ? (
@@ -206,13 +224,13 @@ export default function AppLayout() {
 
               {/* Account Dropdown Menu */}
               {accountMenuOpen && (
-                <div className="absolute right-0 top-full mt-2 w-60 figma-card p-3.5 z-50 origin-top-right animate-dropdown-in text-sm">
+                <div className="absolute right-0 top-full mt-2 w-60 figma-card p-3.5 z-50 origin-top-right animate-dropdown-in text-sm shadow-2xl border border-slate-200 dark:border-white/10">
                   <div className="px-2 py-1.5">
                     <p className="font-bold text-slate-900 dark:text-white truncate">
-                      {user?.username || '[User]'}
+                      {user?.username || 'Pengguna'}
                     </p>
                     <p className="text-xs text-slate-600 dark:text-slate-300 truncate">
-                      {user?.email || 'peneliti@apps.ipb.ac.id'}
+                      {user?.email || 'user@email.com'}
                     </p>
                     <span className="mt-1.5 inline-block rounded-full bg-[#5B4DFE]/15 dark:bg-[#5B4DFE]/20 px-2.5 py-0.5 text-xs font-bold text-[#5B4DFE] dark:text-[#818CF8]">
                       {user?.role === 'administrator' ? 'Administrator' : 'Pengguna Analisis'}
@@ -295,8 +313,8 @@ export default function AppLayout() {
         <Outlet />
       </main>
 
-      {/* ── Footer ── */}
-      <footer className="border-t border-slate-200/80 dark:border-white/5 bg-white/50 dark:bg-[#121634]/40 px-4 py-3 text-center text-xs text-slate-600 dark:text-slate-400">
+      {/* ── Footer Institusi (Konsisten font-sans text-sm font-medium tracking-normal) ── */}
+      <footer className="border-t border-slate-200/80 dark:border-white/5 bg-white/50 dark:bg-[#121634]/40 px-4 py-3 text-center font-sans text-sm font-medium tracking-normal text-slate-500 dark:text-slate-400">
         Platform GWAS · Program Studi Bioinformatika IPB University
       </footer>
     </div>

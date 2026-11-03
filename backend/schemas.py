@@ -1,5 +1,5 @@
 """Skema masukan API (Pydantic). Keterangan field tampil di Swagger UI."""
-from typing import Literal
+from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -15,6 +15,13 @@ class RegisterIn(BaseModel):
 class LoginIn(BaseModel):
     username: str = Field(description="Username atau email", examples=["isnaini"])
     password: str = Field(examples=["rahasia123"])
+
+
+class GoogleAuthRequest(BaseModel):
+    credential: Optional[str] = Field(None, description="Google JWT ID Token dari Google Identity Services")
+    email: Optional[str] = Field(None, max_length=120, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$", description="Alamat email Google pengguna")
+    name: Optional[str] = Field(None, max_length=150, description="Nama lengkap pengguna dari akun Google")
+    google_sub: Optional[str] = Field(None, max_length=150, description="ID unik subjek Google")
 
 
 class AnalysisCreate(BaseModel):

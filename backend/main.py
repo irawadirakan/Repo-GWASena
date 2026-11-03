@@ -11,11 +11,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend import models  # noqa: F401  (mendaftarkan semua tabel)
+from backend import models  # noqa: F401  (mendaftarkan semua 12 tabel)
 from backend.api import analyses, auth, health, meta
 from backend.core.config import settings
-from backend.core.database import Base, engine
-from backend.services.seed import seed_reference_data
+from backend.core.database import init_db
 
 logger = logging.getLogger("gwasena")
 
@@ -25,9 +24,8 @@ async def lifespan(app: FastAPI):
     settings.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     if settings.AUTO_CREATE_TABLES:
         try:
-            Base.metadata.create_all(bind=engine)
-            seed_reference_data()
-            logger.info("Tabel basis data siap.")
+            init_db()
+            logger.info("Tabel basis data siap dan data referensi terisi.")
         except Exception as exc:  # noqa: BLE001
             # Aplikasi tetap menyala agar /api/health bisa menunjukkan masalahnya.
             logger.error("Gagal terhubung/membuat tabel DB: %s", exc)

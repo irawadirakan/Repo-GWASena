@@ -171,20 +171,20 @@ export default function Step5Annotation({ analysisId, onNavigateStep }) {
             onClick={() => onNavigateStep(4)}
             className="rounded-xl px-3.5 py-1.5 text-xs font-sans font-semibold text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors"
           >
-            &larr; Langkah 4: Hasil & Visualisasi
+            Hasil & Visualisasi
           </button>
           <button
             type="button"
             className="rounded-xl bg-[#5B4DFE] px-3.5 py-1.5 text-xs font-sans font-bold text-white shadow-sm"
           >
-            Langkah 5: Anotasi Gen
+            Anotasi Gen
           </button>
           <button
             type="button"
             onClick={() => onNavigateStep(6)}
             className="rounded-xl px-3.5 py-1.5 text-xs font-sans font-semibold text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors"
           >
-            Langkah 6: Ekspor & Laporan &rarr;
+            Ekspor & Laporan
           </button>
         </div>
 
@@ -262,7 +262,7 @@ export default function Step5Annotation({ analysisId, onNavigateStep }) {
               </h4>
               <p className="text-xs font-serif leading-relaxed text-amber-900 dark:text-slate-300">
                 {annotationData?.pesan ||
-                  'Berkas anotasi GFF3 tidak dapat dibaca dari server atau fitur gen belum dikonfigurasi. Sesuai prinsip ketahanan sistem GWASena 2.0 (AC-07.2), kegagalan anotasi gen bersifat non-fatal. Hasil statistik asosiasi Anda pada Langkah 4 dan fitur unduh CSV pada Langkah 6 tetap dapat digunakan sepenuhnya tanpa hambatan.'}
+                  'Berkas anotasi GFF3 tidak dapat dibaca dari server atau fitur gen belum dikonfigurasi. Sesuai prinsip ketahanan sistem GWASena 2.0 (AC-07.2), kegagalan anotasi gen bersifat non-fatal. Hasil statistik asosiasi Anda pada Hasil & Visualisasi dan fitur unduh CSV pada Ekspor & Laporan tetap dapat digunakan sepenuhnya tanpa hambatan.'}
               </p>
             </div>
           </div>
@@ -272,7 +272,7 @@ export default function Step5Annotation({ analysisId, onNavigateStep }) {
               onClick={() => onNavigateStep(6)}
               className="inline-flex items-center gap-2 rounded-xl bg-[#5B4DFE] hover:bg-[#4F46E5] px-4 py-2 text-xs font-sans font-bold text-white shadow-md shadow-[#5B4DFE]/30 hover:-translate-y-[1px] hover:shadow-lg active:scale-[0.98] transition-all duration-100"
             >
-              <span>Lanjut ke Pengunduhan Data (Langkah 6) &rarr;</span>
+              <span>Lanjut ke Pengunduhan Data (Ekspor & Laporan) &rarr;</span>
             </button>
           </div>
         </div>

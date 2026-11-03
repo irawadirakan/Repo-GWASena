@@ -1,9 +1,11 @@
 import { AlertCircle, AlertTriangle, Info, X } from 'lucide-react';
+import { formatUserFriendlyError } from '../../services/apiClient.js';
 
 /**
  * ErrorMessageArea - Message Banner Standar GWASena 2.0 (Figma Design Aligned)
  * Acuan: frontend/assets/Message Banner/ & 01b — Login_ Kredensial Salah.png
- * Mendukung tipe error, warning, dan info serta normalisasi error 422 { message, details: [] }
+ * Dilengkapi Human-Friendly Error Formatter sehingga pesan error teknis mentah FastAPI/Pydantic
+ * (seperti <class 'str'>, body >, Value error) otomatis diterjemahkan ke bahasa Indonesia yang ramah.
  */
 export default function ErrorMessageArea({
   error,
@@ -13,17 +15,20 @@ export default function ErrorMessageArea({
 }) {
   if (!error) return null;
 
+  // Format agar selalu ramah pengguna
+  const normalizedError = formatUserFriendlyError(error);
+
   let message = '';
   let details = [];
 
-  if (typeof error === 'string') {
-    message = error;
-  } else if (typeof error === 'object') {
-    message = error.message || error.pesan || 'Terjadi kesalahan pada sistem.';
-    if (Array.isArray(error.details) && error.details.length > 0) {
-      details = error.details;
-    } else if (Array.isArray(error.rincian) && error.rincian.length > 0) {
-      details = error.rincian;
+  if (typeof normalizedError === 'string') {
+    message = normalizedError;
+  } else if (typeof normalizedError === 'object') {
+    message = normalizedError.message || normalizedError.pesan || 'Terjadi kesalahan pada sistem.';
+    if (Array.isArray(normalizedError.details) && normalizedError.details.length > 0) {
+      details = normalizedError.details;
+    } else if (Array.isArray(normalizedError.rincian) && normalizedError.rincian.length > 0) {
+      details = normalizedError.rincian;
     }
   }
 

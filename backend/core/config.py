@@ -1,11 +1,13 @@
-"""Konfigurasi aplikasi dibaca dari berkas .env di root repositori."""
+"""Konfigurasi aplikasi dibaca dari berkas .env di root repositori dan backend/."""
 import os
 from pathlib import Path
 
 from dotenv import load_dotenv
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
-load_dotenv(ROOT_DIR / ".env")
+# Prioritaskan berkas konfigurasi tanpa menimpa environment variable yang sudah diset (mis. saat pengujian pytest)
+load_dotenv(ROOT_DIR / "backend" / ".env", override=False)
+load_dotenv(ROOT_DIR / ".env", override=False)
 
 
 def _as_bool(value: str) -> bool:
@@ -19,7 +21,7 @@ class Settings:
 
     DATABASE_URL: str = os.getenv(
         "DATABASE_URL",
-        "postgresql+psycopg://gwasena:gwasena@localhost:5432/gwasena",
+        "postgresql://postgres:renoipb@localhost:5432/gwasena_database",
     )
     REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 
@@ -33,7 +35,7 @@ class Settings:
     MAX_UPLOAD_MB: int = int(os.getenv("MAX_UPLOAD_MB", "200"))
 
     # Autentikasi (FR-01). Ganti SECRET_KEY di .env dengan teks acak yang panjang.
-    SECRET_KEY: str = os.getenv("SECRET_KEY", "dev-ganti-kunci-ini-di-env")
+    SECRET_KEY: str = os.getenv("SECRET_KEY", "gwasena_secret_key_super_aman_2026")
     TOKEN_EXPIRE_HOURS: int = int(os.getenv("TOKEN_EXPIRE_HOURS", "12"))
 
     # Cara menjalankan pipeline:

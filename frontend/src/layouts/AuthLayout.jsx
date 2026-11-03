@@ -48,8 +48,8 @@ export default function AuthLayout() {
         <Outlet />
       </main>
 
-      {/* ── Footer Institusi ── */}
-      <footer className="z-10 border-t border-slate-200/80 dark:border-white/5 bg-white/40 dark:bg-[#121634]/40 px-4 py-3 text-center text-xs font-serif italic text-slate-600 dark:text-slate-400 backdrop-blur-sm">
+      {/* ── Footer Institusi (Konsisten font-sans text-sm font-medium tracking-normal) ── */}
+      <footer className="z-10 border-t border-slate-200/80 dark:border-white/5 bg-white/40 dark:bg-[#121634]/40 px-4 py-3 text-center font-sans text-sm font-medium tracking-normal text-slate-500 dark:text-slate-400 backdrop-blur-sm">
         Platform GWAS · Program Studi Bioinformatika IPB University
       </footer>
     </DnaBackdrop>

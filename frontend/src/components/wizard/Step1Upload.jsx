@@ -309,7 +309,7 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
       {/* ── Header Langkah ── */}
       <div className="border-b border-slate-200 dark:border-white/10 pb-4">
         <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">
-          1. Unggah & Validasi Dataset Genomik
+          Unggah & Validasi Dataset Genomik
         </h2>
         <p className="mt-1 text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
           Unggah berkas varian genotipe (SNP) dan data pengamatan fenotipe. Sistem secara otomatis
@@ -837,7 +837,7 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
               onClick={handleProceedToStep2}
               className="inline-flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 px-7 py-3 text-sm font-semibold text-white shadow-sm hover:-translate-y-[1px] hover:shadow-md active:scale-[0.98] transition-all duration-100 cursor-pointer"
             >
-              <span>Lanjut ke Konfigurasi QC (Langkah 2)</span>
+              <span>Lanjut ke Konfigurasi QC & Model</span>
               <ArrowRight className="h-4 w-4" />
             </button>
           </div>

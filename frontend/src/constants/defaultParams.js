@@ -26,7 +26,7 @@ export const QC_PARAM_RANGES = {
   maf: { min: 0.01, max: 0.49, step: 0.01 },
   hwe: { min: 1e-10, max: 1e-1, step: 'scientific' },
   king_cutoff: { min: 0.0, max: 0.5, step: 0.001 },
-  alpha: { min: 0.001, max: 0.1, step: 0.005 },
+  alpha: { min: 0.0001, max: 0.20, step: 'any' },
 };
 
 export const ANALYSIS_STATUSES = {

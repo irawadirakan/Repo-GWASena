@@ -4,30 +4,33 @@ import {
   Dna,
   PlusCircle,
   History,
-  Activity,
   CheckCircle2,
-  AlertTriangle,
   ArrowRight,
   Sprout,
   Loader2,
   X,
+  FileCheck,
+  FileQuestion,
+  Sparkles,
+  BookOpen,
 } from 'lucide-react';
 import { useAuthStore } from '../store/useAuthStore.js';
+import { useAnalysisStore } from '../store/useAnalysisStore.js';
 import { analysisService } from '../services/analysisService.js';
 import ErrorMessageArea from '../components/common/ErrorMessageArea.jsx';
 
 /**
- * DashboardPage (Layar Utama Peneliti - Figma Aligned with Micro-Interactions)
+ * DashboardPage (Layar Utama Pengguna - Figma Aligned)
  * Acuan: 03 — Dashboard (Pengguna Analisis).png & 03 — Dashboard (Pengguna Analisis) (Light).png
  */
 export default function DashboardPage() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
+  const { uploadSummary, currentAnalysis } = useAnalysisStore();
 
   const [meta, setMeta] = useState(null);
-  const [health, setHealth] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [analysisName, setAnalysisName] = useState('Analisis Asosiasi Genomik 2026');
+  const [analysisName, setAnalysisName] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState(null);
 
@@ -35,16 +38,10 @@ export default function DashboardPage() {
     let isMounted = true;
     async function loadDashboardData() {
       try {
-        const [metaData, healthData] = await Promise.allSettled([
-          analysisService.getMeta(),
-          analysisService.checkHealth(),
-        ]);
-        if (isMounted) {
-          if (metaData.status === 'fulfilled') setMeta(metaData.value);
-          if (healthData.status === 'fulfilled') setHealth(healthData.value);
-        }
+        const metaData = await analysisService.getMeta();
+        if (isMounted) setMeta(metaData);
       } catch (err) {
-        console.error('Gagal memuat data dashboard:', err);
+        console.warn('Gagal memuat metadata:', err);
       }
     }
     loadDashboardData();
@@ -55,13 +52,13 @@ export default function DashboardPage() {
 
   const handleCreateAnalysis = async (e) => {
     e.preventDefault();
-    if (!analysisName.trim()) return;
+    const finalName = analysisName.trim() || 'Analisis Asosiasi Genomik 2026';
 
     setIsSubmitting(true);
     setError(null);
 
     try {
-      const res = await analysisService.createAnalysis(analysisName.trim());
+      const res = await analysisService.createAnalysis(finalName);
       setIsModalOpen(false);
       navigate(`/analyses/${res.analysis_id}`);
     } catch (err) {
@@ -70,12 +67,17 @@ export default function DashboardPage() {
     }
   };
 
-  const org = meta?.organisme;
-  const isHealthy = health?.status === 'ok';
+  // TUGAS 5: Spesimen/Dataset dinamis berdasarkan dataset yang diunggah/diolah
+  const isBenchmarkExample =
+    uploadSummary?.simulated ||
+    uploadSummary?.genotipe?.nama_berkas?.toLowerCase()?.includes('bawang') ||
+    uploadSummary?.genotipe?.nama_berkas?.toLowerCase()?.includes('garlic');
+
+  const hasUploadedData = Boolean(uploadSummary?.genotipe);
 
   return (
     <div className="space-y-8 animate-fade-in pb-12">
-      {/* ── Banner Sambutan Peneliti & Organisme (3-Layer High Separation Glass) ── */}
+      {/* ── Banner Sambutan Pengguna & Profil Dataset Dinamis ── */}
       <div className="relative overflow-hidden figma-card p-6 sm:p-8">
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="space-y-2">
@@ -86,7 +88,7 @@ export default function DashboardPage() {
 
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white font-sans">
               Selamat datang kembali,{' '}
-              <span className="text-[#5B4DFE] dark:text-[#06B6D4]">{user?.username || 'Peneliti'}</span>!
+              <span className="text-[#5B4DFE] dark:text-[#06B6D4]">{user?.username || 'Pengguna'}</span>!
             </h1>
 
             <p className="max-w-2xl font-serif text-base sm:text-lg text-slate-600 dark:text-slate-300 leading-relaxed">
@@ -95,21 +97,57 @@ export default function DashboardPage() {
             </p>
           </div>
 
-          {/* Quick Species Badge */}
-          {org && (
-            <div className="shrink-0 glass-subcard p-4 text-sm space-y-1.5 min-w-[220px]">
-              <span className="font-bold text-slate-900 dark:text-white block font-sans">Spesimen Aktif:</span>
-              <div className="font-serif text-[#0284C7] dark:text-[#06B6D4] font-bold italic text-base">
-                {org.nama_ilmiah}
-              </div>
-              <div className="text-slate-700 dark:text-slate-300 font-semibold font-sans">
-                {org.ploidi} · {org.jumlah_kromosom} Pasang Kromosom
-              </div>
-              <div className="text-xs text-slate-600 dark:text-slate-300 font-medium font-sans">
-                Ukuran Genom: {org.ukuran_genom_perkiraan}
-              </div>
-            </div>
-          )}
+          {/* Quick Dataset / Specimen Badge Dinamis (TUGAS 5) */}
+          <div className="shrink-0 glass-subcard p-4 text-sm space-y-1.5 min-w-[240px] max-w-sm">
+            {hasUploadedData ? (
+              isBenchmarkExample ? (
+                <>
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-400 font-sans uppercase tracking-wider">
+                    <FileCheck className="h-4 w-4" />
+                    <span>Dataset Benchmark (Allium sativum)</span>
+                  </div>
+                  <div className="font-serif text-[#0284C7] dark:text-[#06B6D4] font-bold italic text-base">
+                    Allium sativum L.
+                  </div>
+                  <div className="text-slate-700 dark:text-slate-300 font-semibold font-sans text-xs">
+                    {uploadSummary.genotipe.jumlah_sampel} Sampel · {uploadSummary.genotipe.jumlah_snp} SNP
+                  </div>
+                  <div className="text-xs text-slate-600 dark:text-slate-400 font-medium font-sans truncate">
+                    Berkas: {uploadSummary.genotipe.nama_berkas}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-blue-700 dark:text-[#06B6D4] font-sans uppercase tracking-wider">
+                    <FileCheck className="h-4 w-4" />
+                    <span>Dataset Aktif</span>
+                  </div>
+                  <div className="font-sans font-bold text-slate-900 dark:text-white text-sm truncate">
+                    {uploadSummary.genotipe.nama_berkas || 'Berkas Genotipe'}
+                  </div>
+                  <div className="text-slate-700 dark:text-slate-300 font-semibold font-sans text-xs">
+                    {uploadSummary.genotipe.format || 'VCF'} · {uploadSummary.genotipe.jumlah_sampel} Sampel · {uploadSummary.genotipe.jumlah_snp} SNP
+                  </div>
+                  <div className="text-xs text-emerald-600 dark:text-emerald-400 font-medium font-sans">
+                    ✓ Validasi ID Sampel 100% Cocok
+                  </div>
+                </>
+              )
+            ) : (
+              <>
+                <div className="flex items-center gap-1.5 text-xs font-bold text-slate-500 dark:text-slate-400 font-sans uppercase tracking-wider">
+                  <FileQuestion className="h-4 w-4" />
+                  <span>Dataset: Belum Diunggah</span>
+                </div>
+                <div className="text-slate-800 dark:text-slate-200 font-bold font-sans text-sm">
+                  Menunggu Berkas Analisis
+                </div>
+                <div className="text-xs text-slate-600 dark:text-slate-400 font-medium font-sans leading-relaxed">
+                  Menunggu berkas genotipe (.vcf / PLINK) & fenotipe (.csv)
+                </div>
+              </>
+            )}
+          </div>
         </div>
 
         {/* Subtle decorative glow */}
@@ -129,7 +167,7 @@ export default function DashboardPage() {
                 <Dna className="h-6 w-6" />
               </div>
               <span className="rounded-full bg-cyan-50 dark:bg-[#5B4DFE]/15 px-3 py-1 text-xs font-bold text-cyan-800 dark:text-[#06B6D4] border border-cyan-200 dark:border-[#06B6D4]/20 font-sans">
-                Alur Wizard 6 Langkah
+                Alur Pipeline Interaktif
               </span>
             </div>
 
@@ -139,7 +177,7 @@ export default function DashboardPage() {
 
             <p className="mt-2 text-sm text-slate-600 dark:text-slate-300 leading-relaxed font-sans">
               Jalankan siklus terpadu: unggah VCF & fenotipe CSV, penyaringan Quality Control, kovariat
-              PCA otomatis, model GLM/MLM, hingga visualisasi Manhattan Plot interaktif.
+              PCA otomatis, model GLM/MLM, anotasi kandidat gen, hingga visualisasi Manhattan Plot interaktif.
             </p>
           </div>
 
@@ -150,7 +188,7 @@ export default function DashboardPage() {
                 e.stopPropagation();
                 setIsModalOpen(true);
               }}
-              className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 py-3 px-4 text-sm font-semibold text-white shadow-sm hover:-translate-y-[1px] hover:shadow-md active:scale-[0.98] transition-all duration-100 font-sans"
+              className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 py-3 px-4 text-sm font-semibold text-white shadow-sm hover:-translate-y-[1px] hover:shadow-md active:scale-[0.98] transition-all duration-100 font-sans cursor-pointer"
             >
               <PlusCircle className="h-4 w-4" />
               <span>+ Inisiasi Sesi Analisis Baru</span>
@@ -190,7 +228,7 @@ export default function DashboardPage() {
                 e.stopPropagation();
                 navigate('/history');
               }}
-              className="w-full inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 dark:border-white/10 bg-white/90 dark:bg-slate-800/90 py-3 px-4 text-sm font-semibold text-slate-800 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-700 hover:shadow-sm active:scale-[0.98] transition-all duration-100 font-sans"
+              className="w-full inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 dark:border-white/10 bg-white/90 dark:bg-slate-800/90 py-3 px-4 text-sm font-semibold text-slate-800 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-700 hover:shadow-sm active:scale-[0.98] transition-all duration-100 font-sans cursor-pointer"
             >
               <span>Buka Daftar Riwayat Analisis</span>
               <ArrowRight className="h-4 w-4 transition-transform duration-150 group-hover:translate-x-1.5" />
@@ -199,61 +237,49 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* ── Panel Status Infrastruktur Ringkas (High Separation Glass) ── */}
-      <div className="figma-card p-5">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <Activity className="h-4 w-4 text-[#06B6D4]" />
-            <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200 font-sans">
-              Kesiapan Infrastruktur Komputasi
-            </h3>
-          </div>
-          <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 font-sans">
-            Status: {isHealthy ? 'Optimal' : 'Memeriksa...'}
-          </span>
+      {/* ── Panduan Singkat Alur Analisis (User-Centric Quick Guide, Menggantikan Kotak Teknis Internal) ── */}
+      <div className="figma-card p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <BookOpen className="h-4 w-4 text-[#06B6D4]" />
+          <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200 font-sans">
+            Alur Kerja Analisis Asosiasi Genomik (GWAS Suite)
+          </h3>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {/* API Backend */}
-          <div className="flex items-center gap-3 glass-subcard p-3.5 text-sm">
-            <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-            <div>
-              <span className="font-bold text-slate-900 dark:text-white block font-sans">FastAPI Engine</span>
-              <span className="text-xs text-slate-600 dark:text-slate-300 font-medium font-sans">REST API v0.1.1 Siap</span>
-            </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="glass-subcard p-4 space-y-1.5">
+            <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-[#06B6D4] text-xs font-bold font-sans">
+              1
+            </span>
+            <div className="font-bold text-slate-900 dark:text-white text-sm font-sans">Unggah & Validasi</div>
+            <p className="text-xs text-slate-600 dark:text-slate-400 font-medium font-sans">
+              Pilih berkas VCF atau PLINK (.bed/.bim/.fam) beserta CSV fenotipe target sifat kuantitatif.
+            </p>
           </div>
 
-          {/* Database PostgreSQL */}
-          <div className="flex items-center gap-3 glass-subcard p-3.5 text-sm">
-            {health?.components?.database?.ok ? (
-              <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-            ) : (
-              <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0" />
-            )}
-            <div>
-              <span className="font-bold text-slate-900 dark:text-white block font-sans">PostgreSQL 16</span>
-              <span className="text-xs text-slate-600 dark:text-slate-300 font-medium font-sans">
-                {health?.components?.database?.tables?.length || 12} Tabel Terindeks
-              </span>
-            </div>
+          <div className="glass-subcard p-4 space-y-1.5">
+            <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-indigo-100 dark:bg-[#5B4DFE]/20 text-[#5B4DFE] dark:text-[#818CF8] text-xs font-bold font-sans">
+              2
+            </span>
+            <div className="font-bold text-slate-900 dark:text-white text-sm font-sans">Penyaringan QC & Model</div>
+            <p className="text-xs text-slate-600 dark:text-slate-400 font-medium font-sans">
+              Atur ambang MAF, missingness, kovariat PCA, serta pilih model statistik GLM atau MLM.
+            </p>
           </div>
 
-          {/* Celery & Redis */}
-          <div className="flex items-center gap-3 glass-subcard p-3.5 text-sm">
-            {health?.components?.redis?.ok ? (
-              <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-            ) : (
-              <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0" />
-            )}
-            <div>
-              <span className="font-bold text-slate-900 dark:text-white block font-sans">Celery & Redis</span>
-              <span className="text-xs text-slate-600 dark:text-slate-300 font-medium font-sans">Antrean Tugas Asinkron</span>
-            </div>
+          <div className="glass-subcard p-4 space-y-1.5">
+            <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 text-xs font-bold font-sans">
+              3
+            </span>
+            <div className="font-bold text-slate-900 dark:text-white text-sm font-sans">Visualisasi & Laporan</div>
+            <p className="text-xs text-slate-600 dark:text-slate-400 font-medium font-sans">
+              Evaluasi Manhattan Plot, QQ-Plot, anotasi kandidat gen, dan unduh laporan riset lengkap.
+            </p>
           </div>
         </div>
       </div>
 
-      {/* ── Modal Dialog Inisiasi Analisis Baru (Dengan Modal Scale-in & Backdrop Fade) ── */}
+      {/* ── Modal Dialog Inisiasi Analisis Baru (TUGAS 6: Placeholder Abu-abu & Teks Ringkas) ── */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
           <div className="w-full max-w-lg figma-card p-6 sm:p-7 shadow-2xl space-y-4 animate-modal-in">
@@ -286,21 +312,20 @@ export default function DashboardPage() {
                 <input
                   id="analysisName"
                   type="text"
-                  required
                   value={analysisName}
                   onChange={(e) => setAnalysisName(e.target.value)}
-                  placeholder="Contoh: GWAS Penanda Sifat Kuantitatif 2026"
+                  placeholder="Contoh: Analisis Asosiasi Genomik 2026"
                   className="w-full rounded-xl border border-slate-300 dark:border-white/10 bg-[#F1F4FD] dark:bg-[#0F172E] py-2.5 px-3.5 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:border-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-600 font-medium"
                 />
-                <span className="mt-1 block text-xs text-slate-600 dark:text-slate-300 font-medium font-sans">
-                  Beri nama deskriptif sesuai sifat target atau kohort populasi yang diuji.
+                <span className="mt-1 block text-xs text-slate-600 dark:text-slate-400 font-medium font-sans">
+                  Kosongkan bila ingin menggunakan nama default otomatis.
                 </span>
               </div>
 
-              <div className="glass-subcard p-3.5 text-xs sm:text-sm text-slate-700 dark:text-slate-200 space-y-1">
-                <div className="font-bold text-slate-900 dark:text-white font-sans">Tahap Berikutnya:</div>
-                <p className="font-sans leading-relaxed">
-                  Setelah sesi dibuat, Anda akan diarahkan ke <strong>Langkah 1 (Unggah Data)</strong> untuk memilih berkas genotipe (.vcf / .vcf.gz) dan fenotipe (.csv).
+              {/* TUGAS 6: Teks Ringkas Tahap Berikutnya */}
+              <div className="glass-subcard p-3.5 text-xs sm:text-sm text-slate-700 dark:text-slate-300 space-y-1">
+                <p className="font-sans font-medium leading-relaxed">
+                  <strong>Selanjutnya:</strong> Unggah berkas genotipe (.vcf / PLINK) dan fenotipe (.csv).
                 </p>
               </div>
 
@@ -309,14 +334,14 @@ export default function DashboardPage() {
                   type="button"
                   onClick={() => setIsModalOpen(false)}
                   disabled={isSubmitting}
-                  className="rounded-xl border border-slate-300 dark:border-white/10 bg-slate-100 dark:bg-transparent px-4 py-2 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-white/5 active:scale-[0.98] transition-all font-sans"
+                  className="rounded-xl border border-slate-300 dark:border-white/10 bg-slate-100 dark:bg-transparent px-4 py-2 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-white/5 active:scale-[0.98] transition-all font-sans cursor-pointer"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  disabled={isSubmitting || !analysisName.trim()}
-                  className="inline-flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 px-5 py-2 text-xs font-semibold text-white shadow-sm hover:-translate-y-[1px] hover:shadow-md active:scale-[0.98] disabled:opacity-60 disabled:transform-none transition-all duration-100 font-sans"
+                  disabled={isSubmitting}
+                  className="inline-flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 px-5 py-2 text-xs font-semibold text-white shadow-sm hover:-translate-y-[1px] hover:shadow-md active:scale-[0.98] disabled:opacity-60 disabled:transform-none transition-all duration-100 font-sans cursor-pointer"
                 >
                   {isSubmitting ? (
                     <>

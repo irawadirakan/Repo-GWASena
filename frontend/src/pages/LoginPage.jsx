@@ -1,17 +1,19 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Eye, EyeOff, Lock, User, ArrowRight, CheckCircle2, Loader2, Sparkles } from 'lucide-react';
 import { useAuthStore } from '../store/useAuthStore.js';
 import ErrorMessageArea from '../components/common/ErrorMessageArea.jsx';
+import GoogleAccountChooserModal, { GoogleIcon } from '../components/common/GoogleAccountChooserModal.jsx';
 
 /**
  * LoginPage (Autentikasi Pengguna - Figma Aligned)
  * Acuan: 01 — Login.png, 01 — Login (Light).png, 01b — Login_ Kredensial Salah.png
+ * Fitur: Masuk dengan Akun Biasa, Akun Google OAuth E2E, dan Akun Demo Cepat.
  */
 export default function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { login, isLoading } = useAuthStore();
+  const { login, googleLogin, isLoading } = useAuthStore();
 
   // Ambil state pendaftaran jika pengguna baru dialihkan dari registrasi
   const registeredSuccess = location.state?.registered;
@@ -22,6 +24,28 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState(null);
+  const [isGoogleModalOpen, setIsGoogleModalOpen] = useState(false);
+
+  // Inisialisasi Google Identity Services jika VITE_GOOGLE_CLIENT_ID tersedia
+  useEffect(() => {
+    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+    if (clientId && window.google?.accounts?.id) {
+      window.google.accounts.id.initialize({
+        client_id: clientId,
+        callback: async (response) => {
+          if (response?.credential) {
+            try {
+              await googleLogin({ credential: response.credential });
+              const destination = location.state?.from?.pathname || '/dashboard';
+              navigate(destination, { replace: true });
+            } catch (err) {
+              setError(err);
+            }
+          }
+        },
+      });
+    }
+  }, [googleLogin, location.state, navigate]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -39,9 +63,14 @@ export default function LoginPage() {
       const destination = location.state?.from?.pathname || '/dashboard';
       navigate(destination, { replace: true });
     } catch (err) {
-      // Tangani galat kredensial salah (401) atau galat lainnya
       setError(err);
     }
+  };
+
+  const handleGoogleSuccess = () => {
+    setIsGoogleModalOpen(false);
+    const destination = location.state?.from?.pathname || '/dashboard';
+    navigate(destination, { replace: true });
   };
 
   return (
@@ -53,7 +82,7 @@ export default function LoginPage() {
             Masuk ke Akun
           </h1>
           <p className="mt-1.5 font-serif text-sm text-slate-600 dark:text-slate-300">
-            Masukkan kredensial akun peneliti Anda untuk melanjutkan riset
+            Masukkan kredensial akun Anda untuk melanjutkan analisis
           </p>
         </div>
 
@@ -67,6 +96,28 @@ export default function LoginPage() {
 
         {/* Kotak Pesan Galat Figma Message Banner */}
         <ErrorMessageArea error={error} onDismiss={() => setError(null)} className="mb-4" />
+
+        {/* Tombol Utama: Masuk dengan Google */}
+        <div className="mb-4">
+          <button
+            type="button"
+            disabled={isLoading}
+            onClick={() => setIsGoogleModalOpen(true)}
+            className="w-full flex items-center justify-center gap-3 py-2.5 px-4 rounded-xl border border-slate-300 dark:border-white/15 bg-white dark:bg-[#162142] hover:bg-slate-50 dark:hover:bg-[#1E2C58] text-slate-800 dark:text-white font-semibold text-sm shadow-sm hover:shadow transition-all active:scale-[0.985] cursor-pointer"
+          >
+            <GoogleIcon className="h-5 w-5" />
+            <span>Lanjutkan dengan Google</span>
+          </button>
+        </div>
+
+        {/* Pemisah Garis 'atau' */}
+        <div className="relative flex py-1 items-center mb-4">
+          <div className="flex-grow border-t border-slate-200 dark:border-white/10"></div>
+          <span className="flex-shrink mx-3 text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 font-bold">
+            atau dengan email
+          </span>
+          <div className="flex-grow border-t border-slate-200 dark:border-white/10"></div>
+        </div>
 
         {/* Form Login */}
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -90,7 +141,7 @@ export default function LoginPage() {
                 required
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="peneliti atau email@apps.ipb.ac.id"
+                placeholder="Contoh: user@email.com atau username"
                 className="w-full rounded-xl border border-slate-300 dark:border-white/10 bg-[#F1F4FD] dark:bg-[#0F172E] py-2.5 pl-10 pr-3 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:border-[#5B4DFE] focus:outline-none focus:ring-1 focus:ring-[#5B4DFE] transition-all font-medium"
               />
             </div>
@@ -162,7 +213,7 @@ export default function LoginPage() {
             )}
           </button>
 
-          {/* Opsi Akses Demo Instan (Pengujian UI & Backend Offline) */}
+          {/* Opsi Akses Demo Instan */}
           <div className="relative flex py-1 items-center">
             <div className="flex-grow border-t border-slate-200 dark:border-white/10"></div>
             <span className="flex-shrink mx-2 text-xs uppercase tracking-wider text-slate-600 dark:text-slate-300 font-bold">
@@ -175,7 +226,7 @@ export default function LoginPage() {
             type="button"
             onClick={async () => {
               try {
-                await login('peneliti_ipb', 'password123');
+                await login('user_demo', 'password123');
                 navigate('/dashboard');
               } catch (e) {
                 console.error(e);
@@ -184,14 +235,14 @@ export default function LoginPage() {
             className="w-full figma-btn-secondary py-2.5 text-xs sm:text-sm font-bold cursor-pointer"
           >
             <Sparkles className="h-4 w-4 text-[#0284C7] dark:text-[#06B6D4]" />
-            <span>Masuk Cepat (Akun Peneliti Demo)</span>
+            <span>Masuk Cepat (Akun Demo)</span>
           </button>
         </form>
 
         {/* Footer Kartu Form */}
         <div className="mt-6 border-t border-slate-200 dark:border-white/10 pt-4 text-center space-y-2">
           <p className="text-xs sm:text-sm text-slate-700 dark:text-slate-300 font-medium">
-            Belum memiliki akun peneliti?{' '}
+            Belum memiliki akun?{' '}
             <Link
               to="/register"
               className="font-bold text-[#0284C7] dark:text-[#06B6D4] hover:underline transition-colors"
@@ -210,6 +261,13 @@ export default function LoginPage() {
           </div>
         </div>
       </div>
+
+      {/* Modal Pemilih Akun Google Interaktif */}
+      <GoogleAccountChooserModal
+        isOpen={isGoogleModalOpen}
+        onClose={() => setIsGoogleModalOpen(false)}
+        onSuccess={handleGoogleSuccess}
+      />
     </div>
   );
 }

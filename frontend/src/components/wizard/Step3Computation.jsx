@@ -411,7 +411,7 @@ export default function Step3Computation({ analysisId, onComplete }) {
               className="inline-flex items-center gap-2 rounded-xl bg-[#5B4DFE] hover:bg-[#4F46E5] px-5 py-2.5 text-xs font-bold text-white shadow-md shadow-[#5B4DFE]/30 transition-all active:scale-95"
             >
               <ArrowLeft className="h-4 w-4" />
-              <span>Kembali ke Konfigurasi (Langkah 2)</span>
+              <span>Kembali ke Konfigurasi QC & Model</span>
             </button>
 
             <button
@@ -424,7 +424,7 @@ export default function Step3Computation({ analysisId, onComplete }) {
               className="inline-flex items-center gap-2 rounded-xl border border-slate-300 dark:border-white/10 bg-white dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 px-5 py-2.5 text-xs font-semibold text-slate-800 dark:text-slate-200 transition-all active:scale-95"
             >
               <ArrowLeft className="h-4 w-4" />
-              <span>Kembali ke Unggah Data (Langkah 1)</span>
+              <span>Kembali ke Unggah & Validasi</span>
             </button>
           </div>
         </div>
@@ -571,7 +571,7 @@ export default function Step3Computation({ analysisId, onComplete }) {
                 onClick={onComplete}
                 className="w-full figma-btn-primary py-3.5 text-sm sm:text-base cursor-pointer"
               >
-                <span>Lihat Hasil Analisis & Visualisasi Plot (Langkah 4)</span>
+                <span>Lihat Hasil Analisis & Visualisasi Plot</span>
                 <ArrowRight className="h-4 w-4" />
               </button>
             </div>

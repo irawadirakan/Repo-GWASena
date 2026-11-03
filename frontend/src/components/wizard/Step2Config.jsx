@@ -46,6 +46,7 @@ export default function Step2Config({
       setTrait(availableTraits[0]);
     }
   }, [availableTraits, trait]);
+
   const [mind, setMind] = useState(configParams.qc?.mind ?? 0.10);
   const [geno, setGeno] = useState(configParams.qc?.geno ?? 0.10);
   const [maf, setMaf] = useState(configParams.qc?.maf ?? 0.05);
@@ -69,6 +70,7 @@ export default function Step2Config({
   // Model & Koreksi
   const [model, setModel] = useState(configParams.model || 'MLM');
   const [koreksi, setKoreksi] = useState(configParams.koreksi || ['bonferroni', 'fdr']);
+  // TUGAS 7: Default alpha = 0.05
   const [alpha, setAlpha] = useState(configParams.alpha ?? 0.05);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -91,19 +93,22 @@ export default function Step2Config({
     setBackendNotice501(null);
     setIsSubmitting(true);
 
+    const parsedAlpha = parseFloat(alpha);
+    const validAlpha = isNaN(parsedAlpha) || parsedAlpha <= 0 ? 0.05 : parsedAlpha;
+
     const payload = {
       trait,
       qc: {
-        mind: parseFloat(mind),
-        geno: parseFloat(geno),
-        maf: parseFloat(maf),
+        mind: parseFloat(mind) || 0.10,
+        geno: parseFloat(geno) || 0.10,
+        maf: parseFloat(maf) || 0.05,
         hwe: isHweActive && hwe ? (typeof hwe === 'string' ? parseFloat(hwe) : hwe) : null,
         king_cutoff: isKingActive && kingCutoff != null ? parseFloat(kingCutoff) : null,
       },
       n_pc: 3,
       model,
       koreksi,
-      alpha: parseFloat(alpha),
+      alpha: validAlpha,
     };
 
     setConfigParams(payload);
@@ -126,12 +131,10 @@ export default function Step2Config({
       const is501 = err.status === 501;
 
       if (isNetworkError || is501) {
-        // Mode tanpa backend / HTTP 501 / Network Error:
         console.warn('Backend tidak tersedia (Network / 501), menjalankan mock simulation otomatis:', err);
         startSimulation();
         onRunSuccess?.({ simulated: true });
       } else {
-        // Error 4xx / 500 dari backend: DILARANG PINDAH SIMULASI & DILARANG PINDAH LANGKAH!
         console.error('Konfigurasi ditolak backend (HTTP ' + err.status + '):', err);
         setError({
           message: err.message || err.pesan || 'Terjadi kesalahan saat memproses parameter analisis.',
@@ -143,10 +146,10 @@ export default function Step2Config({
 
   return (
     <div className="space-y-8 animate-fade-in">
-      {/* ── Header Langkah ── */}
+      {/* ── Header Tahap (TUGAS 9: Tanpa Kata "Langkah X:") ── */}
       <div className="border-b border-slate-200 dark:border-white/10 pb-4">
         <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">
-          2. Konfigurasi Parameter Quality Control & Model Asosiasi
+          Konfigurasi Parameter Quality Control & Model Asosiasi
         </h2>
         <p className="mt-1 text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
           Tentukan sifat agronomi yang diuji, sesuaikan filter penyaringan data varian genomik, serta pilih model asosiasi (GLM atau MLM).
@@ -180,13 +183,14 @@ export default function Step2Config({
               <span>Buka Pratinjau Alur Komputasi & Visualisasi UI</span>
             </button>
             <span className="text-xs sm:text-[13px] text-slate-700 dark:text-slate-300 font-medium">
-              (Menampilkan antarmuka Langkah 3 s.d. 6 dengan penanda simulasi yang jelas)
+              (Menampilkan antarmuka komputasi & hasil dengan penanda simulasi yang jelas)
             </span>
           </div>
         </div>
       )}
 
-      <form onSubmit={(e) => handleStartAnalysis(e, false)} className="space-y-8">
+      {/* TUGAS 7: noValidate pada form untuk menghilangkan error step browser bawaan */}
+      <form onSubmit={(e) => handleStartAnalysis(e, false)} noValidate className="space-y-8">
         {/* ── Bagian A: Pemilihan Sifat Fenotipe (Trait) ── */}
         <div className="figma-card p-6 space-y-4">
           <div className="flex items-center justify-between">
@@ -259,16 +263,17 @@ export default function Step2Config({
               <input
                 id="mind"
                 type="range"
-                min={QC_PARAM_RANGES.mind.min}
-                max={QC_PARAM_RANGES.mind.max}
-                step={QC_PARAM_RANGES.mind.step}
+                min={0}
+                max={0.5}
+                step={0.01}
                 value={mind}
                 onChange={(e) => setMind(e.target.value)}
                 className="w-full accent-[#5B4DFE] dark:accent-[#06B6D4] cursor-pointer"
               />
-              <span className="text-xs sm:text-[13px] text-slate-700 dark:text-slate-300 block font-sans font-medium">
-                Default: 0.10 (buang sampel dengan missing data &gt; 10%)
-              </span>
+              <div className="flex items-center justify-between text-xs text-slate-600 dark:text-slate-400 font-sans font-medium">
+                <span>Nilai valid: 0.00 – 1.00</span>
+                <span>Default: 0.10 (&gt; 10% dibuang)</span>
+              </div>
             </div>
 
             {/* 2. Missingness per SNP (geno) */}
@@ -287,16 +292,17 @@ export default function Step2Config({
               <input
                 id="geno"
                 type="range"
-                min={QC_PARAM_RANGES.geno.min}
-                max={QC_PARAM_RANGES.geno.max}
-                step={QC_PARAM_RANGES.geno.step}
+                min={0}
+                max={0.5}
+                step={0.01}
                 value={geno}
                 onChange={(e) => setGeno(e.target.value)}
                 className="w-full accent-[#0284C7] dark:accent-[#06B6D4] cursor-pointer"
               />
-              <span className="text-xs sm:text-[13px] text-slate-700 dark:text-slate-300 block font-sans font-medium">
-                Default: 0.10 (buang SNP yang hilang pada &gt; 10% populasi)
-              </span>
+              <div className="flex items-center justify-between text-xs text-slate-600 dark:text-slate-400 font-sans font-medium">
+                <span>Nilai valid: 0.00 – 1.00</span>
+                <span>Default: 0.10 (&gt; 10% dibuang)</span>
+              </div>
             </div>
 
             {/* 3. Minor Allele Frequency (maf) */}
@@ -315,16 +321,17 @@ export default function Step2Config({
               <input
                 id="maf"
                 type="range"
-                min={QC_PARAM_RANGES.maf.min}
-                max={QC_PARAM_RANGES.maf.max}
-                step={QC_PARAM_RANGES.maf.step}
+                min={0.01}
+                max={0.49}
+                step={0.01}
                 value={maf}
                 onChange={(e) => setMaf(e.target.value)}
                 className="w-full accent-[#0284C7] dark:accent-[#06B6D4] cursor-pointer"
               />
-              <span className="text-xs sm:text-[13px] text-slate-700 dark:text-slate-300 block font-sans font-medium">
-                Default: 0.05 (saring varian langka &lt; 5%)
-              </span>
+              <div className="flex items-center justify-between text-xs text-slate-600 dark:text-slate-400 font-sans font-medium">
+                <span>Nilai valid: 0.00 – 0.50</span>
+                <span>Default: 0.05 (saring &lt; 5%)</span>
+              </div>
             </div>
 
             {/* 4. Relatedness / Kinship Cutoff (king_cutoff) */}
@@ -367,25 +374,20 @@ export default function Step2Config({
                 id="king"
                 type="range"
                 disabled={!isKingActive}
-                min={QC_PARAM_RANGES.king_cutoff.min}
-                max={QC_PARAM_RANGES.king_cutoff.max}
-                step={QC_PARAM_RANGES.king_cutoff.step}
+                min={0.0}
+                max={0.5}
+                step={0.001}
                 value={kingCutoff ?? 0.177}
                 onChange={(e) => setKingCutoff(e.target.value)}
                 className={`w-full accent-[#0284C7] dark:accent-[#06B6D4] ${isKingActive ? 'cursor-pointer' : 'cursor-not-allowed opacity-40'}`}
               />
-              <span className="text-xs sm:text-[13px] text-slate-700 dark:text-slate-300 block font-sans font-medium">
-                {isKingActive ? (
-                  'Nilai rekomendasi: 0.177 (hubungan derajat pertama / klon kembar)'
-                ) : (
-                  <span className="text-amber-800 dark:text-amber-300 font-semibold">
-                    Nonaktif secara bawaan untuk tanaman klonal
-                  </span>
-                )}
-              </span>
+              <div className="flex items-center justify-between text-xs text-slate-600 dark:text-slate-400 font-sans font-medium">
+                <span>Nilai valid: &gt; 0 – 0.50</span>
+                <span>{isKingActive ? 'Rekomendasi: 0.177' : 'Nonaktif untuk klonal'}</span>
+              </div>
             </div>
 
-            {/* 5. Hardy-Weinberg Equilibrium (hwe) - Input khusus dengan catatan agronomi */}
+            {/* 5. Hardy-Weinberg Equilibrium (hwe) */}
             <div className={`md:col-span-2 space-y-3 glass-subcard p-4 transition-all duration-200 ${!isHweActive ? 'opacity-85' : ''}`}>
               <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-2">
                 <label className="flex items-center gap-2 cursor-pointer select-none">
@@ -412,7 +414,7 @@ export default function Step2Config({
                     Ambang Batas HWE p-value (hwe)
                   </span>
                   <span className="text-xs sm:text-[13px] text-slate-700 dark:text-slate-300 font-medium font-sans">
-                    {isHweActive ? 'Rekomendasi nilai awal: 1e-6' : 'Nonaktif secara bawaan untuk tanaman klonal'}
+                    {isHweActive ? 'Nilai valid: > 0 hingga < 1 (Rekomendasi: 1e-6)' : 'Nonaktif secara bawaan untuk tanaman klonal'}
                   </span>
                 </div>
                 {isHweActive ? (
@@ -551,7 +553,7 @@ export default function Step2Config({
           </div>
         </div>
 
-        {/* ── Bagian E: Koreksi Multiple Testing & Alpha ── */}
+        {/* ── Bagian E: Koreksi Multiple Testing & Alpha (TUGAS 7) ── */}
         <div className="figma-card p-6 space-y-4">
           <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-3">
             <div className="flex items-center gap-2.5">
@@ -600,22 +602,65 @@ export default function Step2Config({
               </div>
             </label>
 
-            {/* Input Alpha */}
-            <div className="glass-subcard p-4 space-y-1.5">
+            {/* Input Alpha (TUGAS 7: Step any, Preset Pills, Info Rentang Valid) */}
+            <div className="glass-subcard p-4 space-y-2">
               <label htmlFor="alpha" className="block text-sm font-bold text-slate-900 dark:text-white font-sans">
                 Ambang Alpha Signifikansi
               </label>
-              <input
-                id="alpha"
-                type="number"
-                min={0.001}
-                max={0.1}
-                step={0.005}
-                value={alpha}
-                onChange={(e) => setAlpha(e.target.value)}
-                className="w-full font-mono text-sm font-bold text-slate-900 dark:text-[#06B6D4] bg-white dark:bg-[#121B38] rounded-xl border border-slate-300 dark:border-white/10 py-2 px-3 focus:outline-none focus:border-[#0284C7]"
-              />
-              <span className="text-xs text-slate-700 dark:text-slate-300 block font-sans font-medium">Default standar riset: 0.05</span>
+
+              <div className="relative">
+                <input
+                  id="alpha"
+                  type="number"
+                  min="0.0001"
+                  max="0.20"
+                  step="any"
+                  value={alpha}
+                  onChange={(e) => setAlpha(e.target.value)}
+                  className="w-full font-mono text-sm font-bold text-slate-900 dark:text-[#06B6D4] bg-white dark:bg-[#121B38] rounded-xl border border-slate-300 dark:border-white/10 py-2 px-3 focus:outline-none focus:border-[#0284C7]"
+                />
+              </div>
+
+              {/* Tombol Kapsul Pilihan Cepat (Preset Chips) */}
+              <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                <button
+                  type="button"
+                  onClick={() => setAlpha(0.01)}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                    Number(alpha) === 0.01
+                      ? 'bg-[#5B4DFE] text-white shadow-sm font-bold'
+                      : 'bg-slate-100 dark:bg-white/5 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-white/10'
+                  }`}
+                >
+                  0.01 (Ketat)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAlpha(0.05)}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                    Number(alpha) === 0.05
+                      ? 'bg-[#0284C7] dark:bg-[#06B6D4] text-white dark:text-slate-950 shadow-sm font-bold'
+                      : 'bg-slate-100 dark:bg-white/5 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-white/10'
+                  }`}
+                >
+                  0.05 (Standar — Default)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAlpha(0.10)}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                    Number(alpha) === 0.10
+                      ? 'bg-[#5B4DFE] text-white shadow-sm font-bold'
+                      : 'bg-slate-100 dark:bg-white/5 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-white/10'
+                  }`}
+                >
+                  0.10 (Eksploratori)
+                </button>
+              </div>
+
+              <span className="text-xs text-slate-600 dark:text-slate-400 block font-sans font-medium">
+                Nilai valid: 0.0001 – 0.20 (Rekomendasi standar: 0.05)
+              </span>
             </div>
           </div>
         </div>
@@ -625,7 +670,7 @@ export default function Step2Config({
           <button
             type="button"
             onClick={onPrev}
-            className="figma-btn-secondary"
+            className="figma-btn-secondary cursor-pointer"
           >
             <ArrowLeft className="h-4 w-4" />
             <span>Kembali ke Unggah Berkas</span>
@@ -634,7 +679,7 @@ export default function Step2Config({
           <button
             type="submit"
             disabled={isSubmitting}
-            className="figma-btn-primary"
+            className="figma-btn-primary cursor-pointer"
           >
             {isSubmitting ? (
               <>
