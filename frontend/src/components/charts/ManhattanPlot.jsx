@@ -3,11 +3,10 @@ import Plotly from 'plotly.js-dist-min';
 import { useThemeStore } from '../../store/useThemeStore.js';
 
 /**
- * ManhattanPlot - Visualisasi Interaktif GWAS Manhattan Plot untuk Bawang Putih (8 Kromosom)
- * Acuan: docs/gwasena-v2/DESIGN.md Bagian 7 & AC-08.1, AC-08.2
- *
- * Menggunakan WebGL (scattergl) dengan pewarnaan bergantian antar-kromosom,
- * garis ambang signifikansi, dan penanganan klik titik SNP.
+ * ManhattanPlot - Visualisasi Interaktif GWAS Manhattan Plot
+ * WebGL (scattergl) dengan pewarnaan bergantian antar-kromosom,
+ * garis ambang signifikansi, margin presisi tanpa pemotongan,
+ * dan Custom HTML Legend Pills bar di luar SVG untuk menjamin 100% bebas clipping.
  */
 export default function ManhattanPlot({
   snps = [],
@@ -23,10 +22,10 @@ export default function ManhattanPlot({
 
     const isDark = theme === 'dark';
 
-    // Warna untuk Dark vs Light Mode sesuai spesifikasi kontras tinggi
-    const colorEven = isDark ? '#38BDF8' : '#2563EB'; // Royal Blue di Light Mode
-    const colorOdd = isDark ? '#818CF8' : '#4F46E5';  // Indigo di Light Mode
-    const colorSignificant = isDark ? '#34D399' : '#059669'; // Emerald
+    // Warna kromosom bergantian sesuai spesifikasi ilmiah kontras tinggi
+    const colorOdd = isDark ? '#818CF8' : '#4F46E5';   // Indigo
+    const colorEven = isDark ? '#38BDF8' : '#0EA5E9';  // Cyan / Sky
+    const colorSignificant = isDark ? '#34D399' : '#10B981'; // Emerald
     const colorSelected = '#F43F5E'; // Rose-500
 
     // Siapkan data per kromosom dengan offset posisi kumulatif pada sumbu X
@@ -54,11 +53,7 @@ export default function ManhattanPlot({
       runningOffset += cLength;
     }
 
-    // Pisahkan SNP ke dalam traces:
-    // Trace 1: Titik non-signifikan (warna bergantian)
-    // Trace 2: Titik signifikan (emerald/highlight)
-    // Trace 3: Titik terpilih (jika ada)
-
+    // Pisahkan SNP ke dalam traces
     const xNonSig = [];
     const yNonSig = [];
     const textNonSig = [];
@@ -81,7 +76,8 @@ export default function ManhattanPlot({
       const negLogP = snp.neg_log10_p ?? -Math.log10(snp.p_value);
       const isSelected = selectedSnpId && snp.snp_id === selectedSnpId;
 
-      const tooltipText = `<b>${snp.snp_id}</b><br>` +
+      const tooltipText =
+        `<b>${snp.snp_id}</b><br>` +
         `Kromosom: ${c}<br>` +
         `Posisi: ${Number(snp.position).toLocaleString('id-ID')} bp<br>` +
         `p-value: ${snp.p_value < 0.0001 ? Number(snp.p_value).toExponential(3) : Number(snp.p_value).toFixed(5)}<br>` +
@@ -109,7 +105,7 @@ export default function ManhattanPlot({
     });
 
     const traces = [
-      // Titik Standar
+      // Trace 1: SNP Teruji (Non-Signifikan)
       {
         x: xNonSig,
         y: yNonSig,
@@ -117,14 +113,14 @@ export default function ManhattanPlot({
         hoverinfo: 'text',
         mode: 'markers',
         type: 'scattergl',
-        name: 'SNP Teruji',
+        name: 'SNP Teruji (Non-Signifikan)',
         marker: {
-          size: 5,
+          size: 5.5,
           color: colorNonSig,
           opacity: 0.85,
         },
       },
-      // Titik Signifikan
+      // Trace 2: SNP Signifikan (Lolos Ambang)
       {
         x: xSig,
         y: ySig,
@@ -132,20 +128,20 @@ export default function ManhattanPlot({
         hoverinfo: 'text',
         mode: 'markers',
         type: 'scattergl',
-        name: 'Signifikan (Lolos Ambang)',
+        name: 'SNP Signifikan (Lolos Ambang)',
         marker: {
-          size: 8,
+          size: 8.5,
           color: colorSignificant,
           symbol: 'diamond',
           line: {
             color: isDark ? '#FFFFFF' : '#0F172A',
-            width: 1,
+            width: 1.25,
           },
         },
       },
     ];
 
-    // Jika ada yang sedang dipilih secara aktif
+    // Trace 3: SNP Terpilih (jika ada)
     if (xSel.length > 0) {
       traces.push({
         x: xSel,
@@ -166,34 +162,27 @@ export default function ManhattanPlot({
       });
     }
 
-    // Batas Sumbu Y
-    const maxY = Math.max(threshold + 2, ...snps.map((s) => s.neg_log10_p || 0));
+    // Batas Sumbu Y otomatis dengan padding atas proporsional
+    const maxNegLogP = Math.max(0, ...snps.map((s) => s.neg_log10_p ?? (-Math.log10(s.p_value) || 0)));
+    const yUpper = Math.max(maxNegLogP + 1.2, threshold + 1.0, 5.0);
 
     const layout = {
       autosize: true,
-      margin: { l: 56, r: 24, t: 36, b: 50 },
-      paper_bgcolor: isDark ? '#0F172A' : '#FFFFFF',
-      plot_bgcolor: isDark ? '#070B14' : '#F8FAFC',
-      showlegend: true,
-      legend: {
-        orientation: 'h',
-        x: 0.5,
-        xanchor: 'center',
-        y: 1.12,
-        font: {
-          family: 'Source Sans 3, Source Sans Pro, sans-serif',
-          size: 11,
-          color: isDark ? '#94A3B8' : '#1E293B',
-        },
-      },
+      // Margin presisi sesuai spesifikasi agar sumbu X dan label Y tidak terpotong
+      margin: { l: 65, r: 30, t: 30, b: 60 },
+      paper_bgcolor: 'transparent',
+      plot_bgcolor: isDark ? 'rgba(7, 11, 20, 0.65)' : 'rgba(248, 250, 252, 0.65)',
+      // Gunakan Custom HTML Legend di luar canvas untuk menjamin 100% bebas clipping
+      showlegend: false,
       xaxis: {
         title: {
-          text: 'Kromosom Bawang Putih (Allium sativum L.)',
+          text: 'Kromosom Genom (Chromosome)',
           font: {
             family: 'Source Sans 3, Source Sans Pro, sans-serif',
             size: 12,
-            color: isDark ? '#94A3B8' : '#1E293B',
+            color: isDark ? '#94A3B8' : '#334155',
           },
+          standoff: 14,
         },
         tickvals: tickVals,
         ticktext: tickText,
@@ -203,7 +192,7 @@ export default function ManhattanPlot({
           color: isDark ? '#E2E8F0' : '#1E293B',
         },
         showgrid: true,
-        gridcolor: isDark ? '#1E293B' : '#E2E8F0',
+        gridcolor: isDark ? 'rgba(51, 65, 85, 0.4)' : 'rgba(226, 232, 240, 0.8)',
         linecolor: isDark ? '#334155' : '#94A3B8',
         zeroline: false,
       },
@@ -213,17 +202,18 @@ export default function ManhattanPlot({
           font: {
             family: 'Source Sans 3, Source Sans Pro, sans-serif',
             size: 12,
-            color: isDark ? '#94A3B8' : '#1E293B',
+            color: isDark ? '#94A3B8' : '#334155',
           },
+          standoff: 10,
         },
-        range: [0, Math.ceil(maxY) + 0.5],
+        range: [0, yUpper],
         tickfont: {
           family: 'JetBrains Mono, monospace',
           size: 11,
           color: isDark ? '#E2E8F0' : '#1E293B',
         },
         showgrid: true,
-        gridcolor: isDark ? '#1E293B' : '#E2E8F0',
+        gridcolor: isDark ? 'rgba(51, 65, 85, 0.4)' : 'rgba(226, 232, 240, 0.8)',
         linecolor: isDark ? '#334155' : '#94A3B8',
         zeroline: false,
       },
@@ -250,13 +240,13 @@ export default function ManhattanPlot({
           x: 0.99,
           yref: 'y',
           y: threshold,
-          text: `Ambang Signifikansi (-log₁₀P = ${threshold.toFixed(2)})`,
+          text: `Ambang Batas (-log₁₀P = ${threshold.toFixed(2)})`,
           showarrow: false,
           xanchor: 'right',
           yanchor: 'bottom',
           font: {
             family: 'Source Sans 3, Source Sans Pro, sans-serif',
-            size: 10,
+            size: 10.5,
             color: isDark ? '#06B6D4' : '#0891B2',
           },
         },
@@ -317,9 +307,52 @@ export default function ManhattanPlot({
     };
   }, [snps, threshold, theme, selectedSnpId, onSelectSnp]);
 
+  const sigCount = snps.filter((s) => s.is_significant || (s.neg_log10_p ?? -Math.log10(s.p_value)) >= threshold).length;
+
   return (
-    <div className="w-full overflow-hidden rounded-2xl figma-card p-2 sm:p-4">
-      <div ref={containerRef} className="h-[420px] w-full" />
+    <div className="w-full overflow-hidden rounded-3xl figma-card p-3.5 sm:p-5">
+      {/* ── Custom HTML/Tailwind Legend Pills Bar (100% Bebas Clipping) ── */}
+      <div className="flex flex-wrap items-center justify-between gap-2.5 pb-3.5 border-b border-slate-200/80 dark:border-white/10 mb-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Badge SNP Teruji (Non-Signifikan) */}
+          <div className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium bg-slate-100/90 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 border border-slate-200/90 dark:border-slate-700/60 shadow-xs">
+            <span className="flex items-center gap-1">
+              <span className="h-2.5 w-2.5 rounded-full bg-[#4F46E5] dark:bg-[#818CF8]" title="Kromosom Ganjil" />
+              <span className="h-2.5 w-2.5 rounded-full bg-[#0EA5E9] dark:bg-[#38BDF8]" title="Kromosom Genap" />
+            </span>
+            <span className="font-semibold">SNP Teruji (Non-Signifikan)</span>
+          </div>
+
+          {/* Badge SNP Signifikan (Lolos Ambang) */}
+          <div className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium bg-emerald-50/90 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border border-emerald-300/80 dark:border-emerald-600/40 shadow-xs">
+            <span className="inline-block w-2.5 h-2.5 rotate-45 bg-[#10B981] dark:bg-[#34D399]" />
+            <span className="font-semibold">SNP Signifikan (Lolos Ambang)</span>
+            <span className="ml-0.5 inline-flex items-center justify-center rounded-full bg-emerald-200/80 dark:bg-emerald-800/60 px-2 py-0.5 text-xs font-bold text-emerald-900 dark:text-emerald-200">
+              {sigCount}
+            </span>
+          </div>
+
+          {/* Badge Ambang Batas Signifikansi */}
+          <div className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium bg-cyan-50/90 dark:bg-cyan-950/40 text-cyan-900 dark:text-cyan-300 border border-cyan-300/80 dark:border-cyan-600/40 shadow-xs">
+            <span className="w-3.5 border-t-2 border-dashed border-[#0891B2] dark:border-[#06B6D4]" />
+            <span className="font-semibold">Ambang Signifikansi (-log₁₀P = {threshold.toFixed(2)})</span>
+          </div>
+
+          {/* Badge SNP Terpilih (jika ada) */}
+          {selectedSnpId && (
+            <div className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium bg-rose-50/90 dark:bg-rose-950/40 text-rose-800 dark:text-rose-300 border border-rose-300/80 dark:border-rose-600/40 shadow-xs animate-pop-in">
+              <span className="h-2.5 w-2.5 rounded-full bg-[#F43F5E]" />
+              <span className="font-semibold">SNP Terpilih ({selectedSnpId})</span>
+            </div>
+          )}
+        </div>
+
+        <div className="text-xs font-mono font-semibold text-slate-700 dark:text-slate-300">
+          Total Teruji: <span className="font-bold text-slate-900 dark:text-white">{snps.length}</span> SNP
+        </div>
+      </div>
+
+      <div ref={containerRef} className="h-[430px] w-full" />
     </div>
   );
 }

@@ -1,5 +1,5 @@
 /**
- * Authentication Service (M-01) GWASena 2.0
+ * Authentication Service GWASena 2.0
  * Acuan: docs/gwasena-v2/API_INTEGRATION.md
  */
 
@@ -7,7 +7,7 @@ import { apiClient, setStoredToken, removeStoredToken, getStoredToken } from './
 
 export const authService = {
   /**
-   * Login pengguna (S-01)
+   * Login pengguna
    * @param {string} username - Username atau alamat email
    * @param {string} password - Kata sandi
    */
@@ -66,7 +66,7 @@ export const authService = {
   },
 
   /**
-   * Registrasi akun peneliti baru (S-02)
+   * Registrasi akun peneliti baru
    * @param {string} username - 3-50 karakter regex ^[A-Za-z0-9_.-]+$
    * @param {string} email - Alamat email valid
    * @param {string} password - Min 8 karakter

@@ -22,11 +22,11 @@ import { generateBenchmarkResults } from '../../services/mockResults.js';
 import ErrorMessageArea from '../common/ErrorMessageArea.jsx';
 
 /**
- * S-06 (Langkah 3): Layar Tunggu Komputasi Pipeline (Figma Aligned)
+ * Step3Computation (Langkah 3): Layar Tunggu Komputasi Pipeline (Figma Aligned)
  * Acuan: 06 — Komputasi_ QC Berjalan.png s.d. 06d — Komputasi_ Semua Selesai.png
  *
- * Mengunci konfigurasi form (BR-05, AC-10.1), menampilkan progres 4 tahapan diskrit,
- * menyajikan ringkasan QC (AC-03.1), serta karusel Tips Edukatif dinamis (FR-10).
+ * Mengunci konfigurasi form, menampilkan progres 4 tahapan diskrit,
+ * menyajikan ringkasan QC, serta karusel Tips Edukatif dinamis.
  */
 export default function Step3Computation({ analysisId, onComplete }) {
   const {
@@ -58,18 +58,38 @@ export default function Step3Computation({ analysisId, onComplete }) {
   const [isFailed, setIsFailed] = useState(false);
   const [error, setError] = useState(null);
 
-  // Carousel State untuk Tips Edukatif (FR-10)
+  // Carousel & Countdown State untuk Tips Edukatif (6 detik)
   const [tipIndex, setTipIndex] = useState(0);
+  const [countdown, setCountdown] = useState(6);
   const [isHovered, setIsHovered] = useState(false);
 
-  // Auto-rotate Tips Edukatif setiap 6 detik jika tidak di-hover
+  // Auto-rotate Tips Edukatif setiap 6 detik dengan hitung mundur 1 detik jika tidak di-hover
   useEffect(() => {
     if (isHovered) return;
+
     const interval = setInterval(() => {
-      setTipIndex((prev) => (prev + 1) % TIPS_EDUKATIF.length);
-    }, 6000);
+      setCountdown((prev) => {
+        if (prev <= 1) {
+          setTipIndex((idx) => (idx + 1) % TIPS_EDUKATIF.length);
+          return 6;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
     return () => clearInterval(interval);
   }, [isHovered]);
+
+  // Handler navigasi manual: putar tips & setel ulang countdown ke 6s penuh
+  const handlePrevTip = () => {
+    setTipIndex((prev) => (prev - 1 + TIPS_EDUKATIF.length) % TIPS_EDUKATIF.length);
+    setCountdown(6);
+  };
+
+  const handleNextTip = () => {
+    setTipIndex((prev) => (prev + 1) % TIPS_EDUKATIF.length);
+    setCountdown(6);
+  };
 
   // Jalankan simulasi otomatis jika dalam mode simulasi dan belum selesai
   useEffect(() => {
@@ -133,13 +153,14 @@ export default function Step3Computation({ analysisId, onComplete }) {
           setProgresPersen(100);
           setLocalCompleted(true);
           try {
-            const resultsData = await analysisService.getResults(analysisId);
+            const resultsData = await analysisService.getFullAnalysisResults(analysisId);
             setResults(resultsData);
-            if (resultsData?.qc || resultsData?.ringkasan_qc) {
-              setRingkasanQc(resultsData.qc || resultsData.ringkasan_qc);
+            setIsSimulated(false);
+            if (resultsData?.raw_backend_results?.qc || resultsData?.qc || resultsData?.ringkasan_qc) {
+              setRingkasanQc(resultsData.raw_backend_results?.qc || resultsData.qc || resultsData.ringkasan_qc);
             }
           } catch (rErr) {
-            console.warn('Gagal memuat data hasil dari backend, beralih ke benchmark lokal:', rErr);
+            console.warn('Gagal memuat data hasil lengkap dari backend, beralih ke benchmark lokal:', rErr);
             const fallback = generateBenchmarkResults(configParams, uploadSummary);
             setResults(fallback);
           }
@@ -189,28 +210,28 @@ export default function Step3Computation({ analysisId, onComplete }) {
         {
           id: 1,
           title: 'Quality Control (Penyaringan Sampel & SNP)',
-          desc: 'Memvalidasi missingness, MAF, HWE klonal bawang putih, dan kekerabatan KING.',
+          desc: 'Memvalidasi tingkat missingness, MAF, kepatuhan HWE, dan estimasi kekerabatan genomik.',
           status: isCompleted || stageNum > 1 ? 'selesai' : stageNum === 1 ? 'berjalan' : 'menunggu',
           message: stageNum > 1 ? 'Penyaringan data genotipe & fenotipe selesai.' : 'Memfilter MAF, missingness, & relatedness...',
         },
         {
           id: 2,
           title: 'Analisis Struktur Populasi (PCA Otomatis)',
-          desc: 'Menghitung dekomposisi kovariat PC1–PC3 untuk koreksi stratifikasi genetik (FR-04).',
+          desc: 'Menghitung dekomposisi kovariat PC1–PC3 untuk mengoreksi stratifikasi struktur populasi.',
           status: isCompleted || stageNum > 2 ? 'selesai' : stageNum === 2 ? 'berjalan' : 'menunggu',
           message: stageNum > 2 ? 'Dekomposisi 3 PC selesai dihitung.' : stageNum === 2 ? 'Menghitung matriks kovariansi PC1–PC3...' : null,
         },
         {
           id: 3,
           title: 'Uji Asosiasi Statistik & Koreksi',
-          desc: `Mengeksekusi model ${configParams.model || 'MLM'} terhadap sifat ${configParams.trait || 'bobot_umbi_g'} dengan koreksi Bonferroni & FDR.`,
+          desc: `Mengeksekusi model ${configParams.model || 'MLM'} terhadap sifat ${configParams.trait || 'target'} dengan koreksi Bonferroni & FDR.`,
           status: isCompleted || stageNum > 3 ? 'selesai' : stageNum === 3 ? 'berjalan' : 'menunggu',
           message: stageNum > 3 ? 'Uji asosiasi genomik selesai.' : stageNum === 3 ? 'Menghitung nilai p-value dan estimasi efek beta...' : null,
         },
         {
           id: 4,
           title: 'Anotasi Kandidat Gen & Visualisasi',
-          desc: 'Memetakan SNP signifikan ke gen Allium sativum dan menyusun plot Manhattan/QQ.',
+          desc: 'Memetakan SNP signifikan ke genom referensi kandidat gen dan menyusun plot Manhattan & QQ.',
           status: isCompleted ? 'selesai' : stageNum === 4 ? 'berjalan' : 'menunggu',
           message: isCompleted ? 'Hasil visualisasi dan tabel asosiasi siap.' : stageNum === 4 ? 'Menyiapkan anotasi gen & visualisasi...' : null,
         },
@@ -280,28 +301,28 @@ export default function Step3Computation({ analysisId, onComplete }) {
       {
         id: 1,
         title: 'Quality Control (Penyaringan Sampel & SNP)',
-        desc: 'Memvalidasi missingness, MAF, HWE klonal bawang putih, dan kekerabatan KING.',
+        desc: 'Memvalidasi tingkat missingness, MAF, kepatuhan HWE, dan estimasi kekerabatan genomik.',
         status: qcStatus,
         message: qcMsg,
       },
       {
         id: 2,
         title: 'Analisis Struktur Populasi (PCA Otomatis)',
-        desc: 'Menghitung dekomposisi kovariat PC1–PC3 untuk koreksi stratifikasi genetik (FR-04).',
+        desc: 'Menghitung dekomposisi kovariat PC1–PC3 untuk mengoreksi stratifikasi struktur populasi.',
         status: pcaStatus,
         message: pcaMsg,
       },
       {
         id: 3,
         title: 'Uji Asosiasi Statistik & Koreksi',
-        desc: `Mengeksekusi model ${configParams.model || 'MLM'} terhadap sifat ${configParams.trait || 'bobot_umbi_g'} dengan koreksi Bonferroni & FDR.`,
+        desc: `Mengeksekusi model ${configParams.model || 'MLM'} terhadap sifat ${configParams.trait || 'target'} dengan koreksi Bonferroni & FDR.`,
         status: asoStatus,
         message: asoMsg,
       },
       {
         id: 4,
         title: 'Anotasi Kandidat Gen & Visualisasi',
-        desc: 'Memetakan SNP signifikan ke gen Allium sativum dan menyusun plot Manhattan/QQ.',
+        desc: 'Memetakan SNP signifikan ke genom referensi kandidat gen dan menyusun plot Manhattan & QQ.',
         status: anoStatus,
         message: anoMsg,
       },
@@ -339,7 +360,7 @@ export default function Step3Computation({ analysisId, onComplete }) {
         </div>
       )}
 
-      {/* ── Banner Status Terkunci (BR-05, AC-10.1) ── */}
+      {/* ── Banner Status Terkunci ── */}
       {!isFailed && (
         <div className="relative overflow-hidden rounded-3xl figma-card border-amber-300/80 dark:border-amber-500/40 bg-gradient-to-r from-amber-100/80 via-amber-50/60 to-transparent dark:from-amber-500/15 dark:via-amber-500/5 dark:to-transparent p-5 sm:p-6 backdrop-blur-md">
           <div className="flex items-start gap-4">
@@ -349,8 +370,8 @@ export default function Step3Computation({ analysisId, onComplete }) {
             <div className="space-y-1">
               <h3 className="text-sm sm:text-base font-sans font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <span>Komputasi Pipeline Sedang Berjalan</span>
-                <span className="inline-flex items-center rounded-full bg-amber-200 dark:bg-amber-500/20 px-2.5 py-0.5 text-[11px] font-sans font-semibold text-amber-900 dark:text-amber-400">
-                  Form Konfigurasi Dikunci (BR-05)
+                <span className="inline-flex items-center rounded-full bg-amber-200 dark:bg-amber-500/20 px-2.5 py-0.5 text-xs font-sans font-bold text-amber-950 dark:text-amber-300">
+                  Form Konfigurasi Dikunci
                 </span>
               </h3>
               <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed max-w-3xl">
@@ -417,15 +438,15 @@ export default function Step3Computation({ analysisId, onComplete }) {
               Kemajuan Komputasi Pipeline
             </span>
             {isFailed ? (
-              <span className="rounded-full bg-rose-100 dark:bg-rose-500/20 text-rose-700 dark:text-rose-300 px-2 py-0.5 text-[10px] font-bold">
+              <span className="rounded-full bg-rose-100 dark:bg-rose-500/20 text-rose-800 dark:text-rose-300 px-2.5 py-0.5 text-xs font-bold">
                 Terhenti (Galat)
               </span>
             ) : isCompleted ? (
-              <span className="rounded-full bg-emerald-100 dark:bg-emerald-500/20 text-emerald-800 dark:text-emerald-300 px-2 py-0.5 text-[10px] font-bold">
+              <span className="rounded-full bg-emerald-100 dark:bg-emerald-500/20 text-emerald-800 dark:text-emerald-300 px-2.5 py-0.5 text-xs font-bold">
                 100% Selesai
               </span>
             ) : (
-              <span className="rounded-full bg-cyan-100 dark:bg-[#06B6D4]/20 text-cyan-900 dark:text-[#06B6D4] px-2 py-0.5 text-[10px] font-bold">
+              <span className="rounded-full bg-cyan-100 dark:bg-[#06B6D4]/20 text-cyan-900 dark:text-[#06B6D4] px-2.5 py-0.5 text-xs font-bold">
                 Sedang Diproses...
               </span>
             )}
@@ -519,20 +540,20 @@ export default function Step3Computation({ analysisId, onComplete }) {
                       >
                         {stage.title}
                       </p>
-                      <span className="text-[10px] font-mono capitalize">
+                      <span className="text-xs font-mono capitalize">
                         {isDone && <span className="text-emerald-600 dark:text-emerald-400 font-bold">Selesai</span>}
-                        {isRunning && <span className="text-cyan-600 dark:text-[#06B6D4] font-bold">Berjalan...</span>}
+                        {isRunning && <span className="text-[#0284C7] dark:text-[#06B6D4] font-bold">Berjalan...</span>}
                         {isFail && <span className="text-rose-600 dark:text-rose-400 font-bold">Gagal</span>}
-                        {!isDone && !isRunning && !isFail && <span className="text-slate-400">Menunggu</span>}
+                        {!isDone && !isRunning && !isFail && <span className="text-slate-500 font-semibold">Menunggu</span>}
                       </span>
                     </div>
 
-                    <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed">
+                    <p className="text-xs sm:text-sm text-slate-700 dark:text-slate-300 leading-relaxed font-medium">
                       {stage.desc}
                     </p>
 
                     {stage.message && (
-                      <p className="text-[11px] font-mono text-[#5B4DFE] dark:text-[#06B6D4] bg-black/5 dark:bg-black/25 px-2.5 py-1 rounded-md mt-1">
+                      <p className="text-xs font-mono font-bold text-[#0284C7] dark:text-[#06B6D4] bg-cyan-50 dark:bg-black/30 px-3 py-1.5 rounded-lg mt-1.5 border border-cyan-200 dark:border-white/5">
                         {stage.message}
                       </p>
                     )}
@@ -548,7 +569,7 @@ export default function Step3Computation({ analysisId, onComplete }) {
               <button
                 type="button"
                 onClick={onComplete}
-                className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-5 py-3.5 text-sm font-sans font-bold text-white shadow-lg shadow-emerald-500/30 hover:-translate-y-[1px] hover:shadow-xl active:scale-[0.97] active:brightness-95 transition-all duration-100"
+                className="w-full figma-btn-primary py-3.5 text-sm sm:text-base cursor-pointer"
               >
                 <span>Lihat Hasil Analisis & Visualisasi Plot (Langkah 4)</span>
                 <ArrowRight className="h-4 w-4" />
@@ -559,67 +580,67 @@ export default function Step3Computation({ analysisId, onComplete }) {
 
         {/* Kolom Kanan: Ringkasan QC & Karusel Tips Edukatif (5 Kolom) */}
         <div className="lg:col-span-5 space-y-4">
-          {/* Card Ringkasan Hasil Penyaringan QC (AC-03.1 / Poin #3) */}
+          {/* Card Ringkasan Hasil Penyaringan QC */}
           <div className="rounded-3xl figma-card p-4 sm:p-5 space-y-3">
             <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-2.5">
               <div className="flex items-center gap-2">
                 <Filter className="h-4 w-4 text-[#06B6D4]" />
-                <h5 className="text-xs font-sans font-bold text-slate-900 dark:text-white">
-                  Ringkasan Penyaringan QC (AC-03.1)
+                <h5 className="text-sm font-sans font-bold text-slate-900 dark:text-white">
+                  Ringkasan Penyaringan Quality Control
                 </h5>
               </div>
               {isQcDone && (
-                <span className="rounded-full bg-emerald-100 dark:bg-emerald-500/20 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-500/40 px-2 py-0.5 text-[10px] font-bold">
+                <span className="rounded-full bg-emerald-100 dark:bg-emerald-500/20 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-500/40 px-2.5 py-0.5 text-xs font-bold">
                   QC Selesai
                 </span>
               )}
             </div>
 
             <div className="grid grid-cols-2 gap-2.5 text-xs">
-              <div className="glass-subcard p-3">
-                <span className="text-[10px] font-sans font-semibold text-slate-500 dark:text-slate-400 block uppercase tracking-wider">
+              <div className="glass-subcard p-3.5">
+                <span className="text-xs font-sans font-bold text-slate-800 dark:text-slate-200 block uppercase tracking-wider">
                   Sampel Dianalisis
                 </span>
-                <span className="font-serif text-lg font-bold text-slate-900 dark:text-white tabular-nums">
+                <span className="font-serif text-xl font-bold text-slate-900 dark:text-white tabular-nums">
                   {samplesPassed}{' '}
-                  <span className="text-[11px] font-sans font-normal text-slate-500 dark:text-slate-400">
+                  <span className="text-xs font-sans font-semibold text-slate-600 dark:text-slate-300">
                     / {samplesTotal} total
                   </span>
                 </span>
                 {samplesFiltered > 0 && (
-                  <span className="text-[10px] font-sans text-amber-600 dark:text-amber-400 block mt-0.5">
+                  <span className="text-xs font-sans font-semibold text-amber-700 dark:text-amber-400 block mt-1">
                     -{samplesFiltered} disaring (mind/kekerabatan)
                   </span>
                 )}
               </div>
 
-              <div className="glass-subcard p-3">
-                <span className="text-[10px] font-sans font-semibold text-slate-500 dark:text-slate-400 block uppercase tracking-wider">
+              <div className="glass-subcard p-3.5">
+                <span className="text-xs font-sans font-bold text-slate-800 dark:text-slate-200 block uppercase tracking-wider">
                   SNP Lolos Filter
                 </span>
-                <span className="font-serif text-lg font-bold text-slate-900 dark:text-white tabular-nums">
+                <span className="font-serif text-xl font-bold text-slate-900 dark:text-white tabular-nums">
                   {snpsPassed}{' '}
-                  <span className="text-[11px] font-sans font-normal text-slate-500 dark:text-slate-400">
+                  <span className="text-xs font-sans font-semibold text-slate-600 dark:text-slate-300">
                     / {snpsTotal} total
                   </span>
                 </span>
                 {snpsFiltered > 0 && (
-                  <span className="text-[10px] font-sans text-amber-600 dark:text-amber-400 block mt-0.5">
+                  <span className="text-xs font-sans font-semibold text-amber-700 dark:text-amber-400 block mt-1">
                     -{snpsFiltered} disaring (MAF/geno/HWE)
                   </span>
                 )}
               </div>
             </div>
 
-            <div className="rounded-xl glass-subcard p-2.5 text-[11px] text-slate-700 dark:text-slate-300 flex items-center justify-between">
+            <div className="rounded-xl glass-subcard p-3 text-xs sm:text-sm text-slate-800 dark:text-slate-200 flex items-center justify-between font-semibold">
               <span className="font-sans">Sifat fenotipe target:</span>
-              <span className="font-mono font-semibold text-[#5B4DFE] dark:text-[#06B6D4]">
-                {configParams.trait || uploadSummary?.fenotipe?.sifat_tersedia?.[0] || 'bobot_umbi_g'}
+              <span className="font-mono font-bold text-[#0284C7] dark:text-[#06B6D4]">
+                {configParams.trait || uploadSummary?.fenotipe?.sifat_tersedia?.[0] || 'trait_target'}
               </span>
             </div>
           </div>
 
-          {/* Card Tips Edukatif Dinamis (FR-10, DESIGN.md Bagian 8B) */}
+          {/* Card Tips Edukatif Dinamis */}
           <div
             onMouseEnter={() => setIsHovered(true)}
             onMouseLeave={() => setIsHovered(false)}
@@ -630,47 +651,62 @@ export default function Step3Computation({ analysisId, onComplete }) {
                 <div className="h-6 w-6 rounded-lg bg-cyan-100 dark:bg-[#06B6D4]/20 flex items-center justify-center text-cyan-800 dark:text-[#06B6D4]">
                   <HelpCircle className="h-3.5 w-3.5" />
                 </div>
-                <span className="text-xs font-sans font-bold text-cyan-900 dark:text-[#06B6D4]">
-                  Tips Edukatif Riset (FR-10)
+                <span className="text-sm font-sans font-bold text-cyan-950 dark:text-[#06B6D4]">
+                  Tips Edukatif Riset Genomik
                 </span>
               </div>
-              <span className="font-mono text-[10px] text-slate-500 dark:text-slate-400">
-                {tipIndex + 1} / {TIPS_EDUKATIF.length}
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-mono bg-cyan-100/90 dark:bg-[#06B6D4]/20 text-cyan-900 dark:text-cyan-300 border border-cyan-300/60 dark:border-[#06B6D4]/30 flex items-center gap-1.5 shadow-sm font-bold">
+                  <span className={`h-1.5 w-1.5 rounded-full ${isHovered ? 'bg-amber-500' : 'bg-cyan-500 animate-pulse'}`} />
+                  {isHovered ? 'DIJEDA' : `${countdown}s`}
+                </span>
+                <span className="font-mono text-xs font-bold text-slate-600 dark:text-slate-300">
+                  {tipIndex + 1} / {TIPS_EDUKATIF.length}
+                </span>
+              </div>
             </div>
 
-            <div className="min-h-[92px] space-y-1.5">
-              <h6 className="text-xs font-sans font-bold text-slate-900 dark:text-white">{currentTip?.judul}</h6>
-              <p className="text-xs sm:text-[13px] font-serif leading-relaxed text-slate-700 dark:text-slate-300 italic">
+            {/* Bilah Progres Countdown 6s */}
+            <div className="w-full h-1.5 bg-slate-200/80 dark:bg-white/10 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-cyan-500 via-sky-500 to-indigo-500 rounded-full"
+                style={{
+                  width: `${(countdown / 6) * 100}%`,
+                  transition: countdown === 6 ? 'none' : 'width 1s linear',
+                }}
+              />
+            </div>
+
+            {/* Konten Tips Berotasi dengan Efek Transisi Fade-In */}
+            <div key={tipIndex} className="min-h-[92px] space-y-1.5 animate-fade-in">
+              <h6 className="text-sm font-sans font-bold text-slate-900 dark:text-white">{currentTip?.judul}</h6>
+              <p className="text-xs sm:text-sm font-serif leading-relaxed text-slate-800 dark:text-slate-200 italic">
                 &ldquo;{currentTip?.teks}&rdquo;
               </p>
             </div>
 
-            {/* Kontrol Navigasi Manual */}
-            <div className="flex items-center justify-between pt-2 border-t border-slate-200 dark:border-white/10 text-[10px]">
-              <span className="text-slate-500 dark:text-slate-400 text-[10px] font-sans">
-                {isHovered ? 'Rotasi dijeda (hover)' : 'Berotasi otomatis setiap 6s'}
+            {/* Kontrol Navigasi Manual & Teks Hitung Mundur */}
+            <div className="flex items-center justify-between pt-2 border-t border-slate-200 dark:border-white/10 text-xs">
+              <span className="text-slate-700 dark:text-slate-300 text-xs font-sans flex items-center gap-1.5 font-semibold">
+                <span className={`h-2 w-2 rounded-full ${isHovered ? 'bg-amber-500' : 'bg-cyan-500 animate-pulse'}`} />
+                {isHovered ? 'Rotasi dijeda (kursor diarahkan)' : `Berotasi otomatis dalam ${countdown}s`}
               </span>
               <div className="flex items-center gap-1.5">
                 <button
                   type="button"
-                  onClick={() =>
-                    setTipIndex(
-                      (prev) => (prev - 1 + TIPS_EDUKATIF.length) % TIPS_EDUKATIF.length
-                    )
-                  }
-                  className="rounded-lg border border-slate-300 dark:border-white/10 bg-slate-100 dark:bg-white/5 p-1 hover:bg-slate-200 dark:hover:bg-white/10 active:scale-90 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-all duration-100"
-                  title="Sebelumnya"
+                  onClick={handlePrevTip}
+                  className="rounded-lg border border-slate-300 dark:border-white/10 bg-white/90 dark:bg-white/5 p-1.5 hover:bg-slate-200 dark:hover:bg-white/10 active:scale-90 text-slate-800 dark:text-slate-200 transition-all duration-100 shadow-sm"
+                  title="Sebelumnya (Reset 6s)"
                 >
-                  <ChevronLeft className="h-3.5 w-3.5" />
+                  <ChevronLeft className="h-4 w-4" />
                 </button>
                 <button
                   type="button"
-                  onClick={() => setTipIndex((prev) => (prev + 1) % TIPS_EDUKATIF.length)}
-                  className="rounded-lg border border-slate-300 dark:border-white/10 bg-slate-100 dark:bg-white/5 p-1 hover:bg-slate-200 dark:hover:bg-white/10 active:scale-90 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-all duration-100"
-                  title="Berikutnya"
+                  onClick={handleNextTip}
+                  className="rounded-lg border border-slate-300 dark:border-white/10 bg-white/90 dark:bg-white/5 p-1.5 hover:bg-slate-200 dark:hover:bg-white/10 active:scale-90 text-slate-800 dark:text-slate-200 transition-all duration-100 shadow-sm"
+                  title="Berikutnya (Reset 6s)"
                 >
-                  <ChevronRight className="h-3.5 w-3.5" />
+                  <ChevronRight className="h-4 w-4" />
                 </button>
               </div>
             </div>

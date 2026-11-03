@@ -4,10 +4,10 @@ import { memo } from 'react';
  * DnaBackdrop - Latar Belakang Atmosferik Heliks DNA Sesuai Desain Figma
  * Menggunakan grafis vektor DNA ambient kiri & kanan serta gradasi kosmik halus.
  */
-function DnaBackdrop({ children, showDna = true, showVignette = true, className = '' }) {
+function DnaBackdrop({ children, showDna = false, showVignette = false, className = '' }) {
   return (
     <div
-      className={`relative min-h-screen w-full overflow-hidden bg-gradient-to-br from-[#E8EEFA] via-[#F1F5FD] to-[#E5EAFC] dark:from-[#080D24] dark:via-[#111A3E] dark:to-[#1B1240] ${className}`}
+      className={`relative z-10 min-h-screen w-full overflow-hidden bg-transparent ${className}`}
     >
       {/* ── Background Glow & DNA Graphics (Only shown when showDna is true) ── */}
       {showDna && (

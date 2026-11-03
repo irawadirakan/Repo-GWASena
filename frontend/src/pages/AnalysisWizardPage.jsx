@@ -19,7 +19,7 @@ import AccessDeniedState from '../components/common/AccessDeniedState.jsx';
 import ErrorMessageArea from '../components/common/ErrorMessageArea.jsx';
 
 /**
- * AnalysisWizardPage - Kontainer Orkestrasi Sesi Analisis GWAS (S-04 s.d. S-09) (Figma Aligned)
+ * AnalysisWizardPage - Kontainer Orkestrasi Sesi Analisis GWAS (Figma Aligned)
  * Acuan: 04c — Unggah_ Valid (Boleh Lanjut).png & 06 — Komputasi_ QC Berjalan.png
  */
 export default function AnalysisWizardPage() {
@@ -53,6 +53,17 @@ export default function AnalysisWizardPage() {
     try {
       const data = await analysisService.getAnalysisDetail(id);
       setCurrentAnalysis(data);
+
+      // Jika analisis sudah selesai, otomatis muat hasil lengkap dan plot asli dari backend
+      if (data.status === 'selesai') {
+        try {
+          const fullResults = await analysisService.getFullAnalysisResults(id);
+          useAnalysisStore.getState().setResults(fullResults);
+          useAnalysisStore.getState().setIsSimulated(false);
+        } catch (rErr) {
+          console.warn('Gagal memuat hasil asosiasi sesi selesai:', rErr);
+        }
+      }
     } catch (err) {
       if (err.status === 403) {
         setIsAccessDenied(true);
@@ -88,7 +99,10 @@ export default function AnalysisWizardPage() {
   const statusKey = currentAnalysis?.status?.toLowerCase() || 'draft';
   const statusConfig = ANALYSIS_STATUSES[statusKey] || ANALYSIS_STATUSES.draft;
   const availableTraits =
-    uploadSummary?.fenotipe?.sifat_tersedia || currentAnalysis?.sifat_tersedia || [];
+    uploadSummary?.fenotipe?.daftar_sifat ||
+    uploadSummary?.fenotipe?.sifat_tersedia ||
+    currentAnalysis?.sifat_tersedia ||
+    [];
 
   return (
     <div className="space-y-6 pb-16 animate-fade-in">
@@ -105,26 +119,26 @@ export default function AnalysisWizardPage() {
           <div className="flex items-center gap-2">
             <Link
               to="/dashboard"
-              className="inline-flex items-center gap-1.5 text-xs text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors"
+              className="inline-flex items-center gap-1.5 text-sm font-bold text-slate-700 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white transition-colors"
             >
-              <ArrowLeft className="h-3.5 w-3.5" />
+              <ArrowLeft className="h-4 w-4" />
               <span>Dashboard</span>
             </Link>
-            <span className="text-slate-400 dark:text-slate-500">/</span>
-            <span className="font-mono text-xs text-cyan-700 dark:text-[#06B6D4] font-semibold">Sesi #{id}</span>
+            <span className="text-slate-400 dark:text-slate-500 font-bold">/</span>
+            <span className="font-mono text-sm text-[#0284C7] dark:text-[#06B6D4] font-bold">Sesi #{id}</span>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
+            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
               {currentAnalysis?.analysis_name || `Analisis GWAS #${id}`}
             </h1>
 
             {/* Badge Status */}
             <span
-              className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-0.5 text-xs font-semibold ${statusConfig.badgeClass}`}
+              className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-bold ${statusConfig.badgeClass}`}
             >
               <span
-                className="h-1.5 w-1.5 rounded-full"
+                className="h-2 w-2 rounded-full"
                 style={{ backgroundColor: statusConfig.color }}
               />
               {statusConfig.label}
@@ -132,7 +146,7 @@ export default function AnalysisWizardPage() {
 
             {/* Simulation Badge if active */}
             {isSimulated && (
-              <span className="rounded-full bg-amber-100 dark:bg-amber-500/20 border border-amber-300 dark:border-amber-500/40 px-2.5 py-0.5 text-[11px] font-bold text-amber-800 dark:text-amber-300">
+              <span className="rounded-full bg-amber-100 dark:bg-amber-500/20 border border-amber-300 dark:border-amber-500/40 px-2.5 py-0.5 text-xs font-bold text-amber-900 dark:text-amber-300">
                 Simulasi UI Aktif
               </span>
             )}
@@ -140,11 +154,9 @@ export default function AnalysisWizardPage() {
         </div>
 
         <div className="flex items-center gap-2 self-start sm:self-auto">
-          <div className="glass-subcard px-3 py-1.5 text-xs text-slate-500 dark:text-slate-400">
-            <span className="font-serif italic font-medium text-slate-700 dark:text-slate-300">
-              {currentAnalysis?.organism || 'Allium sativum L.'}
-            </span>{' '}
-            <span className="text-[11px] font-sans">(2n=16)</span>
+          <div className="glass-subcard px-4 py-2 text-sm flex items-center gap-2 text-slate-800 dark:text-slate-100 font-bold shadow-sm">
+            <Dna className="h-4 w-4 text-[#0284C7] dark:text-[#06B6D4]" />
+            <span>{currentAnalysis?.organism || 'Genomic Association Suite'}</span>
           </div>
         </div>
       </div>
@@ -204,12 +216,14 @@ export default function AnalysisWizardPage() {
 
         {activeStep === 4 && (
           <Step4Results
+            analysisId={id}
             onNavigateStep={(stepNum) => setActiveStep(stepNum)}
           />
         )}
 
         {activeStep === 5 && (
           <Step5Annotation
+            analysisId={id}
             onNavigateStep={(stepNum) => setActiveStep(stepNum)}
           />
         )}

@@ -47,7 +47,7 @@ export default function UploadStep({ onNext }) {
     <section className="panel" style={{ marginTop: "1.5rem" }}>
       <h2>1. Unggah Berkas Analisis</h2>
       <p className="muted" style={{ marginBottom: "1rem" }}>
-        Unggah berkas genomik genotipe dan metadata fenotipe sampel bawang putih.
+        Unggah berkas genomik genotipe dan metadata fenotipe sampel penelitian.
       </p>
 
       {errorMsg && (

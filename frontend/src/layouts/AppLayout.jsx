@@ -17,8 +17,8 @@ import { useAuthStore } from '../store/useAuthStore.js';
 import { analysisService } from '../services/analysisService.js';
 
 /**
- * AppLayout - Layout Aplikasi Terproteksi Sesuai Desain Figma (S-03 s.d. S-10)
- * Acuan: frontend/screens/03 — Dashboard (Pengguna Analisis).png & 03c — Dashboard_ Menu Akun Terbuka.png
+ * AppLayout - Layout Aplikasi Terproteksi Sesuai Desain Figma
+ * Menyediakan navigasi utama, status bar sistem, dan menu akun.
  */
 export default function AppLayout() {
   const navigate = useNavigate();
@@ -70,7 +70,7 @@ export default function AppLayout() {
   const isDegraded = health?.status === 'degraded';
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#E8EEFA] via-[#F1F5FD] to-[#E5EAFC] dark:from-[#080D24] dark:via-[#111A3E] dark:to-[#1B1240] text-slate-900 dark:text-white flex flex-col font-sans antialiased">
+    <div className="relative z-10 min-h-screen bg-transparent text-slate-900 dark:text-white flex flex-col font-sans antialiased">
       {/* ── App Topbar / Header Sesuai Figma (Floating Liquid Glass) ── */}
       <header className="sticky top-0 z-40 glass-navbar px-4 sm:px-6 lg:px-8">
         <div className="mx-auto flex max-w-7xl items-center justify-between h-16">
@@ -87,7 +87,7 @@ export default function AppLayout() {
                 className={({ isActive }) =>
                   `text-sm font-semibold tracking-tight transition-all ${
                     isActive
-                      ? 'text-[#5B4DFE] dark:text-white font-bold drop-shadow-[0_0_8px_rgba(91,77,254,0.3)]'
+                      ? 'text-[#5B4DFE] dark:text-white font-bold'
                       : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                   }`
                 }
@@ -100,7 +100,7 @@ export default function AppLayout() {
                 className={({ isActive }) =>
                   `text-sm font-semibold tracking-tight transition-all ${
                     isActive
-                      ? 'text-[#5B4DFE] dark:text-white font-bold drop-shadow-[0_0_8px_rgba(91,77,254,0.3)]'
+                      ? 'text-[#5B4DFE] dark:text-white font-bold'
                       : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                   }`
                 }
@@ -117,7 +117,7 @@ export default function AppLayout() {
               <button
                 type="button"
                 onClick={() => setIsHealthOpen(!isHealthOpen)}
-                className="flex items-center gap-1.5 rounded-full border border-slate-300 dark:border-white/10 bg-white/95 dark:bg-[#162142]/80 px-2.5 py-1 text-[11px] font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[#1E2C58] active:scale-95 transition-all duration-100 shadow-sm"
+                className="flex items-center gap-2 rounded-full border border-slate-300 dark:border-white/10 bg-white/95 dark:bg-[#162142]/80 px-3 py-1.5 text-xs font-semibold text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#1E2C58] active:scale-95 transition-all duration-100 shadow-sm"
                 title="Status Koneksi Backend"
               >
                 <span className="relative flex h-2 w-2">
@@ -132,10 +132,10 @@ export default function AppLayout() {
                     }`}
                   />
                 </span>
-                <span className="hidden xl:inline font-medium">
-                  {isHealthy ? 'Siap' : isDegraded ? 'Degradasi' : 'Offline'}
+                <span className="hidden xl:inline font-semibold">
+                  {isHealthy ? 'Backend Siap' : isDegraded ? 'Degradasi' : 'Offline'}
                 </span>
-                <Activity className="h-3 w-3 text-slate-400" />
+                <Activity className="h-3.5 w-3.5 text-slate-500" />
               </button>
 
               {/* Popover Detail Kesehatan Sistem */}
@@ -189,32 +189,32 @@ export default function AppLayout() {
                 aria-expanded={accountMenuOpen}
               >
                 {/* Avatar Bulat Bergradien (Figma Style) */}
-                <span className="h-6 w-6 rounded-full bg-gradient-to-tr from-[#38BDF8] via-[#6366F1] to-[#818CF8] flex items-center justify-center text-white text-[11px] font-bold shadow-inner">
+                <span className="h-6 w-6 rounded-full bg-gradient-to-tr from-[#38BDF8] via-[#6366F1] to-[#818CF8] flex items-center justify-center text-white text-xs font-bold shadow-inner">
                   {user?.username ? user.username.charAt(0).toUpperCase() : 'U'}
                 </span>
 
-                <span className="text-xs font-semibold text-slate-800 dark:text-white">
+                <span className="text-sm font-bold text-slate-900 dark:text-white">
                   {user?.username || '[User]'}
                 </span>
 
                 {accountMenuOpen ? (
-                  <ChevronUp className="h-3.5 w-3.5 text-slate-400" />
+                  <ChevronUp className="h-4 w-4 text-slate-500" />
                 ) : (
-                  <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
+                  <ChevronDown className="h-4 w-4 text-slate-500" />
                 )}
               </button>
 
-              {/* Account Dropdown Menu Sesuai 03c — Dashboard_ Menu Akun Terbuka.png */}
+              {/* Account Dropdown Menu */}
               {accountMenuOpen && (
-                <div className="absolute right-0 top-full mt-2 w-56 figma-card p-3 z-50 origin-top-right animate-dropdown-in text-xs">
+                <div className="absolute right-0 top-full mt-2 w-60 figma-card p-3.5 z-50 origin-top-right animate-dropdown-in text-sm">
                   <div className="px-2 py-1.5">
                     <p className="font-bold text-slate-900 dark:text-white truncate">
                       {user?.username || '[User]'}
                     </p>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                    <p className="text-xs text-slate-600 dark:text-slate-300 truncate">
                       {user?.email || 'peneliti@apps.ipb.ac.id'}
                     </p>
-                    <span className="mt-1 inline-block rounded-full bg-[#5B4DFE]/15 dark:bg-[#5B4DFE]/20 px-2 py-0.5 text-[10px] font-semibold text-[#5B4DFE] dark:text-[#818CF8]">
+                    <span className="mt-1.5 inline-block rounded-full bg-[#5B4DFE]/15 dark:bg-[#5B4DFE]/20 px-2.5 py-0.5 text-xs font-bold text-[#5B4DFE] dark:text-[#818CF8]">
                       {user?.role === 'administrator' ? 'Administrator' : 'Pengguna Analisis'}
                     </span>
                   </div>
