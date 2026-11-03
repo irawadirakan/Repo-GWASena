@@ -14,7 +14,7 @@ const CROSSFADE_WINDOW_SEC = 2.0;
  * - The incoming buffer is placed on top (z-index: 2) and fades from opacity 0 -> 1.
  * - Combined opacity is strictly 100% at all times (Zero Opacity Gap, Zero Blackout).
  */
-function DualVideoPlayer({ src, isActive }) {
+function DualVideoPlayer({ src, isActive, filter }) {
   const videoRefA = useRef(null);
   const videoRefB = useRef(null);
   const activeBufferRef = useRef('A');
@@ -237,6 +237,7 @@ function DualVideoPlayer({ src, isActive }) {
           opacity: layers.a.opacity,
           zIndex: layers.a.zIndex,
           transition: layers.a.transition,
+          filter: filter || undefined,
         }}
       />
 
@@ -254,6 +255,7 @@ function DualVideoPlayer({ src, isActive }) {
           opacity: layers.b.opacity,
           zIndex: layers.b.zIndex,
           transition: layers.b.transition,
+          filter: filter || undefined,
         }}
       />
     </div>
@@ -315,13 +317,13 @@ function SeamlessVideoBackground() {
         <MemoizedDualVideoPlayer
           src="/assets/backgrounds/dna-light.mp4"
           isActive={!isDark}
+          filter="contrast(1.15) brightness(0.96) saturate(1.15)"
         />
-        {/* Light Mode Ambient Overlay: Soft Clinical Sky-Blue Tint (DentaCare Aesthetic) */}
+        {/* Light Mode Ambient Overlay: Ultra-Clear Clinical Sky-Blue (0.22 alpha for vivid 3D DNA rotation) */}
         <div
-          className="absolute inset-0 backdrop-blur-[2px] pointer-events-none"
+          className="absolute inset-0 pointer-events-none"
           style={{
-            background:
-              'linear-gradient(180deg, rgba(219, 234, 254, 0.42) 0%, rgba(224, 242, 254, 0.35) 100%)',
+            background: 'rgba(224, 242, 254, 0.22)',
           }}
         />
       </div>

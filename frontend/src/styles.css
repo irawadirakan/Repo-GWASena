@@ -98,9 +98,9 @@
     border-radius: 1.5rem;
     transition: all 180ms cubic-bezier(0.22, 1, 0.36, 1);
     /* Light Mode: Icy Sky-Blue Translucent Gradient with Specular White Border */
-    background: linear-gradient(145deg, rgba(235, 248, 255, 0.78) 0%, rgba(219, 238, 254, 0.65) 55%, rgba(207, 250, 254, 0.70) 100%);
-    backdrop-filter: blur(20px) saturate(180%);
-    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    background: linear-gradient(145deg, rgba(235, 248, 255, 0.70) 0%, rgba(219, 238, 254, 0.64) 55%, rgba(207, 250, 254, 0.68) 100%);
+    backdrop-filter: blur(16px) saturate(180%);
+    -webkit-backdrop-filter: blur(16px) saturate(180%);
     border: 1.5px solid rgba(255, 255, 255, 0.92);
     box-shadow: inset 0 2px 4px rgba(255, 255, 255, 0.95),
                 0 14px 32px -8px rgba(14, 116, 144, 0.12),
@@ -119,9 +119,9 @@
   .glass-subcard {
     border-radius: 1rem;
     transition: all 150ms ease;
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.72) 0%, rgba(224, 242, 254, 0.68) 100%);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.68) 0%, rgba(224, 242, 254, 0.62) 100%);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
     border: 1.5px solid rgba(255, 255, 255, 0.95);
     box-shadow: 0 4px 14px rgba(14, 165, 233, 0.08),
                 inset 0 1px 1.5px 0 rgba(255, 255, 255, 0.95);
@@ -428,5 +428,119 @@ html.dark .text-slate-300 {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+}
+
+/* ── Standar Cetak Dokumen Ilmiah A4 (@media print) — FR-09 & AC-09.2 ── */
+@media print {
+  /* Sembunyikan elemen antarmuka non-cetak */
+  .no-print,
+  nav,
+  header,
+  footer,
+  aside,
+  video,
+  canvas:not(.print-canvas),
+  .video-background-layer,
+  .figma-theme-toggle,
+  .toast,
+  .tooltip,
+  .fixed.inset-0.bg-black\/75 {
+    display: none !important;
+  }
+
+  /* Reset tampilan cetak dokumen A4 */
+  html, body {
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+    background-image: none !important;
+    color: #0f172a !important;
+    font-size: 10pt !important;
+    line-height: 1.4 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Tampilkan container laporan di root cetak */
+  .print-modal-overlay {
+    position: static !important;
+    inset: auto !important;
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow: visible !important;
+    backdrop-filter: none !important;
+    z-index: auto !important;
+    display: block !important;
+  }
+
+  .print-document-container {
+    position: static !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+    color: #0f172a !important;
+    border-radius: 0 !important;
+    overflow: visible !important;
+    max-height: none !important;
+  }
+
+  .pdf-page {
+    page-break-after: always !important;
+    break-after: page !important;
+    min-height: 297mm !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+    padding: 10mm 15mm !important;
+    margin: 0 !important;
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+    color: #0f172a !important;
+  }
+
+  .pdf-page:last-child {
+    page-break-after: avoid !important;
+    break-after: avoid !important;
+  }
+
+  .print-avoid-break {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  .print-break-after {
+    page-break-after: always !important;
+    break-after: always !important;
+  }
+
+  /* Styling tabel cetak ilmiah berkontras tinggi */
+  .print-table {
+    border-collapse: collapse !important;
+    width: 100% !important;
+    color: #0f172a !important;
+  }
+
+  .print-table th, .print-table td {
+    border: 1px solid #cbd5e1 !important;
+    padding: 4px 6px !important;
+  }
+
+  .print-table th {
+    background-color: #f1f5f9 !important;
+    color: #0f172a !important;
+    font-weight: 700 !important;
   }
 }
