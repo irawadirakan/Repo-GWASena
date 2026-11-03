@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   Download,
   FileSpreadsheet,
@@ -8,39 +8,94 @@ import {
   ArrowLeft,
   Printer,
   X,
-  Dna,
   Loader2,
   AlertTriangle,
 } from 'lucide-react';
 import { useAnalysisStore } from '../../store/useAnalysisStore.js';
 import { generateBenchmarkResults } from '../../services/mockResults.js';
 import { analysisService } from '../../services/analysisService.js';
+import ScientificReportModal from './ScientificReportModal.jsx';
 
 /**
  * Step6Export (Langkah 6): Ekspor Data & Laporan Analisis (Figma Aligned)
  * Acuan: 09 — Ekspor & Laporan.png & 09d — Ekspor_ Laporan Tanpa Kandidat Gen.png
  *
  * Mendukung unduhan resmi CSV hasil asosiasi, gambar plot PNG resolusi tinggi
- * (Plot Manhattan dan QQ Plot dari backend matplotlib), serta laporan ilmiah cetak/PDF.
+ * (Plot Manhattan dan QQ Plot dari backend matplotlib), serta laporan ilmiah cetak/PDF
+ * terstandarisasi A4 (FR-09, AC-09.2, Modul M-08).
  */
-export default function Step6Export({ analysisId, onNavigateStep }) {
-  const { results, configParams, uploadSummary, isSimulated } = useAnalysisStore();
-  const activeResults = results || generateBenchmarkResults(configParams, uploadSummary);
+export default function Step6Export({ analysisId, analysis, onNavigateStep }) {
+  const { results, setResults, configParams, uploadSummary, isSimulated } = useAnalysisStore();
 
-  const rawBackend = activeResults?.raw_backend_results || {};
-  const qc = activeResults?.summary?.qc || rawBackend?.qc || {};
-  const asosiasi = activeResults?.summary?.asosiasi || rawBackend?.asosiasi || {};
-  const snps = activeResults?.association_results || [];
-  const significantSnps = activeResults?.significant_snps || [];
-  const topSnps = activeResults?.top_snps || [];
-  const candidateGenes = activeResults?.candidate_genes || [];
-  const summary = activeResults?.summary || {};
-
+  const [isLoadingData, setIsLoadingData] = useState(false);
+  const [annotationData, setAnnotationData] = useState(null);
   const [downloadingCsv, setDownloadingCsv] = useState(false);
   const [downloadingPlot, setDownloadingPlot] = useState(null); // 'manhattan' | 'qq' | null
   const [downloadSuccess, setDownloadSuccess] = useState(null);
   const [exportError, setExportError] = useState(null);
+
+  // State Kontrol Laporan Ilmiah (Modal, Auto-Download & Print)
   const [showReportModal, setShowReportModal] = useState(false);
+  const [autoPrintReport, setAutoPrintReport] = useState(false);
+  const [autoDownloadPdf, setAutoDownloadPdf] = useState(false);
+
+  // Otomatis muat hasil asosiasi dan anotasi jika pengguna melompat langsung ke Langkah 6 atau me-refresh halaman
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadStep6Data() {
+      if (!analysisId || isSimulated) return;
+
+      const needsResults = !results || !results.association_results;
+      const needsAnnotation = !annotationData;
+
+      if (needsResults || needsAnnotation) {
+        setIsLoadingData(true);
+        try {
+          const promises = [];
+          if (needsResults) {
+            promises.push(
+              analysisService
+                .getFullAnalysisResults(analysisId)
+                .then((res) => {
+                  if (isMounted) setResults(res);
+                })
+                .catch((e) => console.warn('Gagal memuat hasil asosiasi sesi:', e))
+            );
+          }
+          if (needsAnnotation) {
+            promises.push(
+              analysisService
+                .getAnnotation(analysisId, true)
+                .then((ann) => {
+                  if (isMounted) setAnnotationData(ann);
+                })
+                .catch((e) => console.warn('Gagal memuat anotasi sesi:', e))
+            );
+          }
+          await Promise.all(promises);
+        } finally {
+          if (isMounted) setIsLoadingData(false);
+        }
+      }
+    }
+
+    loadStep6Data();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [analysisId, isSimulated, results, annotationData, setResults]);
+
+  const activeResults = useMemo(() => {
+    if (results && (results.association_results || results.raw_backend_results)) {
+      return results;
+    }
+    return generateBenchmarkResults(configParams, uploadSummary);
+  }, [results, configParams, uploadSummary]);
+
+  const snps = Array.isArray(activeResults?.association_results) ? activeResults.association_results : [];
+  const summary = activeResults?.summary || {};
 
   // 1. Unduh CSV Hasil Asosiasi (Endpoint resmi: GET /api/analyses/{id}/results/csv)
   async function handleDownloadCsv() {
@@ -80,18 +135,18 @@ export default function Step6Export({ analysisId, onNavigateStep }) {
       ];
 
       const rows = snps.map((s) => [
-        s.snp_id,
-        s.chromosome,
-        s.position,
-        s.p_value,
-        s.neg_log10_p ?? -Math.log10(s.p_value),
-        s.q_value ?? '',
-        s.effect_size,
-        s.std_error,
-        s.allele_ref,
-        s.allele_alt,
-        s.maf,
-        s.is_significant ? 'TRUE' : 'FALSE',
+        s?.snp_id || '',
+        s?.chromosome || '',
+        s?.position || '',
+        s?.p_value || '',
+        s?.neg_log10_p ?? (s?.p_value ? -Math.log10(s.p_value) : ''),
+        s?.q_value ?? '',
+        s?.effect_size ?? 0,
+        s?.std_error ?? 0,
+        s?.allele_ref || 'A',
+        s?.allele_alt || 'T',
+        s?.maf ?? 0.05,
+        s?.is_significant ? 'TRUE' : 'FALSE',
       ]);
 
       const csvContent =
@@ -103,7 +158,7 @@ export default function Step6Export({ analysisId, onNavigateStep }) {
       link.setAttribute('href', encodedUri);
       link.setAttribute(
         'download',
-        `gwasena_simulasi_sesi_${analysisId || '1'}_${summary.trait || 'trait'}.csv`
+        `gwasena_simulasi_sesi_${analysisId || '1'}_${summary?.trait || 'trait'}.csv`
       );
       document.body.appendChild(link);
       link.click();
@@ -145,9 +200,35 @@ export default function Step6Export({ analysisId, onNavigateStep }) {
       setTimeout(() => setDownloadSuccess(null), 4000);
     } else {
       alert(
-        `Dalam mode simulasi, grafik ${plotType.toUpperCase()} dapat diunduh langsung dari tombol kamera (📷) pada Langkah 4.`
+        `Dalam mode simulasi, grafik ${plotType.toUpperCase()} dapat diunduh langsung dari tombol kamera pada Langkah 4.`
       );
     }
+  }
+
+  // 3. Tangani Aksi Buka Pratinjau, Unduh PDF, atau Cetak Langsung
+  function handleOpenReport(action = 'preview') {
+    if (action === 'download') {
+      setAutoDownloadPdf(true);
+      setAutoPrintReport(false);
+    } else if (action === 'print') {
+      setAutoPrintReport(true);
+      setAutoDownloadPdf(false);
+    } else {
+      setAutoDownloadPdf(false);
+      setAutoPrintReport(false);
+    }
+    setShowReportModal(true);
+  }
+
+  if (isLoadingData && (!results || !results.association_results)) {
+    return (
+      <div className="flex min-h-[40vh] flex-col items-center justify-center p-8 space-y-3">
+        <Loader2 className="h-8 w-8 animate-spin text-[#06B6D4]" />
+        <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+          Memuat ringkasan ekspor dan laporan ilmiah sesi #{analysisId}...
+        </p>
+      </div>
+    );
   }
 
   return (
@@ -324,7 +405,7 @@ export default function Step6Export({ analysisId, onNavigateStep }) {
           </div>
         </div>
 
-        {/* Kartu 3: Laporan Riset Ilmiah (PDF / Web Report) */}
+        {/* Kartu 3: Laporan Riset Ilmiah (PDF / Web Report) — FR-09 & AC-09.2 */}
         <div className="rounded-3xl figma-card p-6 space-y-4 hover:border-indigo-400/40 hover:-translate-y-1 active:scale-[0.985] transition-all duration-150 flex flex-col justify-between">
           <div className="space-y-3">
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-100 dark:bg-[#5B4DFE]/20 text-indigo-700 dark:text-[#5B4DFE]">
@@ -335,188 +416,70 @@ export default function Step6Export({ analysisId, onNavigateStep }) {
                 Laporan Interpretasi Ilmiah
               </h4>
               <span className="inline-block mt-1 rounded-full bg-indigo-100 dark:bg-[#5B4DFE]/20 px-2.5 py-0.5 font-mono text-xs font-bold text-indigo-800 dark:text-[#A5B4FC] border border-indigo-200 dark:border-[#5B4DFE]/30">
-                Format Laporan Eksekutif
+                Format Laporan Eksekutif (A4 PDF)
               </span>
             </div>
             <p className="text-xs sm:text-sm font-serif leading-relaxed text-slate-800 dark:text-slate-200">
-              Hasilkan laporan ringkasan eksekutif komprehensif berisi parameter QC, model asosiasi,
-              daftar SNP signifikan, metrik $\lambda_{{GC}}$, dan daftar kandidat temuan.
+              Hasilkan laporan interpretasi ilmiah komprehensif berisi parameter QC, evaluasi inflasi &lambda; (lambda GC),
+              gambar plot resolusi tinggi, tabel SNP signifikan, dan pemetaan gen fungsional GFF3.
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={() => setShowReportModal(true)}
-            className="w-full mt-4 figma-btn-primary"
-          >
-            <Printer className="h-4 w-4" />
-            <span>Buka Laporan Riset Lengkap</span>
-          </button>
+          <div className="space-y-2 mt-4 font-sans">
+            {/* Tombol Utama: Unduh Laporan PDF Resmi (jsPDF + html2canvas) */}
+            <button
+              type="button"
+              onClick={() => handleOpenReport('download')}
+              className="w-full figma-btn-primary flex items-center justify-center gap-2"
+              title="Unduh laporan ilmiah resmi berformat PDF resolusi tinggi"
+            >
+              <Download className="h-4 w-4" />
+              <span>Unduh Laporan PDF (Resmi)</span>
+            </button>
+
+            {/* Tombol Sekunder: Pratinjau Layar Penuh di Layar (Full Screen Modal) */}
+            <button
+              type="button"
+              onClick={() => handleOpenReport('preview')}
+              className="w-full figma-btn-secondary flex items-center justify-center gap-2"
+              title="Buka pratinjau dokumen ilmiah interaktif layar penuh"
+            >
+              <FileText className="h-4 w-4 text-indigo-500" />
+              <span>Pratinjau Layar Penuh</span>
+            </button>
+
+            {/* Tombol Opsi Alternatif: Cetak via Driver Browser */}
+            <button
+              type="button"
+              onClick={() => handleOpenReport('print')}
+              className="w-full inline-flex items-center justify-center gap-1.5 py-1.5 text-xs font-sans font-semibold text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-colors"
+              title="Buka dialog cetak printer fisik atau save as PDF bawaan peramban"
+            >
+              <Printer className="h-3.5 w-3.5 text-slate-500 dark:text-slate-400" />
+              <span>Opsi: Dialog Cetak Browser</span>
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* ── Modal Laporan Ilmiah Siap Cetak ── */}
-      {showReportModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm animate-fade-in overflow-y-auto">
-          <div className="relative my-8 w-full max-w-4xl rounded-3xl figma-card p-6 sm:p-8 shadow-2xl text-slate-900 dark:text-white max-h-[90vh] overflow-y-auto animate-modal-in">
-            {/* Header Dialog */}
-            <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-4">
-              <div className="flex items-center gap-2.5">
-                <Dna className="h-5 w-5 text-cyan-600 dark:text-[#06B6D4]" />
-                <h3 className="text-base sm:text-lg font-sans font-bold">
-                  Laporan Analisis Asosiasi Genomik — GWASena
-                </h3>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => window.print()}
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-[#5B4DFE] hover:bg-[#4F46E5] px-3.5 py-1.5 text-xs font-sans font-bold text-white shadow-sm hover:-translate-y-[1px] hover:shadow-md active:scale-[0.98] transition-all duration-100"
-                >
-                  <Printer className="h-3.5 w-3.5" />
-                  <span>Cetak / Simpan PDF</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowReportModal(false)}
-                  className="rounded-xl p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/10 active:scale-95 transition-all"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-            </div>
-
-            {/* Dokumen Laporan (Print-Friendly) */}
-            <div className="space-y-6 pt-6 text-xs" id="scientific-report-content">
-              {/* Metadata Sesi */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 rounded-2xl glass-subcard p-4">
-                <div>
-                  <span className="text-xs font-sans text-slate-800 dark:text-slate-200 block uppercase tracking-wider font-bold">ID Sesi Analisis</span>
-                  <span className="font-mono font-bold text-[#0284C7] dark:text-[#06B6D4] text-sm">#{analysisId || '1'}</span>
-                </div>
-                <div>
-                  <span className="text-xs font-sans text-slate-800 dark:text-slate-200 block uppercase tracking-wider font-bold">Organisme Target</span>
-                  <span className="font-serif font-bold italic text-slate-900 dark:text-white text-sm">
-                    {summary.organism || 'Allium sativum (Bawang Putih)'}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-xs font-sans text-slate-800 dark:text-slate-200 block uppercase tracking-wider font-bold">Sifat Fenotipe</span>
-                  <span className="font-mono font-bold text-slate-900 dark:text-white text-sm">
-                    {asosiasi.trait || summary.trait || 'bobot_umbi'}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-xs font-sans text-slate-800 dark:text-slate-200 block uppercase tracking-wider font-bold">Waktu Analisis</span>
-                  <span className="text-slate-800 dark:text-slate-200 font-sans font-medium text-sm">{new Date().toLocaleDateString('id-ID')}</span>
-                </div>
-              </div>
-
-              {/* Ringkasan Konfigurasi QC & Pipeline */}
-              <div className="space-y-2">
-                <h4 className="text-xs sm:text-sm font-sans font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">
-                  1. Parameter Quality Control & Pemodelan
-                </h4>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 font-mono text-xs sm:text-sm">
-                  <div className="p-3 rounded-xl glass-subcard">
-                    <span className="text-slate-700 dark:text-slate-300 block font-sans text-xs font-medium">Missingness Sampel (mind):</span>
-                    <span className="font-bold text-slate-900 dark:text-white">{configParams.mind || 0.10}</span>
-                  </div>
-                  <div className="p-3 rounded-xl glass-subcard">
-                    <span className="text-slate-700 dark:text-slate-300 block font-sans text-xs font-medium">Missingness SNP (geno):</span>
-                    <span className="font-bold text-slate-900 dark:text-white">{configParams.geno || 0.10}</span>
-                  </div>
-                  <div className="p-3 rounded-xl glass-subcard">
-                    <span className="text-slate-700 dark:text-slate-300 block font-sans text-xs font-medium">Minor Allele Freq (MAF):</span>
-                    <span className="font-bold text-slate-900 dark:text-white">{configParams.maf || 0.05}</span>
-                  </div>
-                  <div className="p-3 rounded-xl glass-subcard">
-                    <span className="text-slate-700 dark:text-slate-300 block font-sans text-xs font-medium">Model Statistik:</span>
-                    <span className="font-bold text-[#0284C7] dark:text-[#06B6D4]">{asosiasi.model || summary.model || 'MLM'}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Ringkasan Metrik Temuan */}
-              <div className="space-y-2">
-                <h4 className="text-xs sm:text-sm font-sans font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">
-                  2. Ringkasan Metrik Hasil Uji Asosiasi
-                </h4>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 font-mono text-xs sm:text-sm">
-                  <div className="p-3 rounded-xl glass-subcard">
-                    <span className="text-slate-700 dark:text-slate-300 block font-sans text-xs font-medium">Sampel Lolos QC:</span>
-                    <span className="font-bold text-slate-900 dark:text-white">{qc.sampel_lolos ?? summary.samples_passed_qc ?? '-'}</span>
-                  </div>
-                  <div className="p-3 rounded-xl glass-subcard">
-                    <span className="text-slate-700 dark:text-slate-300 block font-sans text-xs font-medium">SNP Lolos QC:</span>
-                    <span className="font-bold text-slate-900 dark:text-white">{qc.snp_lolos ?? summary.snps_passed_qc ?? snps.length}</span>
-                  </div>
-                  <div className="p-3 rounded-xl glass-subcard">
-                    <span className="text-slate-700 dark:text-slate-300 block font-sans text-xs font-medium">SNP Signifikan:</span>
-                    <span className="font-bold text-emerald-600 dark:text-emerald-400">{asosiasi.jumlah_signifikan ?? significantSnps.length}</span>
-                  </div>
-                  <div className="p-3 rounded-xl glass-subcard">
-                    <span className="text-slate-700 dark:text-slate-300 block font-sans text-xs font-medium">Inflasi Genomik (λ_GC):</span>
-                    <span className="font-bold text-slate-900 dark:text-white">{Number(asosiasi.lambda_gc ?? summary.lambda_gc ?? 1.04).toFixed(3)}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Tabel SNP Signifikan / Teratas */}
-              <div className="space-y-2">
-                <h4 className="text-xs sm:text-sm font-sans font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">
-                  3. Penanda SNP Unggulan & Asosiasi Genomik
-                </h4>
-                <div className="overflow-x-auto rounded-2xl border border-slate-200/80 dark:border-white/10">
-                  <table className="w-full text-left text-sm">
-                    <thead className="bg-slate-100/95 dark:bg-[#0B132C]/90 text-xs text-slate-800 dark:text-slate-200 uppercase font-sans font-bold">
-                      <tr>
-                        <th className="py-3 px-3.5">SNP ID</th>
-                        <th className="py-3 px-3.5">Kromosom</th>
-                        <th className="py-3 px-3.5">Posisi (bp)</th>
-                        <th className="py-3 px-3.5">p-value</th>
-                        <th className="py-3 px-3.5">Effect Size (Beta)</th>
-                        <th className="py-3 px-3.5">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 dark:divide-white/5 font-mono">
-                      {(significantSnps.length > 0 ? significantSnps : topSnps.slice(0, 10)).map((s) => (
-                        <tr key={s.snp_id}>
-                          <td className="py-2.5 px-3 font-bold text-cyan-700 dark:text-[#06B6D4]">{s.snp_id}</td>
-                          <td className="py-2.5 px-3 text-slate-700 dark:text-slate-300 font-sans">Chr {s.chromosome}</td>
-                          <td className="py-2.5 px-3 text-slate-700 dark:text-slate-300">{Number(s.position).toLocaleString('id-ID')}</td>
-                          <td className="py-2.5 px-3 text-emerald-600 dark:text-emerald-400 font-bold">
-                            {Number(s.p_value) < 0.001 ? Number(s.p_value).toExponential(3) : Number(s.p_value).toFixed(5)}
-                          </td>
-                          <td className="py-2.5 px-3 text-slate-700 dark:text-slate-300">
-                            {s.effect_size >= 0 ? '+' : ''}{s.effect_size}
-                          </td>
-                          <td className="py-2.5 px-3 font-sans text-xs">
-                            {s.is_significant ? (
-                              <span className="rounded-full bg-emerald-100 dark:bg-emerald-500/20 px-2 py-0.5 font-bold text-emerald-800 dark:text-emerald-300">
-                                Signifikan
-                              </span>
-                            ) : (
-                              <span className="rounded-full bg-slate-100 dark:bg-white/10 px-2 py-0.5 font-semibold text-slate-600 dark:text-slate-400">
-                                Top Kandidat
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              <div className="pt-4 border-t border-slate-200 dark:border-white/10 text-center font-serif italic text-xs text-slate-500 dark:text-slate-400">
-                Laporan ini dihasilkan secara otomatis oleh suite bioinformatika GWASena 2.0 untuk keperluan analisis asosiasi genomik
-                dan penelitian ilmiah tanaman bernilai ekonomi tinggi.
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* ── Komponen Modal Pratinjau & Cetak Laporan Ilmiah Formal (A4 PDF via Portal) ── */}
+      <ScientificReportModal
+        isOpen={showReportModal}
+        onClose={() => {
+          setShowReportModal(false);
+          setAutoPrintReport(false);
+          setAutoDownloadPdf(false);
+        }}
+        analysisId={analysisId}
+        analysis={analysis}
+        results={activeResults}
+        annotationData={annotationData}
+        configParams={configParams}
+        uploadSummary={uploadSummary}
+        isSimulated={isSimulated}
+        autoPrintOnOpen={autoPrintReport}
+        autoDownloadOnOpen={autoDownloadPdf}
+      />
     </div>
   );
 }

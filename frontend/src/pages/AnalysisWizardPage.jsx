@@ -231,6 +231,7 @@ export default function AnalysisWizardPage() {
         {activeStep === 6 && (
           <Step6Export
             analysisId={id}
+            analysis={currentAnalysis}
             onNavigateStep={(stepNum) => setActiveStep(stepNum)}
           />
         )}

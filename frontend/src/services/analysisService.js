@@ -216,6 +216,59 @@ export const analysisService = {
   },
 
   /**
+   * Ambil objek Blob URL dari plot PNG untuk pratinjau di laporan ilmiah
+   * @param {number|string} analysisId
+   * @param {'manhattan'|'qq'} jenis
+   * @returns {Promise<string|null>} Object URL blob gambar atau null jika gagal
+   */
+  async getPlotImageBlobUrl(analysisId, jenis) {
+    const token = getStoredToken();
+    const headers = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    try {
+      const res = await fetch(`/api/analyses/${analysisId}/plots/${jenis}/png`, {
+        method: 'GET',
+        headers,
+      });
+      if (!res.ok) return null;
+      const blob = await res.blob();
+      return window.URL.createObjectURL(blob);
+    } catch {
+      return null;
+    }
+  },
+
+  /**
+   * Ambil data URL (Base64) dari plot PNG agar html2canvas & jsPDF dapat merender tanpa kendala CORS
+   * @param {number|string} analysisId
+   * @param {'manhattan'|'qq'} jenis
+   * @returns {Promise<string|null>} Base64 Data URL atau null jika gagal
+   */
+  async getPlotImageDataUrl(analysisId, jenis) {
+    const token = getStoredToken();
+    const headers = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    try {
+      const res = await fetch(`/api/analyses/${analysisId}/plots/${jenis}/png`, {
+        method: 'GET',
+        headers,
+      });
+      if (!res.ok) return null;
+      const blob = await res.blob();
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result);
+        reader.onerror = () => resolve(null);
+        reader.readAsDataURL(blob);
+      });
+    } catch {
+      return null;
+    }
+  },
+
+  /**
    * Ambil anotasi gen kandidat dari endpoint backend (GFF3 lokal)
    * @param {number|string} analysisId
    * @param {boolean} sertakanTeratas
