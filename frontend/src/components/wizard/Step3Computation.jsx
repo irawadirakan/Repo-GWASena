@@ -341,7 +341,7 @@ export default function Step3Computation({ analysisId, onComplete }) {
   // Hitung data ringkasan QC dinamis
   const isQcDone = isCompleted || displayStages[0].status === 'selesai';
   const samplesPassed = ringkasanQc?.sampel_lolos ?? ringkasanQc?.n_samples ?? (isQcDone ? 38 : 40);
-  const samplesTotal = ringkasanQc?.total_sampel ?? uploadSummary?.genotipe?.jumlah_sampel ?? 40;
+  const samplesTotal = ringkasanQc?.total_sampel ?? ringkasanQc?.sampel_total ?? uploadSummary?.genotipe?.jumlah_sampel ?? 40;
   const samplesFiltered =
     ringkasanQc?.sampel_disaring ?? (samplesTotal - samplesPassed > 0 ? samplesTotal - samplesPassed : 0);
 
@@ -350,6 +350,20 @@ export default function Step3Computation({ analysisId, onComplete }) {
   const snpsFiltered = ringkasanQc?.snp_disaring ?? (snpsTotal - snpsPassed > 0 ? snpsTotal - snpsPassed : 0);
 
   const currentTip = TIPS_EDUKATIF[tipIndex];
+
+  // Diagnosa galat komputasi spesifik
+  const errText = `${error?.message || ''} ${JSON.stringify(error?.details || [])}`.toLowerCase();
+  const initialSamples = uploadSummary?.genotipe?.jumlah_sampel || ringkasanQc?.total_sampel || ringkasanQc?.sampel_total || 0;
+  const isInitialUnder10 = initialSamples > 0 && initialSamples < 10;
+  const isQcFilterTooStrict =
+    !isInitialUnder10 &&
+    (errText.includes('sampel') ||
+      errText.includes('sample') ||
+      errText.includes('qc') ||
+      errText.includes('filter') ||
+      errText.includes('kurang dari 10') ||
+      errText.includes('minimal 10') ||
+      (ringkasanQc?.sampel_lolos != null && ringkasanQc.sampel_lolos < 10));
 
   return (
     <div className="space-y-8 animate-fade-in">
@@ -394,6 +408,30 @@ export default function Step3Computation({ analysisId, onComplete }) {
             </h3>
           </div>
 
+          {/* Kotak Diagnosa Spesifik (Tester Evaluation Item 2) */}
+          {isQcFilterTooStrict ? (
+            <div className="rounded-2xl border border-amber-300 dark:border-amber-500/40 bg-amber-50 dark:bg-amber-500/15 p-4 space-y-2">
+              <div className="flex items-center gap-2 text-amber-800 dark:text-amber-300 font-bold text-sm">
+                <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                <span>Sumber Masalah: Pengaturan Filter Quality Control (QC) Terlalu Ketat</span>
+              </div>
+              <p className="text-xs sm:text-[13px] text-slate-700 dark:text-slate-300 leading-relaxed font-medium">
+                Penyaringan Quality Control menyebabkan jumlah sampel yang lolos menjadi kurang dari batas minimum (10 sampel), sementara berkas awal Anda memiliki {initialSamples} sampel.
+                Silakan <strong>longgarkan nilai Missingness Sampel (mind)</strong> (misalnya ke 0.20 atau lebih tinggi) atau <strong>nonaktifkan filter kekerabatan KING</strong> jika populasi tanaman Anda memiliki banyak aksesi berkerabat/klonal.
+              </p>
+            </div>
+          ) : isInitialUnder10 ? (
+            <div className="rounded-2xl border border-amber-300 dark:border-amber-500/40 bg-amber-50 dark:bg-amber-500/15 p-4 space-y-2">
+              <div className="flex items-center gap-2 text-amber-800 dark:text-amber-300 font-bold text-sm">
+                <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                <span>Sumber Masalah: Berkas Awal Memiliki Kurang dari 10 Sampel</span>
+              </div>
+              <p className="text-xs sm:text-[13px] text-slate-700 dark:text-slate-300 leading-relaxed font-medium">
+                Berkas genotipe atau fenotipe yang diunggah hanya memiliki {initialSamples} sampel. Analisis asosiasi genomik membutuhkan minimal 10 sampel berpasangan untuk inferensi statistik yang bermakna.
+              </p>
+            </div>
+          ) : null}
+
           <ErrorMessageArea error={error} type="error" />
 
           <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
@@ -401,31 +439,61 @@ export default function Step3Computation({ analysisId, onComplete }) {
           </p>
 
           <div className="flex flex-wrap items-center gap-3 pt-3 border-t border-rose-200 dark:border-rose-500/20">
-            <button
-              type="button"
-              onClick={() => {
-                setIsFailed(false);
-                setError(null);
-                setActiveStep(2);
-              }}
-              className="inline-flex items-center gap-2 rounded-xl bg-[#5B4DFE] hover:bg-[#4F46E5] px-5 py-2.5 text-xs font-bold text-white shadow-md shadow-[#5B4DFE]/30 transition-all active:scale-95"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              <span>Kembali ke Konfigurasi QC & Model</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setIsFailed(false);
-                setError(null);
-                setActiveStep(1);
-              }}
-              className="inline-flex items-center gap-2 rounded-xl border border-slate-300 dark:border-white/10 bg-white dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 px-5 py-2.5 text-xs font-semibold text-slate-800 dark:text-slate-200 transition-all active:scale-95"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              <span>Kembali ke Unggah & Validasi</span>
-            </button>
+            {isInitialUnder10 ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsFailed(false);
+                    setError(null);
+                    setActiveStep(1);
+                  }}
+                  className="inline-flex items-center gap-2 rounded-xl bg-[#5B4DFE] hover:bg-[#4F46E5] px-5 py-2.5 text-xs font-bold text-white shadow-md shadow-[#5B4DFE]/30 transition-all active:scale-95 cursor-pointer"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                  <span>← Kembali ke Unggah &amp; Validasi (Disarankan)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsFailed(false);
+                    setError(null);
+                    setActiveStep(2);
+                  }}
+                  className="inline-flex items-center gap-2 rounded-xl border border-slate-300 dark:border-white/10 bg-white dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 px-5 py-2.5 text-xs font-semibold text-slate-800 dark:text-slate-200 transition-all active:scale-95 cursor-pointer"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                  <span>Kembali ke Konfigurasi QC &amp; Model</span>
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsFailed(false);
+                    setError(null);
+                    setActiveStep(2);
+                  }}
+                  className="inline-flex items-center gap-2 rounded-xl bg-[#5B4DFE] hover:bg-[#4F46E5] px-5 py-2.5 text-xs font-bold text-white shadow-md shadow-[#5B4DFE]/30 transition-all active:scale-95 cursor-pointer"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                  <span>← Kembali ke Konfigurasi QC &amp; Model (Disarankan)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsFailed(false);
+                    setError(null);
+                    setActiveStep(1);
+                  }}
+                  className="inline-flex items-center gap-2 rounded-xl border border-slate-300 dark:border-white/10 bg-white dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 px-5 py-2.5 text-xs font-semibold text-slate-800 dark:text-slate-200 transition-all active:scale-95 cursor-pointer"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                  <span>Kembali ke Unggah &amp; Validasi</span>
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -660,8 +728,8 @@ export default function Step3Computation({ analysisId, onComplete }) {
                   <span className={`h-1.5 w-1.5 rounded-full ${isHovered ? 'bg-amber-500' : 'bg-cyan-500 animate-pulse'}`} />
                   {isHovered ? 'DIJEDA' : `${countdown}s`}
                 </span>
-                <span className="font-mono text-xs font-bold text-slate-600 dark:text-slate-300">
-                  {tipIndex + 1} / {TIPS_EDUKATIF.length}
+                <span className="font-mono text-xs font-bold text-slate-700 dark:text-slate-200 bg-white dark:bg-white/10 px-2.5 py-0.5 rounded-lg border border-slate-200 dark:border-white/10 shadow-xs">
+                  Tips Edukatif {tipIndex + 1} / {TIPS_EDUKATIF.length}
                 </span>
               </div>
             </div>

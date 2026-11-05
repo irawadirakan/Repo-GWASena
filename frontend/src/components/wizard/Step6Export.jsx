@@ -97,6 +97,17 @@ export default function Step6Export({ analysisId, analysis, onNavigateStep }) {
   const snps = Array.isArray(activeResults?.association_results) ? activeResults.association_results : [];
   const summary = activeResults?.summary || {};
 
+  // Daftar kolom CSV dinamis (Tester Evaluation Item 7)
+  const csvColumnsList = useMemo(() => {
+    if (snps.length > 0 && typeof snps[0] === 'object') {
+      const keys = Object.keys(snps[0]);
+      if (keys.length > 0) {
+        return keys.join(', ');
+      }
+    }
+    return 'snp_id, chromosome, position, p_value, neg_log10_p, q_value_fdr, effect_size_beta, std_error, allele_ref, allele_alt, maf, is_significant';
+  }, [snps]);
+
   // 1. Unduh CSV Hasil Asosiasi (Endpoint resmi: GET /api/analyses/{id}/results/csv)
   async function handleDownloadCsv() {
     setExportError(null);
@@ -307,7 +318,7 @@ export default function Step6Export({ analysisId, analysis, onNavigateStep }) {
               </span>
             </div>
             <p className="text-xs sm:text-sm font-serif leading-relaxed text-slate-800 dark:text-slate-200">
-              Unduh data statistik asosiasi genomik lengkap dari server backend: Chr, Pos, SNP_ID, Ref, Alt, Beta, SE, P_Value, Bonferroni, dan Q_Value FDR.
+              Unduh data statistik asosiasi genomik lengkap dari server backend dengan kolom: <code className="font-mono text-[11px] bg-slate-100 dark:bg-white/10 px-1.5 py-0.5 rounded text-[#0284C7] dark:text-[#06B6D4] break-all">{csvColumnsList}</code>.
             </p>
           </div>
 

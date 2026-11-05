@@ -87,6 +87,15 @@ export const analysisService = {
   },
 
   /**
+   * Perbarui nama sesi analisis (Auto-Rename)
+   * @param {number|string} analysisId
+   * @param {string} analysis_name
+   */
+  async updateAnalysisName(analysisId, analysis_name) {
+    return apiClient.patch(`/api/analyses/${analysisId}`, { analysis_name });
+  },
+
+  /**
    * Detail sesi analisis
    * @param {number|string} analysisId
    */

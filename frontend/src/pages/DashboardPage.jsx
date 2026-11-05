@@ -13,6 +13,7 @@ import {
   FileQuestion,
   Sparkles,
   BookOpen,
+  Activity,
 } from 'lucide-react';
 import { useAuthStore } from '../store/useAuthStore.js';
 import { useAnalysisStore } from '../store/useAnalysisStore.js';
@@ -29,6 +30,7 @@ export default function DashboardPage() {
   const { uploadSummary, currentAnalysis } = useAnalysisStore();
 
   const [meta, setMeta] = useState(null);
+  const [analysesCount, setAnalysesCount] = useState(0);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [analysisName, setAnalysisName] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -38,8 +40,16 @@ export default function DashboardPage() {
     let isMounted = true;
     async function loadDashboardData() {
       try {
-        const metaData = await analysisService.getMeta();
-        if (isMounted) setMeta(metaData);
+        const [metaData, listData] = await Promise.all([
+          analysisService.getMeta(),
+          analysisService.listAnalyses().catch(() => []),
+        ]);
+        if (isMounted) {
+          setMeta(metaData);
+          if (Array.isArray(listData)) {
+            setAnalysesCount(listData.length);
+          }
+        }
       } catch (err) {
         console.warn('Gagal memuat metadata:', err);
       }
@@ -52,7 +62,7 @@ export default function DashboardPage() {
 
   const handleCreateAnalysis = async (e) => {
     e.preventDefault();
-    const finalName = analysisName.trim() || 'Analisis Asosiasi Genomik 2026';
+    const finalName = analysisName.trim() || 'Sesi Analisis Baru';
 
     setIsSubmitting(true);
     setError(null);
@@ -83,7 +93,7 @@ export default function DashboardPage() {
           <div className="space-y-2">
             <div className="inline-flex items-center gap-2 rounded-full border border-cyan-300 dark:border-[#06B6D4]/30 bg-cyan-50 dark:bg-[#06B6D4]/10 px-3 py-1 text-xs font-semibold text-cyan-900 dark:text-[#06B6D4]">
               <Sprout className="h-3.5 w-3.5 text-cyan-700 dark:text-[#06B6D4]" />
-              <span>Platform Riset Asosiasi Genomik Terpadu (GWAS Suite)</span>
+              <span>Alur Kerja Analisis Asosiasi Genomik GWASena</span>
             </div>
 
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white font-sans">
@@ -135,15 +145,16 @@ export default function DashboardPage() {
               )
             ) : (
               <>
-                <div className="flex items-center gap-1.5 text-xs font-bold text-slate-500 dark:text-slate-400 font-sans uppercase tracking-wider">
-                  <FileQuestion className="h-4 w-4" />
-                  <span>Dataset: Belum Diunggah</span>
+                <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-300 font-sans uppercase tracking-wider">
+                  <Activity className="h-4 w-4 text-[#06B6D4]" />
+                  <span>RINGKASAN AKTIVITAS RISET</span>
                 </div>
-                <div className="text-slate-800 dark:text-slate-200 font-bold font-sans text-sm">
-                  Menunggu Berkas Analisis
+                <div className="text-slate-900 dark:text-white font-bold font-sans text-sm">
+                  {analysesCount > 0 ? `${analysesCount} Sesi Analisis Tersimpan` : 'Ruang Kerja Siap'}
                 </div>
-                <div className="text-xs text-slate-600 dark:text-slate-400 font-medium font-sans leading-relaxed">
-                  Menunggu berkas genotipe (.vcf / PLINK) & fenotipe (.csv)
+                <div className="text-xs text-emerald-600 dark:text-emerald-400 font-medium font-sans flex items-center gap-1">
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  <span>Ruang kerja aktif & siap untuk analisis baru</span>
                 </div>
               </>
             )}
@@ -152,6 +163,14 @@ export default function DashboardPage() {
 
         {/* Subtle decorative glow */}
         <div className="pointer-events-none absolute -right-20 -bottom-20 h-64 w-64 rounded-full bg-[#06B6D4]/10 blur-3xl" />
+      </div>
+
+      {/* ── Banner Petunjuk Fungsi Ikon Tanda Tanya (?) ── */}
+      <div className="rounded-2xl border border-cyan-200 dark:border-cyan-500/30 bg-cyan-50/80 dark:bg-cyan-500/10 p-3.5 sm:p-4 text-xs sm:text-sm text-cyan-950 dark:text-cyan-200 flex items-center gap-2.5 font-medium shadow-sm">
+        <span className="text-base sm:text-lg">💡</span>
+        <span>
+          <strong>Panduan Parameter:</strong> Klik atau arahkan kursor ke ikon tanda tanya (?) di pojok setiap kartu untuk membaca penjelasan ilmiah dan fungsi bagian tersebut.
+        </span>
       </div>
 
       {/* ── Dua Kartu Aksi Utama (High-Separation Glass dengan Micro-Interactions) ── */}
@@ -167,7 +186,7 @@ export default function DashboardPage() {
                 <Dna className="h-6 w-6" />
               </div>
               <span className="rounded-full bg-cyan-50 dark:bg-[#5B4DFE]/15 px-3 py-1 text-xs font-bold text-cyan-800 dark:text-[#06B6D4] border border-cyan-200 dark:border-[#06B6D4]/20 font-sans">
-                Alur Pipeline Interaktif
+                6 Tahap Terpandu
               </span>
             </div>
 
@@ -176,8 +195,7 @@ export default function DashboardPage() {
             </h2>
 
             <p className="mt-2 text-sm text-slate-600 dark:text-slate-300 leading-relaxed font-sans">
-              Jalankan siklus terpadu: unggah VCF & fenotipe CSV, penyaringan Quality Control, kovariat
-              PCA otomatis, model GLM/MLM, anotasi kandidat gen, hingga visualisasi Manhattan Plot interaktif.
+              Unggah berkas VCF/PLINK & fenotipe CSV, saring Quality Control & PCA otomatis, uji model GLM/MLM, hingga visualisasi Manhattan Plot.
             </p>
           </div>
 
@@ -242,7 +260,7 @@ export default function DashboardPage() {
         <div className="flex items-center gap-2 mb-4">
           <BookOpen className="h-4 w-4 text-[#06B6D4]" />
           <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200 font-sans">
-            Alur Kerja Analisis Asosiasi Genomik (GWAS Suite)
+            Alur Kerja Analisis Asosiasi Genomik GWASena
           </h3>
         </div>
 
@@ -314,19 +332,12 @@ export default function DashboardPage() {
                   type="text"
                   value={analysisName}
                   onChange={(e) => setAnalysisName(e.target.value)}
-                  placeholder="Contoh: Analisis Asosiasi Genomik 2026"
+                  placeholder="Contoh: Sesi Analisis Baru"
                   className="w-full rounded-xl border border-slate-300 dark:border-white/10 bg-[#F1F4FD] dark:bg-[#0F172E] py-2.5 px-3.5 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:border-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-600 font-medium"
                 />
                 <span className="mt-1 block text-xs text-slate-600 dark:text-slate-400 font-medium font-sans">
-                  Kosongkan bila ingin menggunakan nama default otomatis.
+                  Kosongkan bila ingin menggunakan nama default otomatis ("Sesi Analisis Baru").
                 </span>
-              </div>
-
-              {/* TUGAS 6: Teks Ringkas Tahap Berikutnya */}
-              <div className="glass-subcard p-3.5 text-xs sm:text-sm text-slate-700 dark:text-slate-300 space-y-1">
-                <p className="font-sans font-medium leading-relaxed">
-                  <strong>Selanjutnya:</strong> Unggah berkas genotipe (.vcf / PLINK) dan fenotipe (.csv).
-                </p>
               </div>
 
               <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-200 dark:border-white/10">

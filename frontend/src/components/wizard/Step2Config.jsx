@@ -71,7 +71,13 @@ export default function Step2Config({
   const [model, setModel] = useState(configParams.model || 'MLM');
   const [koreksi, setKoreksi] = useState(configParams.koreksi || ['bonferroni', 'fdr']);
   // TUGAS 7: Default alpha = 0.05
-  const [alpha, setAlpha] = useState(configParams.alpha ?? 0.05);
+  const [alpha, setAlpha] = useState(configParams.alpha != null ? Number(configParams.alpha).toFixed(2) : '0.05');
+
+  const handleAlphaStep = (delta) => {
+    const cur = parseFloat(alpha) || 0.05;
+    const next = Math.max(0.01, Math.min(0.20, parseFloat((cur + delta).toFixed(2))));
+    setAlpha(next.toFixed(2));
+  };
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState(null);
@@ -154,6 +160,14 @@ export default function Step2Config({
         <p className="mt-1 text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
           Tentukan sifat agronomi yang diuji, sesuaikan filter penyaringan data varian genomik, serta pilih model asosiasi (GLM atau MLM).
         </p>
+      </div>
+
+      {/* ── Banner Petunjuk Fungsi Ikon Tanda Tanya (?) ── */}
+      <div className="rounded-2xl border border-cyan-200 dark:border-cyan-500/30 bg-cyan-50/80 dark:bg-cyan-500/10 p-3.5 sm:p-4 text-xs sm:text-sm text-cyan-950 dark:text-cyan-200 flex items-center gap-2.5 font-medium shadow-sm">
+        <span className="text-base sm:text-lg">💡</span>
+        <span>
+          <strong>Panduan Parameter:</strong> Klik atau arahkan kursor ke ikon tanda tanya (?) di pojok setiap kartu untuk membaca penjelasan ilmiah dan fungsi bagian tersebut.
+        </span>
       </div>
 
       <ErrorMessageArea error={error} onDismiss={() => setError(null)} />
@@ -264,15 +278,15 @@ export default function Step2Config({
                 id="mind"
                 type="range"
                 min={0}
-                max={0.5}
+                max={0.50}
                 step={0.01}
                 value={mind}
                 onChange={(e) => setMind(e.target.value)}
                 className="w-full accent-[#5B4DFE] dark:accent-[#06B6D4] cursor-pointer"
               />
               <div className="flex items-center justify-between text-xs text-slate-600 dark:text-slate-400 font-sans font-medium">
-                <span>Nilai valid: 0.00 – 1.00</span>
-                <span>Default: 0.10 (&gt; 10% dibuang)</span>
+                <span>Rentang nilai: 0.00 – 0.50</span>
+                <span>Default: 0.10 (&gt;10% sampel hilang disaring)</span>
               </div>
             </div>
 
@@ -293,15 +307,15 @@ export default function Step2Config({
                 id="geno"
                 type="range"
                 min={0}
-                max={0.5}
+                max={0.50}
                 step={0.01}
                 value={geno}
                 onChange={(e) => setGeno(e.target.value)}
                 className="w-full accent-[#0284C7] dark:accent-[#06B6D4] cursor-pointer"
               />
               <div className="flex items-center justify-between text-xs text-slate-600 dark:text-slate-400 font-sans font-medium">
-                <span>Nilai valid: 0.00 – 1.00</span>
-                <span>Default: 0.10 (&gt; 10% dibuang)</span>
+                <span>Rentang nilai: 0.00 – 0.50</span>
+                <span>Default: 0.10 (&gt;10% SNP hilang disaring)</span>
               </div>
             </div>
 
@@ -322,15 +336,15 @@ export default function Step2Config({
                 id="maf"
                 type="range"
                 min={0.01}
-                max={0.49}
+                max={0.50}
                 step={0.01}
                 value={maf}
                 onChange={(e) => setMaf(e.target.value)}
                 className="w-full accent-[#0284C7] dark:accent-[#06B6D4] cursor-pointer"
               />
               <div className="flex items-center justify-between text-xs text-slate-600 dark:text-slate-400 font-sans font-medium">
-                <span>Nilai valid: 0.00 – 0.50</span>
-                <span>Default: 0.05 (saring &lt; 5%)</span>
+                <span>Rentang nilai: 0.01 – 0.50</span>
+                <span>Default: 0.05 (saring alel langka &lt;5%)</span>
               </div>
             </div>
 
@@ -374,15 +388,15 @@ export default function Step2Config({
                 id="king"
                 type="range"
                 disabled={!isKingActive}
-                min={0.0}
-                max={0.5}
+                min={0.05}
+                max={0.50}
                 step={0.001}
                 value={kingCutoff ?? 0.177}
                 onChange={(e) => setKingCutoff(e.target.value)}
                 className={`w-full accent-[#0284C7] dark:accent-[#06B6D4] ${isKingActive ? 'cursor-pointer' : 'cursor-not-allowed opacity-40'}`}
               />
               <div className="flex items-center justify-between text-xs text-slate-600 dark:text-slate-400 font-sans font-medium">
-                <span>Nilai valid: &gt; 0 – 0.50</span>
+                <span>Rentang nilai: 0.05 – 0.50</span>
                 <span>{isKingActive ? 'Rekomendasi: 0.177' : 'Nonaktif untuk klonal'}</span>
               </div>
             </div>
@@ -485,68 +499,64 @@ export default function Step2Config({
             {/* Model 1: GLM */}
             <div
               onClick={() => setModel('GLM')}
-              className={`glass-subcard p-5 cursor-pointer transition-all duration-150 active:scale-[0.985] ${
+              className={`glass-subcard p-5 cursor-pointer transition-all duration-150 active:scale-[0.985] flex flex-col justify-between ${
                 model === 'GLM'
                   ? 'border-[#5B4DFE] dark:border-[#5B4DFE] ring-2 ring-[#5B4DFE]/40 bg-indigo-50/80 dark:bg-[#5B4DFE]/15'
                   : 'hover:border-slate-400 hover:-translate-y-[1px]'
               }`}
             >
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2.5">
-                  <input
-                    type="radio"
-                    name="model"
-                    value="GLM"
-                    checked={model === 'GLM'}
-                    onChange={() => setModel('GLM')}
-                    className="accent-[#5B4DFE] h-4 w-4 cursor-pointer"
-                  />
-                  <span className="text-base font-bold text-slate-900 dark:text-white font-sans">GLM</span>
+              <div>
+                <div className="relative text-center pb-3 border-b border-slate-200 dark:border-white/10 mb-3">
+                  <div className="absolute right-0 top-0">
+                    <EduHintTooltip hintKey="glm" />
+                  </div>
+                  <h4 className="text-xl font-extrabold text-slate-900 dark:text-white font-sans tracking-tight">GLM</h4>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 font-sans font-medium mt-0.5">(General Linear Model)</p>
                 </div>
-                <EduHintTooltip hintKey="glm" />
+                <p className="text-xs sm:text-[13px] text-slate-700 dark:text-slate-300 leading-relaxed font-sans font-medium">
+                  Menguji asosiasi genetik menggunakan kovariat struktur populasi (PCA) sebagai efek tetap. Komputasi cepat dan ideal untuk populasi tanpa struktur kekerabatan kompleks.
+                </p>
               </div>
-              <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed font-sans">
-                General Linear Model. Menguji asosiasi dengan kovariat PC dari PCA. Komputasi cepat,
-                cocok untuk populasi tanpa struktur kekerabatan yang kompleks.
-              </p>
+
+              {model === 'GLM' && (
+                <div className="mt-4 pt-3 border-t border-emerald-200 dark:border-emerald-500/20 flex items-center gap-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-400 animate-fade-down">
+                  <CheckCircle2 className="h-4 w-4 shrink-0 stroke-[2.5] animate-pop-in" />
+                  <span>✓ Kovariat struktur populasi (PC1–PC3) disertakan secara otomatis</span>
+                </div>
+              )}
             </div>
 
             {/* Model 2: MLM (Rekomendasi Struktur Populasi Kompleks) */}
             <div
               onClick={() => setModel('MLM')}
-              className={`glass-subcard p-5 cursor-pointer transition-all duration-150 active:scale-[0.985] ${
+              className={`glass-subcard p-5 cursor-pointer transition-all duration-150 active:scale-[0.985] flex flex-col justify-between ${
                 model === 'MLM'
                   ? 'border-cyan-600 dark:border-[#06B6D4] ring-2 ring-cyan-500/40 bg-cyan-50/80 dark:bg-[#06B6D4]/15'
                   : 'hover:border-slate-400 hover:-translate-y-[1px]'
               }`}
             >
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2.5">
-                  <input
-                    type="radio"
-                    name="model"
-                    value="MLM"
-                    checked={model === 'MLM'}
-                    onChange={() => setModel('MLM')}
-                    className="accent-[#06B6D4] h-4 w-4 cursor-pointer"
-                  />
-                  <span className="text-base font-bold text-slate-900 dark:text-white font-sans">MLM</span>
+              <div>
+                <div className="relative text-center pb-3 border-b border-slate-200 dark:border-white/10 mb-3">
+                  <div className="absolute left-0 top-0">
+                    <span className="rounded-full bg-cyan-100 dark:bg-[#06B6D4]/20 border border-cyan-300 dark:border-[#06B6D4]/30 px-2.5 py-0.5 text-[10px] sm:text-[11px] font-bold text-cyan-900 dark:text-[#06B6D4] font-sans">
+                      Direkomendasikan
+                    </span>
+                  </div>
+                  <div className="absolute right-0 top-0">
+                    <EduHintTooltip hintKey="mlm" />
+                  </div>
+                  <h4 className="text-xl font-extrabold text-slate-900 dark:text-white font-sans tracking-tight">MLM</h4>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 font-sans font-medium mt-0.5">(Mixed Linear Model)</p>
                 </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="rounded-full bg-cyan-100 dark:bg-[#06B6D4]/20 border border-cyan-300 dark:border-[#06B6D4]/30 px-2.5 py-0.5 text-xs font-bold text-cyan-900 dark:text-[#06B6D4] font-sans">
-                    Direkomendasikan
-                  </span>
-                  <EduHintTooltip hintKey="mlm" />
-                </div>
+                <p className="text-xs sm:text-[13px] text-slate-700 dark:text-slate-300 leading-relaxed font-sans font-medium">
+                  Menggabungkan kovariat PCA (efek tetap) dan matriks kekerabatan genetik / Kinship (efek acak). Sangat direkomendasikan untuk populasi berkerabat atau klonal guna menekan temuan positif palsu.
+                </p>
               </div>
-              <p className="text-xs sm:text-[13px] text-slate-700 dark:text-slate-300 leading-relaxed font-sans font-medium">
-                Mixed Linear Model. Menggabungkan kovariat PCA (efek tetap) DAN matriks kekerabatan
-                genetik / <em>Kinship</em> (efek acak). Sangat direkomendasikan untuk populasi dengan struktur kekerabatan kompleks atau klonal guna menekan temuan positif palsu.
-              </p>
+
               {model === 'MLM' && (
-                <div className="mt-3 flex items-center gap-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-400 animate-fade-down">
-                  <CheckCircle2 className="h-4 w-4 stroke-[2.5] animate-pop-in" />
-                  <span>Matriks Kinship disertakan secara otomatis</span>
+                <div className="mt-4 pt-3 border-t border-emerald-200 dark:border-emerald-500/20 flex items-center gap-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-400 animate-fade-down">
+                  <CheckCircle2 className="h-4 w-4 shrink-0 stroke-[2.5] animate-pop-in" />
+                  <span>✓ Kovariat PCA (PC1–PC3) &amp; Matriks Kinship disertakan secara otomatis</span>
                 </div>
               )}
             </div>
@@ -564,7 +574,9 @@ export default function Step2Config({
                 Koreksi Multiple Testing & Ambang Signifikansi
               </h3>
             </div>
-            <span className="text-xs text-slate-500 dark:text-slate-400 font-sans">Pengendalian Positif Palsu</span>
+            <span className="text-xs font-bold text-[#5B4DFE] dark:text-[#06B6D4] font-sans">
+              Pilih Salah Satu atau Keduanya
+            </span>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -602,30 +614,49 @@ export default function Step2Config({
               </div>
             </label>
 
-            {/* Input Alpha (TUGAS 7: Step any, Preset Pills, Info Rentang Valid) */}
+            {/* Input Alpha dengan Kontrol Kustom & Tombol Panah Atas/Bawah */}
             <div className="glass-subcard p-4 space-y-2">
               <label htmlFor="alpha" className="block text-sm font-bold text-slate-900 dark:text-white font-sans">
                 Ambang Alpha Signifikansi
               </label>
 
-              <div className="relative">
+              <div className="relative flex items-center">
                 <input
                   id="alpha"
-                  type="number"
-                  min="0.0001"
-                  max="0.20"
-                  step="any"
+                  type="text"
+                  inputMode="decimal"
                   value={alpha}
-                  onChange={(e) => setAlpha(e.target.value)}
-                  className="w-full font-mono text-sm font-bold text-slate-900 dark:text-[#06B6D4] bg-white dark:bg-[#121B38] rounded-xl border border-slate-300 dark:border-white/10 py-2 px-3 focus:outline-none focus:border-[#0284C7]"
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/,/g, '.');
+                    setAlpha(val);
+                  }}
+                  className="w-full font-mono text-sm font-bold text-slate-900 dark:text-[#06B6D4] bg-white dark:bg-[#121B38] rounded-xl border border-slate-300 dark:border-white/10 py-2 pl-3 pr-10 focus:outline-none focus:border-[#0284C7]"
                 />
+                <div className="absolute right-1.5 flex flex-col gap-0.5">
+                  <button
+                    type="button"
+                    onClick={() => handleAlphaStep(0.01)}
+                    className="h-3.5 w-6 flex items-center justify-center rounded bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/20 text-[9px] text-slate-700 dark:text-slate-200 select-none cursor-pointer"
+                    title="Tambah 0.01"
+                  >
+                    ▲
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleAlphaStep(-0.01)}
+                    className="h-3.5 w-6 flex items-center justify-center rounded bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/20 text-[9px] text-slate-700 dark:text-slate-200 select-none cursor-pointer"
+                    title="Kurangi 0.01"
+                  >
+                    ▼
+                  </button>
+                </div>
               </div>
 
               {/* Tombol Kapsul Pilihan Cepat (Preset Chips) */}
               <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
                 <button
                   type="button"
-                  onClick={() => setAlpha(0.01)}
+                  onClick={() => setAlpha('0.01')}
                   className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                     Number(alpha) === 0.01
                       ? 'bg-[#5B4DFE] text-white shadow-sm font-bold'
@@ -636,7 +667,7 @@ export default function Step2Config({
                 </button>
                 <button
                   type="button"
-                  onClick={() => setAlpha(0.05)}
+                  onClick={() => setAlpha('0.05')}
                   className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                     Number(alpha) === 0.05
                       ? 'bg-[#0284C7] dark:bg-[#06B6D4] text-white dark:text-slate-950 shadow-sm font-bold'
@@ -647,7 +678,7 @@ export default function Step2Config({
                 </button>
                 <button
                   type="button"
-                  onClick={() => setAlpha(0.10)}
+                  onClick={() => setAlpha('0.10')}
                   className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                     Number(alpha) === 0.10
                       ? 'bg-[#5B4DFE] text-white shadow-sm font-bold'
@@ -659,7 +690,7 @@ export default function Step2Config({
               </div>
 
               <span className="text-xs text-slate-600 dark:text-slate-400 block font-sans font-medium">
-                Nilai valid: 0.0001 – 0.20 (Rekomendasi standar: 0.05)
+                Rentang valid: 0.0001 – 0.20 | Format desimal bertitik (contoh: 0.10)
               </span>
             </div>
           </div>

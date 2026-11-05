@@ -109,13 +109,14 @@ export default function QQPlot({ qqData = [], lambdaGc = 1.024 }) {
       responsive: true,
       displayModeBar: true,
       displaylogo: false,
-      modeBarButtonsToRemove: ['lasso2d', 'select2d'],
+      doubleClick: 'reset+autosize',
+      modeBarButtonsToRemove: ['sendDataToCloud', 'editInChartStudio', 'lasso2d', 'select2d'],
       toImageButtonOptions: {
         format: 'png',
-        filename: 'gwasena_qq_plot',
-        height: 500,
-        width: 600,
-        scale: 2,
+        filename: 'QQ_Plot_GWASena_HD',
+        height: 1600,
+        width: 1600,
+        scale: 3,
       },
     };
 

@@ -3,7 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Eye, EyeOff, Lock, User, ArrowRight, CheckCircle2, Loader2, Sparkles } from 'lucide-react';
 import { useAuthStore } from '../store/useAuthStore.js';
 import ErrorMessageArea from '../components/common/ErrorMessageArea.jsx';
-import GoogleAccountChooserModal, { GoogleIcon } from '../components/common/GoogleAccountChooserModal.jsx';
+import GoogleAuthModal, { GoogleIcon } from '../components/common/GoogleAuthModal.jsx';
 
 /**
  * LoginPage (Autentikasi Pengguna - Figma Aligned)
@@ -106,7 +106,7 @@ export default function LoginPage() {
             className="w-full flex items-center justify-center gap-3 py-2.5 px-4 rounded-xl border border-slate-300 dark:border-white/15 bg-white dark:bg-[#162142] hover:bg-slate-50 dark:hover:bg-[#1E2C58] text-slate-800 dark:text-white font-semibold text-sm shadow-sm hover:shadow transition-all active:scale-[0.985] cursor-pointer"
           >
             <GoogleIcon className="h-5 w-5" />
-            <span>Lanjutkan dengan Google</span>
+            <span>Masuk dengan Google</span>
           </button>
         </div>
 
@@ -262,8 +262,8 @@ export default function LoginPage() {
         </div>
       </div>
 
-      {/* Modal Pemilih Akun Google Interaktif */}
-      <GoogleAccountChooserModal
+      {/* Modal Masuk Akun Google Interaktif (Anti-Black-Page) */}
+      <GoogleAuthModal
         isOpen={isGoogleModalOpen}
         onClose={() => setIsGoogleModalOpen(false)}
         onSuccess={handleGoogleSuccess}

@@ -16,13 +16,64 @@ from backend.schemas import GoogleAuthRequest, LoginIn, RegisterIn
 
 router = APIRouter(prefix="/api/auth", tags=["1. autentikasi"])
 
+DUMMY_EMAIL_PREFIXES = ("blablabla", "test", "dummy", "abc", "123", "asdf", "user")
+DISPOSABLE_DOMAINS = (
+    "mailinator.com",
+    "tempmail.com",
+    "example.com",
+    "throwaway.com",
+    "guerrillamail.com",
+)
+
+
+def _validate_not_dummy_email(email: str) -> None:
+    clean = email.strip().lower()
+    parts = clean.split("@")
+    if len(parts) != 2:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY, "Format alamat email tidak valid."
+        )
+    prefix, domain = parts
+    for p in DUMMY_EMAIL_PREFIXES:
+        if (
+            prefix == p
+            or prefix.startswith(f"{p}_")
+            or prefix.startswith(f"{p}.")
+            or prefix.startswith(f"{p}1")
+            or prefix.startswith(f"{p}2")
+            or prefix.startswith(f"{p}@")
+        ):
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                "Alamat email dummy atau percobaan tidak diizinkan. Mohon gunakan email resmi atau institusi yang valid.",
+            )
+    for d in DISPOSABLE_DOMAINS:
+        if domain == d or domain.endswith("." + d):
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                "Domain email sementara (disposable) tidak diizinkan. Mohon gunakan email institusi atau email resmi yang valid.",
+            )
+
 
 def _user_out(u: User) -> dict:
-    return {"user_id": u.user_id, "username": u.username, "email": u.email, "role": u.role}
+    created_str = None
+    if hasattr(u, "created_at") and u.created_at:
+        try:
+            created_str = u.created_at.isoformat()
+        except Exception:
+            created_str = str(u.created_at)
+    return {
+        "user_id": u.user_id,
+        "username": u.username,
+        "email": u.email,
+        "role": u.role,
+        "created_at": created_str,
+    }
 
 
 @router.post("/register", status_code=status.HTTP_201_CREATED, summary="Daftar akun baru")
 def register(data: RegisterIn, db: Session = Depends(get_db)):
+    _validate_not_dummy_email(data.email)
     exists = db.scalar(
         select(User).where(or_(User.username == data.username, User.email == data.email.lower()))
     )
@@ -37,7 +88,12 @@ def register(data: RegisterIn, db: Session = Depends(get_db)):
     db.add(user)
     db.commit()
     db.refresh(user)
-    return {"pesan": "Akun berhasil dibuat. Silakan login.", "pengguna": _user_out(user)}
+    u_out = _user_out(user)
+    return {
+        "pesan": "Akun berhasil dibuat. Silakan login.",
+        "user": u_out,
+        "pengguna": u_out,
+    }
 
 
 @router.post("/login", summary="Login dan dapatkan token")
@@ -46,11 +102,13 @@ def login(data: LoginIn, db: Session = Depends(get_db)):
     user = db.scalar(select(User).where(or_(User.username == ident, User.email == ident.lower())))
     if user is None or not verify_password(data.password, user.password_hash):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Username/email atau kata sandi salah.")
+    u_out = _user_out(user)
     return {
         "access_token": create_token(user.user_id, user.role),
         "token_type": "bearer",
         "berlaku_jam": settings.TOKEN_EXPIRE_HOURS,
-        "pengguna": _user_out(user),
+        "user": u_out,
+        "pengguna": u_out,
     }
 
 
@@ -118,11 +176,13 @@ def google_auth(payload: GoogleAuthRequest, db: Session = Depends(get_db)):
         db.commit()
         db.refresh(user)
 
+    u_out = _user_out(user)
     return {
         "access_token": create_token(user.user_id, user.role),
         "token_type": "bearer",
         "berlaku_jam": settings.TOKEN_EXPIRE_HOURS,
-        "pengguna": _user_out(user),
+        "user": u_out,
+        "pengguna": u_out,
     }
 
 

@@ -30,7 +30,9 @@ class QCResult:
     def as_dict(self, n_samples: int, n_snps: int) -> dict:
         return {
             "sampel_awal": n_samples,
+            "sampel_total": n_samples,
             "snp_awal": n_snps,
+            "snp_total": n_snps,
             "sampel_lolos": int(self.sample_mask.sum()),
             "snp_lolos": int(self.snp_mask.sum()),
             "kriteria": self.summary,

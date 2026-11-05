@@ -82,8 +82,8 @@ export default function IntroPage() {
           <span>GWASena 2.0 · Platform Genome-Wide Association Study Terpadu</span>
         </div>
 
-        {/* Brand Display */}
-        <div className="mb-2">
+        {/* Brand Display dengan kapsul terang lembut agar logo biru tua tidak tenggelam di mode gelap */}
+        <div className="mb-3 inline-flex items-center justify-center p-3 sm:p-4 rounded-3xl bg-white/95 dark:bg-white/95 shadow-xl shadow-cyan-500/20 backdrop-blur-md border border-white/60">
           <BrandLogo size="xl" showTagline={false} />
         </div>
 
@@ -101,8 +101,8 @@ export default function IntroPage() {
         </h1>
 
         {/* Narasi Pacing (Neuton Editorial Font) */}
-        <p className="mt-4 max-w-2xl font-serif text-base sm:text-lg text-slate-600 dark:text-slate-300 leading-relaxed">
-          Dirancang untuk peneliti agronomi, pemulia genetik, dan akademisi bioinformatika. Mengeliminasi kerumitan perintah CLI (PLINK 2 & GAPIT) dengan panduan parameter ilmiah yang transparan dan alur kerja terpadu.
+        <p className="mt-4 max-w-2xl font-serif text-base sm:text-lg text-slate-800 dark:text-slate-100 dark:drop-shadow leading-relaxed font-medium">
+          Dirancang untuk peneliti agronomi, pemulia genetik, dan akademisi bioinformatika dengan panduan parameter ilmiah transparan dalam satu alur kerja terpadu.
         </p>
       </div>
 
@@ -112,15 +112,17 @@ export default function IntroPage() {
           {capabilities.map((cap, idx) => {
             const Icon = cap.icon;
             const isActive = activeCapability === idx;
+            const isStep2Or3 = idx === 1 || idx === 2;
+            const darkModeCustom = isStep2Or3 && !isActive ? 'dark:bg-slate-900/80 dark:border dark:border-slate-700 dark:text-slate-200' : '';
             return (
               <button
                 key={cap.id}
                 type="button"
                 onClick={() => setActiveCapability(idx)}
-                className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs sm:text-sm font-semibold transition-all duration-100 active:scale-95 shrink-0 ${
+                className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs sm:text-sm font-semibold transition-all duration-100 active:scale-95 shrink-0 cursor-pointer ${
                   isActive
-                    ? 'border border-[#5B4DFE] dark:border-[#5B4DFE]/40 bg-white dark:bg-[#5B4DFE]/15 text-[#5B4DFE] dark:text-white shadow-md'
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-slate-200'
+                    ? 'border border-[#5B4DFE] dark:border-[#5B4DFE]/40 bg-white dark:bg-[#5B4DFE]/25 text-[#5B4DFE] dark:text-white shadow-md'
+                    : `${darkModeCustom} text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-slate-100`
                 }`}
               >
                 <Icon className={`h-4 w-4 ${isActive ? 'text-[#5B4DFE] dark:text-[#06B6D4]' : ''}`} />

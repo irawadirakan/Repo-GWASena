@@ -34,7 +34,7 @@ from backend.models import (
     User,
     VisualizationResult,
 )
-from backend.schemas import AnalysisCreate, ParameterIn
+from backend.schemas import AnalysisCreate, AnalysisUpdate, ParameterIn
 from backend.services import dataset_service as ds
 from backend.services.analysis_runner import dispatch
 from pipeline.annotation import annotate_from_gff3
@@ -139,6 +139,15 @@ def get_analysis(a: Analysis = Depends(owned_analysis), db: Session = Depends(ge
     }
 
 
+@router.patch("/{analysis_id}", summary="Perbarui nama atau atribut sesi analisis")
+def update_analysis(data: AnalysisUpdate, a: Analysis = Depends(owned_analysis), db: Session = Depends(get_db)):
+    if data.analysis_name:
+        a.analysis_name = data.analysis_name.strip()
+        db.commit()
+        db.refresh(a)
+    return _summary(a)
+
+
 # ------------------------------------------------------------------ 2. unggah & validasi
 @router.post("/{analysis_id}/upload", summary="2. Unggah genotipe (VCF atau PLINK biner) + CSV dan validasi")
 def upload(
@@ -187,13 +196,23 @@ def upload(
     info = ds.store_datasets(db, a.analysis_id, genotipe.filename, g_path,
                              fenotipe.filename, p_path, geno, pheno,
                              genotype_type="plink_bed" if plink else "vcf")
+    # Auto-rename sesi jika pengguna membiarkan nama default
+    default_names = {"Sesi Analisis Baru", "Analisis Asosiasi Genomik 2026", "Analisis Baru", ""}
+    if a.analysis_name in default_names or a.analysis_name.startswith("Sesi Analisis"):
+        stem = Path(genotipe.filename).stem
+        if stem.lower().endswith(".vcf"):
+            stem = Path(stem).stem
+        a.analysis_name = f"Analisis {stem}"
+
     a.status = AnalysisStatus.TERVALIDASI
     db.add(AnalysisLog(analysis_id=a.analysis_id, stage="validasi", status="selesai",
                        message=f"{geno.n_samples} sampel, {geno.n_snps} SNP; Sample ID cocok"))
     db.commit()
+    db.refresh(a)
     return {
         "pesan": "Berkas valid. Lanjutkan ke pengaturan parameter.",
         "analysis_id": a.analysis_id,
+        "analysis_name": a.analysis_name,
         "status": a.status,
         **info,
         "kecocokan_sample_id": match,

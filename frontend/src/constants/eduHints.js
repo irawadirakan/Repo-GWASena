@@ -56,26 +56,78 @@ export const TIPS_EDUKATIF = [
   {
     id: 1,
     judul: 'Skala Genomik & Kerapatan Penanda',
-    teks: 'Tahukah Anda? Analisis asosiasi genomik (GWAS) mengintegrasikan jutaan titik variasi penanda SNP untuk memetakan arsitektur genetik sifat kuantitatif secara presisi.',
+    teks: 'Analisis GWAS mengintegrasikan ribuan hingga jutaan varian SNP untuk memetakan arsitektur genetik sifat kuantitatif secara presisi pada aksesi tanaman.',
   },
   {
     id: 2,
-    judul: 'Pentingnya Koreksi PCA',
-    teks: 'Tanpa koreksi struktur populasi (PCA), perbedaan geografis asal kultivar atau aksesi dapat disalahartikan sebagai asosiasi genetik murni terhadap sifat fenotipe.',
+    judul: 'Missingness Sampel (mind)',
+    teks: 'Ambang batas mind menyaring sampel yang memiliki banyak genotipe kosong agar tidak menimbulkan distorsi pada inferensi alel populasi.',
   },
   {
     id: 3,
-    judul: 'Membaca Manhattan Plot',
-    teks: 'Pada Manhattan Plot, setiap titik mewakili satu SNP. Semakin tinggi posisi titik pada sumbu Y (-log10 P), semakin kuat bukti statistik asosiasi SNP tersebut dengan sifat fenotipe yang diuji.',
+    judul: 'Missingness SNP (geno)',
+    teks: 'Filter geno membuang penanda SNP yang gagal terbaca pada sebagian besar sampel demi menjaga keandalan statistik pengujian asosiasi.',
   },
   {
     id: 4,
-    judul: 'Mengevaluasi Kualitas via QQ Plot',
-    teks: 'QQ Plot membantu memvalidasi kualitas model Anda. Jika titik-titik mengikuti garis lurus di awal lalu melengkung naik tajam hanya di ujung kanan atas, berarti model telah berhasil mengendalikan bias populasi.',
+    judul: 'Minor Allele Frequency (maf)',
+    teks: 'SNP dengan MAF di bawah 0.05 disaring karena alel yang terlalu langka memiliki kekuatan statistik rendah dan rentan positif palsu.',
   },
   {
     id: 5,
-    judul: 'Sifat Non-Blocking Anotasi Gen',
-    teks: 'Setelah uji asosiasi selesai, GWASena memetakan SNP signifikan ke gen kandidat terdekat. Jika server referensi eksternal sedang sibuk, hasil statistik dan grafik Anda tetap aman dan dapat langsung diunduh.',
+    judul: 'Keseimbangan Hardy-Weinberg (HWE)',
+    teks: 'Pada plasma nutfah klonal atau silang khusus, penyimpangan HWE lumrah terjadi sehingga filter ini dianjurkan dinonaktifkan atau dilonggarkan.',
+  },
+  {
+    id: 6,
+    judul: 'Koefisien Kekerabatan KING',
+    teks: 'Filter KING mendeteksi dan menyaring individu duplikat atau kembar klon agar struktur kekerabatan ekstrem tidak mendistorsi analisis asosiasi.',
+  },
+  {
+    id: 7,
+    judul: 'Pentingnya Koreksi PCA',
+    teks: 'Dekomposisi PCA PC1–PC3 menyerap stratifikasi geografis aksesi sehingga mencegah korelasi semu antara asal daerah dan sifat fenotipe agronomi.',
+  },
+  {
+    id: 8,
+    judul: 'Kelebihan Model GLM',
+    teks: 'Model Linier Umum mengoreksi struktur populasi sebagai kovariat tetap dengan komputasi cepat, ideal untuk populasi tanpa kekerabatan klonal kompleks.',
+  },
+  {
+    id: 9,
+    judul: 'Keunggulan Model MLM',
+    teks: 'Model Linier Campuran memadukan kovariat PCA dan matriks kinship untuk menekan angka positif palsu pada populasi berkerabat dekat.',
+  },
+  {
+    id: 10,
+    judul: 'Koreksi Ketat Bonferroni',
+    teks: 'Mengendalikan family-wise error rate secara ketat dengan membagi alpha terhadap total SNP, efektif menemukan lokus utama berefek besar.',
+  },
+  {
+    id: 11,
+    judul: 'Sensitivitas Koreksi FDR',
+    teks: 'False Discovery Rate Benjamini-Hochberg lebih adaptif untuk mendeteksi banyak varian poligenik yang masing-masing berkontribusi kecil pada fenotipe.',
+  },
+  {
+    id: 12,
+    judul: 'Membaca Manhattan Plot',
+    teks: 'Sumbu Y menampilkan minus log10 p-value; semakin menjulang titik di atas garis batas, semakin kuat bukti signifikansi asosiasi lokus.',
+  },
+  {
+    id: 13,
+    judul: 'Evaluasi Deviasi QQ Plot',
+    teks: 'Keselarasan titik terhadap garis diagonal menunjukkan pengendalian bias populasi yang baik, dengan lonjakan di ujung atas menandakan asosiasi sejati.',
+  },
+  {
+    id: 14,
+    judul: 'Radius Pemetaan Gen Kandidat',
+    teks: 'SNP signifikan dipetakan ke gen terdekat dalam radius window 50.000 pasang basa untuk mengidentifikasi fungsi biologis terkait fenotipe.',
+  },
+  {
+    id: 15,
+    judul: 'Anotasi Gen Non-Blocking',
+    teks: 'Proses anotasi genomik referensi berjalan secara asinkron tanpa memblokir unduhan hasil statistik asosiasi atau visualisasi plot utama Anda.',
   },
 ];
+
+export const EDU_TIPS = TIPS_EDUKATIF;

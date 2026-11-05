@@ -29,6 +29,11 @@ class AnalysisCreate(BaseModel):
                                examples=["GWAS bobot umbi bawang putih"])
 
 
+class AnalysisUpdate(BaseModel):
+    analysis_name: str = Field(min_length=1, max_length=150,
+                               examples=["Analisis genotipe_bawang_putih"])
+
+
 class ParameterIn(BaseModel):
     # Field yang tidak dikenal ditolak (422), supaya salah nama field dari frontend
     # langsung kelihatan dan tidak diam-diam diabaikan.

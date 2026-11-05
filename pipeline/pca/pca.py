@@ -38,6 +38,12 @@ def run_pca(g: np.ndarray, n_pc: int) -> PCAResult:
         return PCAResult(pcs=np.zeros((n, 0)), variance_explained=np.zeros(0))
     z = standardize(g)
     u, s, _ = np.linalg.svd(z, full_matrices=False)
+    # Konvensi tanda deterministik: pastikan komponen dengan magnitudo absolut terbesar bertanda positif
+    u_k = u[:, :k].copy()
+    for col in range(k):
+        max_row = int(np.argmax(np.abs(u_k[:, col])))
+        if u_k[max_row, col] < 0:
+            u_k[:, col] *= -1
     var = s ** 2
     total = var.sum() if var.sum() > 0 else 1.0
-    return PCAResult(pcs=u[:, :k] * s[:k], variance_explained=var[:k] / total)
+    return PCAResult(pcs=u_k * s[:k], variance_explained=var[:k] / total)

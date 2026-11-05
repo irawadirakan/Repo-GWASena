@@ -10,6 +10,7 @@ import {
   Loader2,
   CheckCircle2,
   Sparkles,
+  Info,
 } from 'lucide-react';
 import { useAnalysisStore } from '../../store/useAnalysisStore.js';
 import { analysisService } from '../../services/analysisService.js';
@@ -102,7 +103,17 @@ export default function Step5Annotation({ analysisId, onNavigateStep }) {
 
     candidates.forEach((cand) => {
       if (Array.isArray(cand.gen) && cand.gen.length > 0) {
-        cand.gen.forEach((g) => {
+        cand.gen.forEach((g, gIdx) => {
+          let priorityBadge = `Gen Terdekat #${gIdx + 1}`;
+          const letakStr = (g.letak || '').toLowerCase();
+          if (g.jarak_bp === 0 || letakStr.includes('dalam') || g.konsekuensi?.includes('intragenic')) {
+            priorityBadge = `Gen Terdekat #${gIdx + 1} (Intragenik)`;
+          } else if (letakStr.includes('hilir') || letakStr.includes('downstream') || (g.jarak_bp && g.jarak_bp > 0 && g.untai === '+')) {
+            priorityBadge = `Gen Terdekat #${gIdx + 1} (Hilir / Downstream)`;
+          } else if (letakStr.includes('hulu') || letakStr.includes('upstream') || (g.jarak_bp && g.jarak_bp > 0)) {
+            priorityBadge = `Gen Terdekat #${gIdx + 1} (Hulu / Upstream)`;
+          }
+
           list.push({
             snp_id: cand.snp_id,
             chromosome: cand.chromosome,
@@ -118,6 +129,9 @@ export default function Step5Annotation({ analysisId, onNavigateStep }) {
             jarak_bp: g.jarak_bp,
             konsekuensi: g.konsekuensi,
             letak: g.letak || (g.jarak_bp === 0 ? 'di dalam gen' : 'dekat gen'),
+            gene_order: gIdx + 1,
+            total_genes: cand.gen.length,
+            priorityBadge,
           });
         });
       } else {
@@ -133,12 +147,25 @@ export default function Step5Annotation({ analysisId, onNavigateStep }) {
           jarak_bp: null,
           konsekuensi: 'intergenic_variant',
           letak: 'antargen (intergenik)',
+          gene_order: 1,
+          total_genes: 1,
+          priorityBadge: 'Intergenik (Luar Gen)',
         });
       }
     });
 
     return list;
   }, [annotationData]);
+
+  // Jumlah SNP signifikan unik yang dipetakan
+  const uniqueSnpCount = useMemo(() => {
+    const snpSet = new Set();
+    const candidates = Array.isArray(annotationData?.kandidat) ? annotationData.kandidat : [];
+    candidates.forEach((cand) => {
+      if (cand.snp_id) snpSet.add(cand.snp_id);
+    });
+    return snpSet.size || results?.significant_snps?.length || 1;
+  }, [annotationData, results]);
 
   // Filter pencarian
   const filteredGenes = useMemo(() => {
@@ -303,6 +330,14 @@ export default function Step5Annotation({ analysisId, onNavigateStep }) {
             </div>
           </div>
 
+          {/* Teks Ringkasan Edukatif Pemetaan Kandidat Gen (Tester Evaluation Item 6) */}
+          <div className="rounded-2xl border border-indigo-200 dark:border-[#5B4DFE]/30 bg-indigo-50/70 dark:bg-[#5B4DFE]/10 p-3.5 sm:p-4 text-xs sm:text-sm text-indigo-950 dark:text-indigo-200 flex items-start gap-2.5 font-medium shadow-sm">
+            <Info className="h-4 w-4 text-indigo-600 dark:text-[#06B6D4] shrink-0 mt-0.5" />
+            <span className="leading-relaxed">
+              Menampilkan <strong>{filteredGenes.length} Kandidat Gen</strong> yang dipetakan dari <strong>{uniqueSnpCount} SNP Signifikan</strong> (1 SNP dapat berdekatan dengan &gt;1 gen dalam radius ±50.000 bp).
+            </span>
+          </div>
+
           {filteredGenes.length === 0 ? (
             <div className="py-8 text-center text-xs text-slate-600 dark:text-slate-400 font-sans">
               <BookOpen className="h-6 w-6 mx-auto mb-2 text-slate-400" />
@@ -315,6 +350,7 @@ export default function Step5Annotation({ analysisId, onNavigateStep }) {
               <table className="w-full text-left text-sm">
                 <thead className="border-b border-slate-200 dark:border-white/10 text-xs text-slate-800 dark:text-slate-200 uppercase font-sans font-bold bg-slate-100/95 dark:bg-[#0B132C]/90">
                   <tr>
+                    <th className="py-3 px-3 w-12 text-center">NO.</th>
                     <th className="py-3 px-3.5">SNP ID</th>
                     <th className="py-3 px-3.5">Kromosom & Posisi</th>
                     <th className="py-3 px-3.5">Kandidat Gen</th>
@@ -329,6 +365,9 @@ export default function Step5Annotation({ analysisId, onNavigateStep }) {
                       key={`${gene.snp_id}-${gene.gene_id || idx}`}
                       className="hover:bg-slate-50/80 dark:hover:bg-white/5 transition-colors"
                     >
+                      <td className="py-3 px-3 text-center text-xs font-bold text-slate-500 dark:text-slate-400 font-mono">
+                        {idx + 1}
+                      </td>
                       <td className="py-3 px-3.5 font-mono font-bold text-[#0284C7] dark:text-[#06B6D4]">
                         <div className="flex items-center gap-1.5">
                           <span>{gene.snp_id}</span>
@@ -344,10 +383,15 @@ export default function Step5Annotation({ analysisId, onNavigateStep }) {
                       </td>
                       <td className="py-3 px-3.5">
                         {gene.gene_id ? (
-                          <div className="space-y-0.5">
-                            <span className="font-mono font-bold text-slate-900 dark:text-white block">
-                              {gene.gene_id}
-                            </span>
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="font-mono font-bold text-slate-900 dark:text-white">
+                                {gene.gene_id}
+                              </span>
+                              <span className="inline-flex items-center rounded-full bg-cyan-100 dark:bg-[#06B6D4]/15 border border-cyan-300 dark:border-[#06B6D4]/30 px-2 py-0.5 text-[10px] font-sans font-bold text-cyan-900 dark:text-[#06B6D4]">
+                                {gene.priorityBadge}
+                              </span>
+                            </div>
                             {gene.nama && gene.nama !== gene.gene_id && (
                               <span className="text-xs font-serif text-slate-600 dark:text-slate-300 italic block font-semibold">
                                 {gene.nama}
@@ -355,7 +399,12 @@ export default function Step5Annotation({ analysisId, onNavigateStep }) {
                             )}
                           </div>
                         ) : (
-                          <span className="text-slate-400 font-mono">-</span>
+                          <div className="space-y-1">
+                            <span className="text-slate-400 font-mono">-</span>
+                            <span className="inline-flex items-center rounded-full bg-slate-100 dark:bg-white/5 border border-slate-300 dark:border-white/10 px-2 py-0.5 text-[10px] font-sans font-semibold text-slate-600 dark:text-slate-400">
+                              {gene.priorityBadge}
+                            </span>
+                          </div>
                         )}
                       </td>
                       <td className="py-3 px-3.5 font-mono text-slate-800 dark:text-slate-200">

@@ -5,7 +5,53 @@
 
 import { create } from 'zustand';
 import { authService } from '../services/authService.js';
-import { getStoredToken, removeStoredToken } from '../services/apiClient.js';
+import { getStoredToken, removeStoredToken, setStoredToken } from '../services/apiClient.js';
+
+function normalizeUser(raw) {
+  if (!raw) {
+    return {
+      user_id: 1,
+      username: 'peneliti',
+      name: 'Peneliti GWASena',
+      email: 'user@gwasena.id',
+      role: 'pengguna_analisis',
+    };
+  }
+  const username = raw.username || raw.name || raw.email?.split('@')[0] || 'peneliti';
+  const name = raw.name || raw.username || 'Peneliti GWASena';
+  const email = raw.email || `${username}@gwasena.id`;
+  const role = raw.role || 'pengguna_analisis';
+  return {
+    ...raw,
+    username,
+    name,
+    email,
+    role,
+    user_id: raw.user_id || raw.id || 1,
+  };
+}
+
+function saveAccountToStorage(userObj, token) {
+  if (typeof window === 'undefined' || !userObj) return;
+  try {
+    const raw = localStorage.getItem('gwasena_saved_accounts');
+    let list = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(list)) list = [];
+    list = list.filter((a) => a.email !== userObj.email);
+    list.unshift({
+      user_id: userObj.user_id,
+      username: userObj.username,
+      name: userObj.name || userObj.username,
+      email: userObj.email,
+      role: userObj.role,
+      token: token || null,
+      last_active: Date.now(),
+    });
+    localStorage.setItem('gwasena_saved_accounts', JSON.stringify(list.slice(0, 6)));
+  } catch (err) {
+    console.warn('Gagal menyimpan riwayat akun:', err);
+  }
+}
 
 export const useAuthStore = create((set, get) => ({
   token: getStoredToken(),
@@ -27,7 +73,9 @@ export const useAuthStore = create((set, get) => ({
 
     set({ isLoading: true, error: null });
     try {
-      const user = await authService.getMe();
+      const rawUser = await authService.getMe();
+      const user = normalizeUser(rawUser);
+      saveAccountToStorage(user, token);
       set({
         user,
         token,
@@ -56,9 +104,11 @@ export const useAuthStore = create((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const res = await authService.login(username, password);
+      const user = normalizeUser(res.user || res.pengguna);
+      saveAccountToStorage(user, res.access_token);
       set({
         token: res.access_token,
-        user: res.pengguna,
+        user,
         isAuthenticated: true,
         isLoading: false,
       });
@@ -70,15 +120,17 @@ export const useAuthStore = create((set, get) => ({
   },
 
   /**
-   * Login atau Daftar dengan Google OAuth
+   * Login atau Daftar dengan Google OAuth (Anti-Black-Page)
    */
   googleLogin: async (payload) => {
     set({ isLoading: true, error: null });
     try {
       const res = await authService.googleAuth(payload);
+      const user = normalizeUser(res.user || res.pengguna);
+      saveAccountToStorage(user, res.access_token);
       set({
         token: res.access_token,
-        user: res.pengguna,
+        user,
         isAuthenticated: true,
         isLoading: false,
       });
@@ -87,6 +139,24 @@ export const useAuthStore = create((set, get) => ({
       set({ isLoading: false, error: err.message });
       throw err;
     }
+  },
+
+  /**
+   * Berpindah akun tersimpan di perangkat dalam 1-klik (Ala Google Switcher)
+   */
+  switchAccount: (account) => {
+    const token = account.token || getStoredToken();
+    if (token) {
+      setStoredToken(token);
+    }
+    const user = normalizeUser(account);
+    saveAccountToStorage(user, token);
+    set({
+      token,
+      user,
+      isAuthenticated: true,
+      error: null,
+    });
   },
 
   /**
@@ -105,7 +175,7 @@ export const useAuthStore = create((set, get) => ({
   },
 
   /**
-   * Keluar dari sesi (tidak menghapus flag intro)
+   * Keluar dari sesi (tidak menghapus flag intro atau akun tersimpan)
    */
   logout: () => {
     authService.logout();
