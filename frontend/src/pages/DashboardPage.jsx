@@ -4,9 +4,6 @@ import {
   Dna,
   PlusCircle,
   History,
-  Activity,
-  CheckCircle2,
-  AlertTriangle,
   ArrowRight,
   Sprout,
   Loader2,
@@ -33,7 +30,6 @@ export default function DashboardPage() {
   const { user } = useAuthStore();
 
   const [meta, setMeta] = useState(null);
-  const [health, setHealth] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [analysisName, setAnalysisName] = useState('Analisis Asosiasi Genomik 2026');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -91,13 +87,9 @@ export default function DashboardPage() {
     let isMounted = true;
     async function loadDashboardData() {
       try {
-        const [metaData, healthData] = await Promise.allSettled([
-          analysisService.getMeta(),
-          analysisService.checkHealth(),
-        ]);
-        if (isMounted) {
-          if (metaData.status === 'fulfilled') setMeta(metaData.value);
-          if (healthData.status === 'fulfilled') setHealth(healthData.value);
+        const metaData = await analysisService.getMeta();
+        if (isMounted && metaData) {
+          setMeta(metaData);
         }
       } catch (err) {
         console.error('Gagal memuat data dashboard:', err);
@@ -138,7 +130,6 @@ export default function DashboardPage() {
   };
 
   const org = meta?.organisme;
-  const isHealthy = health?.status === 'ok';
 
   // Filter riwayat yang sesuai dengan ketikan input
   const filteredHistory = sessionHistory.filter((item) =>
@@ -369,59 +360,6 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* ── Panel Status Infrastruktur Ringkas (High Separation Glass) ── */}
-      <div className="figma-card p-5">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <Activity className="h-4 w-4 text-[#06B6D4]" />
-            <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200 font-sans">
-              Kesiapan Infrastruktur Komputasi
-            </h3>
-          </div>
-          <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 font-sans">
-            Status: {isHealthy ? 'Optimal' : 'Memeriksa...'}
-          </span>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {/* API Backend */}
-          <div className="flex items-center gap-3 glass-subcard p-3.5 text-sm">
-            <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-            <div>
-              <span className="font-bold text-slate-900 dark:text-white block font-sans">FastAPI Engine</span>
-              <span className="text-xs text-slate-600 dark:text-slate-300 font-medium font-sans">REST API v0.1.1 Siap</span>
-            </div>
-          </div>
-
-          {/* Database PostgreSQL */}
-          <div className="flex items-center gap-3 glass-subcard p-3.5 text-sm">
-            {health?.components?.database?.ok ? (
-              <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-            ) : (
-              <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0" />
-            )}
-            <div>
-              <span className="font-bold text-slate-900 dark:text-white block font-sans">PostgreSQL 16</span>
-              <span className="text-xs text-slate-600 dark:text-slate-300 font-medium font-sans">
-                {health?.components?.database?.tables?.length || 12} Tabel Terindeks
-              </span>
-            </div>
-          </div>
-
-          {/* Celery & Redis */}
-          <div className="flex items-center gap-3 glass-subcard p-3.5 text-sm">
-            {health?.components?.redis?.ok ? (
-              <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-            ) : (
-              <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0" />
-            )}
-            <div>
-              <span className="font-bold text-slate-900 dark:text-white block font-sans">Celery & Redis</span>
-              <span className="text-xs text-slate-600 dark:text-slate-300 font-medium font-sans">Antrean Tugas Asinkron</span>
-            </div>
-          </div>
-        </div>
-      </div>
 
       {/* ── Modal Dialog Inisiasi Analisis Baru (Dengan Custom Autocomplete & Penghapusan Riwayat) ── */}
       {isModalOpen && (
