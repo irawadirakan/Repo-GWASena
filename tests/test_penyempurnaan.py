@@ -254,3 +254,12 @@ def test_role_bawaan_konsisten():
     from backend.models import User
 
     assert User.__table__.c.role.default.arg == "pengguna_analisis"
+
+
+def test_swagger_tanpa_keterangan_di_judul():
+    """Tampilan /docs hanya menampilkan metode dan alamat endpoint."""
+    with TestClient(app) as c:
+        paths = c.get("/openapi.json").json()["paths"]
+    operasi = [d for o in paths.values() for d in o.values()]
+    assert operasi and all("summary" not in d and "description" not in d for d in operasi)
+    assert "/api/analyses/{analysis_id}/run" in paths
