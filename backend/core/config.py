@@ -59,5 +59,9 @@ class Settings:
     ).resolve()
     ANNOTATION_WINDOW_BP: int = int(os.getenv("ANNOTATION_WINDOW_BP", "50000"))
 
+    # Smart downsampling Manhattan plot: di atas batas ini, titik non-signifikan diringkas
+    # agar grafik interaktif tetap ringan (SNP signifikan selalu dipertahankan).
+    MANHATTAN_MAX_POINTS: int = int(os.getenv("MANHATTAN_MAX_POINTS", "20000"))
+
 
 settings = Settings()

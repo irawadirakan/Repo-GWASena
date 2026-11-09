@@ -7,7 +7,7 @@ Urutan pemakaian:
   4. POST /api/analyses/{id}/run                jalankan QC -> PCA -> GLM/MLM -> koreksi
   5. GET  /api/analyses/{id}/status             pantau kemajuan
   6. GET  /api/analyses/{id}/results            lihat hasil
-  7. GET  /api/analyses/{id}/results/csv        unduh hasil CSV
+  7. GET  /api/analyses/{id}/results/csv        unduh hasil CSV (?hanya_signifikan=true untuk SNP signifikan)
 """
 import csv
 import io
@@ -36,10 +36,12 @@ from backend.models import (
 )
 from backend.schemas import AnalysisCreate, AnalysisUpdate, ParameterIn
 from backend.services import dataset_service as ds
+from backend.services import plot_service
 from backend.services.analysis_runner import dispatch
 from pipeline.annotation import annotate_from_gff3
 from pipeline.errors import ValidationError
 from pipeline.runner import STAGES
+from pipeline.visualization.downsample import smart_downsample
 from pipeline.validation import match_sample_ids, read_genotype, read_phenotype_csv
 
 router = APIRouter(prefix="/api/analyses", tags=["2. analisis (alur utama)"])
@@ -363,6 +365,9 @@ def get_results(a: Analysis = Depends(owned_analysis), db: Session = Depends(get
         **ringkasan,
         "tautan": {
             "unduh_csv": f"{base}/results/csv",
+            "unduh_csv_signifikan": f"{base}/results/csv?hanya_signifikan=true",
+            "unduh_png_manhattan": f"{base}/plots/manhattan/png",
+            "unduh_png_qq": f"{base}/plots/qq/png",
             "data_manhattan": f"{base}/plots/manhattan",
             "data_qq": f"{base}/plots/qq",
             "data_pca": f"{base}/plots/pca",
@@ -371,46 +376,43 @@ def get_results(a: Analysis = Depends(owned_analysis), db: Session = Depends(get
 
 
 @router.get("/{analysis_id}/plots/{jenis}", summary="Data titik untuk Manhattan, QQ, atau PCA plot")
-def get_plot(jenis: str, a: Analysis = Depends(owned_analysis), db: Session = Depends(get_db)):
+def get_plot(
+    jenis: str,
+    maks_titik: int | None = Query(
+        None, ge=0,
+        description="Khusus Manhattan: batas jumlah titik (smart downsampling). Kosong = memakai "
+                    "MANHATTAN_MAX_POINTS dari .env; 0 = kirim semua titik."),
+    a: Analysis = Depends(owned_analysis),
+    db: Session = Depends(get_db),
+):
     if jenis not in ("manhattan", "qq", "pca"):
         raise HTTPException(status.HTTP_404_NOT_FOUND, _detail("Jenis plot: manhattan, qq, atau pca."))
     _require_done(a)
-    return _get_cache(db, a.analysis_id, jenis) or {}
+    data = _get_cache(db, a.analysis_id, jenis) or {}
+    if jenis == "manhattan" and data.get("titik"):
+        batas = settings.MANHATTAN_MAX_POINTS if maks_titik is None else maks_titik
+        ring = smart_downsample(data["titik"], batas)
+        data = {**data, **ring}
+    return data
 
 
 @router.get("/{analysis_id}/plots/{jenis}/png", summary="Unduh Manhattan atau QQ plot (PNG)",
             response_class=Response,
             responses={200: {"content": {"image/png": {}}, "description": "Berkas gambar PNG"}})
 def get_plot_png(jenis: str, a: Analysis = Depends(owned_analysis), db: Session = Depends(get_db)):
-    if jenis not in ("manhattan", "qq"):
+    if jenis not in plot_service.PNG_TYPES:
         raise HTTPException(status.HTTP_404_NOT_FOUND, _detail("Jenis plot PNG: manhattan atau qq."))
     _require_done(a)
-    row = db.scalar(select(VisualizationResult).where(
-        VisualizationResult.analysis_id == a.analysis_id, VisualizationResult.plot_type == jenis))
-    if row is None or not row.plot_cache:
+    # PNG dibuat saat analisis selesai dan lokasinya dicatat di visualization_results.file_path
+    # (AC-08.1). Bila belum ada (mis. matplotlib baru dipasang), dibuat sekarang.
+    try:
+        png = plot_service.render_png(db, a.analysis_id, jenis)
+    except plot_service.PngUnavailable:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, _detail(
+            "Ekspor PNG belum tersedia karena paket matplotlib belum terpasang.",
+            ["Jalankan: pip install -r backend/requirements.txt"]))
+    if png is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, _detail("Data plot tidak ditemukan untuk analisis ini."))
-
-    # PNG dibuat sekali lalu disimpan; lokasinya dicatat di visualization_results.file_path (AC-08.1).
-    path = Path(row.file_path) if row.file_path else None
-    if path is not None and path.is_file():
-        png = path.read_bytes()
-    else:
-        try:
-            from pipeline.visualization import manhattan_png, qq_png
-        except ImportError:
-            raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, _detail(
-                "Ekspor PNG belum tersedia karena paket matplotlib belum terpasang.",
-                ["Jalankan: pip install -r backend/requirements.txt"]))
-        ringkasan = _get_cache(db, a.analysis_id, "ringkasan") or {}
-        nama = "Manhattan plot" if jenis == "manhattan" else "QQ plot"
-        judul = f"{nama} - {ringkasan.get('trait', '')} ({ringkasan.get('model', '')})"
-        png = manhattan_png(row.plot_cache, judul) if jenis == "manhattan" else qq_png(row.plot_cache, judul)
-        folder = ds.analysis_dir(a.analysis_id) / "plot"
-        folder.mkdir(parents=True, exist_ok=True)
-        path = folder / f"{jenis}.png"
-        path.write_bytes(png)
-        row.file_path = str(path)
-        db.commit()
     return Response(content=png, media_type="image/png", headers={
         "Content-Disposition": f'attachment; filename="gwasena_sesi{a.analysis_id}_{jenis}.png"'})
 
@@ -440,7 +442,9 @@ def get_annotation(
             AssociationResult.snp_code == k["snp_id"],
         ))
         if db_res:
-            db_res.candidate_gene = k.get("gene_id") or k.get("gene_name")
+            # k["gen"] berisi daftar gen terdekat (paling dekat lebih dulu); simpan gen pertama
+            gen = k.get("gen") or []
+            db_res.candidate_gene = (gen[0].get("gene_id") or gen[0].get("gene_name")) if gen else None
             db_res.annotation_info = k
     db.commit()
 
@@ -452,26 +456,37 @@ def get_annotation(
 
 # ------------------------------------------------------------------ 7. unduh CSV
 @router.get("/{analysis_id}/results/csv", summary="7. Unduh hasil asosiasi (CSV)")
-def download_csv(a: Analysis = Depends(owned_analysis), db: Session = Depends(get_db)):
+def download_csv(
+    hanya_signifikan: bool = Query(False, description="true = hanya SNP yang signifikan setelah koreksi"),
+    a: Analysis = Depends(owned_analysis),
+    db: Session = Depends(get_db),
+):
     _require_done(a)
-    rows = db.execute(
+    stmt = (
         select(SNP.chromosome, SNP.position, SNP.variant_code, SNP.ref_allele, SNP.alt_allele,
                AssociationResult.effect_size, AssociationResult.std_error,
-               AssociationResult.p_value, AssociationResult.q_value)
+               AssociationResult.p_value, AssociationResult.q_value,
+               AssociationResult.is_significant, AssociationResult.candidate_gene)
         .select_from(AssociationResult)
         .join(SNP, SNP.snp_id == AssociationResult.snp_id)
         .where(AssociationResult.analysis_id == a.analysis_id)
         .order_by(SNP.snp_id)
-    ).all()
+    )
+    rows = db.execute(stmt).all()
+    # Bonferroni dihitung dari SEMUA SNP yang diuji, walau yang diekspor hanya yang signifikan
     m = sum(1 for r in rows if r.p_value is not None)
+    if hanya_signifikan:
+        rows = [r for r in rows if r.is_significant]
     buf = io.StringIO()
     w = csv.writer(buf)
     w.writerow(["Chr", "Pos", "SNP_ID", "Ref_Allele", "Alt_Allele", "Beta_OR", "SE",
-                "P_Value", "P_Bonferroni", "Q_Value_FDR"])
+                "P_Value", "P_Bonferroni", "Q_Value_FDR", "Signifikan", "Kandidat_Gen"])
     for r in rows:
         p_bonf = min(r.p_value * m, 1.0) if r.p_value is not None else None
         w.writerow([r.chromosome, r.position, r.variant_code, r.ref_allele, r.alt_allele,
-                    r.effect_size, r.std_error, r.p_value, p_bonf, r.q_value])
-    filename = f"gwasena_analisis_{a.analysis_id}_hasil.csv"
+                    r.effect_size, r.std_error, r.p_value, p_bonf, r.q_value,
+                    "ya" if r.is_significant else "tidak", r.candidate_gene or ""])
+    akhiran = "snp_signifikan" if hanya_signifikan else "hasil"
+    filename = f"gwasena_analisis_{a.analysis_id}_{akhiran}.csv"
     return Response(content=buf.getvalue(), media_type="text/csv",
                     headers={"Content-Disposition": f'attachment; filename="{filename}"'})

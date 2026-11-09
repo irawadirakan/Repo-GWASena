@@ -33,3 +33,9 @@ def test_nilai_qc_tetap_divalidasi():
 def test_field_tak_dikenal_ditolak():
     with pytest.raises(ValidationError):
         ParameterIn.model_validate({"trait": "bobot_umbi_g", "ambang_maf": 0.1})
+
+
+def test_pca_tidak_boleh_dilewati():
+    """AC-04.1: PCA wajib, jadi n_pc = 0 ditolak."""
+    with pytest.raises(ValidationError):
+        ParameterIn.model_validate({"trait": "bobot_umbi_g", "n_pc": 0})

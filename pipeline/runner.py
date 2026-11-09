@@ -172,6 +172,8 @@ def run_pipeline(
         "trait": trait,
         "model": model,
         "qc": qc.as_dict(geno.n_samples, geno.n_snps),
+        # dipakai backend untuk menandai kolom passed_qc pada tabel samples dan snps
+        "qc_lolos": {"sampel": samples_kept, "varian_index": [int(j) for j in v_idx]},
         "varian_dilewati": geno.skipped,
         "pca": pca.as_dict(samples_kept),
         "asosiasi": {

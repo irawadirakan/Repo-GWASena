@@ -2,7 +2,7 @@
 import logging
 import math
 from fastapi import BackgroundTasks
-from sqlalchemy import insert, select
+from sqlalchemy import insert, select, update
 
 from backend.core.config import settings
 from backend.core.database import SessionLocal
@@ -14,8 +14,10 @@ from backend.models import (
     AnalysisStatus,
     AssociationResult,
     Dataset,
+    Sample,
     VisualizationResult,
 )
+from backend.services import plot_service
 from backend.services.dataset_service import GENOTYPE_TYPES, dataset_paths
 from pipeline.errors import PipelineError
 from pipeline.runner import run_pipeline
@@ -74,6 +76,15 @@ def run_analysis(analysis_id: int) -> None:
             db.rollback()
             analysis.status = AnalysisStatus.GAGAL
             _log(db, analysis_id, "simpan", "gagal", f"Hasil gagal disimpan.\n{exc}")
+            return
+
+        # PNG Manhattan dan QQ langsung dibuat agar file_path tercatat (AC-08.1).
+        # Bila matplotlib belum terpasang, PNG dibuat nanti saat endpoint /png dipanggil.
+        try:
+            plot_service.render_all(db, analysis_id)
+        except Exception:  # noqa: BLE001
+            logger.exception("PNG analisis %s gagal dibuat; dapat dibuat ulang lewat endpoint /png", analysis_id)
+            db.rollback()
 
 
 def _save_results(db, analysis_id: int, result: dict) -> None:
@@ -116,6 +127,33 @@ def _save_results(db, analysis_id: int, result: dict) -> None:
     if rows:
         db.execute(insert(AssociationResult), rows)
 
+    # Tandai sampel dan SNP yang tidak lolos QC (kolom passed_qc)
+    lolos = result.get("qc_lolos") or {}
+    if geno_ds is not None and lolos:
+        sampel_lolos = set(lolos.get("sampel") or [])
+        for s in db.scalars(select(Sample).where(Sample.dataset_id == geno_ds.dataset_id)).all():
+            s.passed_qc = s.sample_code in sampel_lolos
+        varian_lolos = set(lolos.get("varian_index") or [])
+        gagal = [pk for i, pk in enumerate(snp_ids) if i not in varian_lolos]
+        db.execute(update(SNP).where(SNP.dataset_id == geno_ds.dataset_id).values(passed_qc=True),
+                   execution_options={"synchronize_session": False})
+        for k in range(0, len(gagal), 1000):
+            db.execute(update(SNP).where(SNP.snp_id.in_(gagal[k:k + 1000])).values(passed_qc=False),
+                       execution_options={"synchronize_session": False})
+
+    # Nilai PC yang dipakai sebagai kovariat disimpan sebagai bagian parameter analisis (AC-04.2)
+    param = db.scalar(select(AnalysisParameter).where(AnalysisParameter.analysis_id == analysis_id))
+    if param is not None:
+        pca = result["pca"]
+        param.parameter_config = {
+            **(param.parameter_config or {}),
+            "pca_kovariat": {
+                "jumlah_pc": pca.get("jumlah_pc"),
+                "variansi_dijelaskan": pca.get("variansi_dijelaskan"),
+                "nilai_per_sampel": pca.get("titik"),
+            },
+        }
+
     significant = [r for r in result["snp"] if r["signifikan"]]
     top = sorted((r for r in result["snp"] if r["p_value"] is not None),
                  key=lambda r: r["p_value"])[:10]
@@ -134,7 +172,7 @@ def _save_results(db, analysis_id: int, result: dict) -> None:
         VisualizationResult(analysis_id=analysis_id, plot_type="manhattan",
                             plot_cache=result["plot"]["manhattan"], plot_metadata={"garis_bonferroni": result["plot"]["manhattan"].get("garis_bonferroni")}),
         VisualizationResult(analysis_id=analysis_id, plot_type="qq", plot_cache=result["plot"]["qq"], plot_metadata={"lambda_gc": result["plot"]["qq"].get("lambda_gc")}),
-        VisualizationResult(analysis_id=analysis_id, plot_type="pca", plot_cache=result["pca"], plot_metadata={"persen_varians": result["pca"].get("persen_varians")}),
+        VisualizationResult(analysis_id=analysis_id, plot_type="pca", plot_cache=result["pca"], plot_metadata={"variansi_dijelaskan": result["pca"].get("variansi_dijelaskan")}),
     ])
     db.add(AnalysisLog(analysis_id=analysis_id, stage="simpan", status="selesai",
                        message=f"{len(rows)} hasil asosiasi disimpan ke database"))

@@ -57,7 +57,8 @@ class ParameterIn(BaseModel):
         None, gt=0, le=0.5,
         description="Ambang kinship KING untuk membuang sampel berkerabat dekat. "
                     "null = tidak difilter (sampel klonal akan banyak terbuang bila diaktifkan).")
-    n_pc: int = Field(3, ge=0, le=10, description="Jumlah komponen utama PCA sebagai kovariat")
+    # PCA wajib dijalankan (AC-04.1), jadi minimal 1 PC dipakai sebagai kovariat.
+    n_pc: int = Field(3, ge=1, le=10, description="Jumlah komponen utama PCA sebagai kovariat (1-10)")
     koreksi: list[Literal["bonferroni", "fdr"]] = Field(
         default_factory=lambda: ["bonferroni", "fdr"],
         description="Metode koreksi multiple testing")
