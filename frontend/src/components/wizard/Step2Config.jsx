@@ -195,7 +195,7 @@ export default function Step2Config({
         </div>
       )}
 
-      <form onSubmit={(e) => handleStartAnalysis(e, false)} className="space-y-8">
+      <form onSubmit={(e) => handleStartAnalysis(e, false)} noValidate className="space-y-8">
         {/* ── Bagian A: Pemilihan Sifat Fenotipe (Trait) ── */}
         <div className="figma-card p-6 space-y-4">
           <div className="flex items-center justify-between">
@@ -619,7 +619,7 @@ export default function Step2Config({
                   <input
                     id="alpha"
                     type="number"
-                    step="0.01"
+                    step="any"
                     min="0.0001"
                     max="0.20"
                     value={alpha}
