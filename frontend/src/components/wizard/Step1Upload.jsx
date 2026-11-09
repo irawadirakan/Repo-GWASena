@@ -11,6 +11,10 @@ import {
   X,
   Sparkles,
   Layers,
+  Eye,
+  EyeOff,
+  Table,
+  Download,
 } from 'lucide-react';
 import { analysisService } from '../../services/analysisService.js';
 import { useAnalysisStore, MOCK_GARLIC_DATASET_SUMMARY } from '../../store/useAnalysisStore.js';
