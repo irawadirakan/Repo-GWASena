@@ -176,6 +176,18 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
         setUploadResult(mockSummary);
         setUploadSummary(mockSummary);
         setIsSimulated(true);
+
+        // Auto-naming sinkronisasi jika nama sesi diawali kosong
+        if (typeof window !== 'undefined' && localStorage.getItem(`gwasena_auto_name_${analysisId}`) === 'true') {
+          const cur = useAnalysisStore.getState().currentAnalysis;
+          if (cur) {
+            useAnalysisStore.getState().setCurrentAnalysis({
+              ...cur,
+              analysis_name: 'Analisis Bobot Umbi Bawang Putih',
+            });
+          }
+        }
+
         onUploadSuccess?.(mockSummary);
       } else {
         const { vcfFile, csvFile } = await getExampleDatasetFiles();
@@ -192,6 +204,18 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
         setUploadResult(mockSummary);
         setUploadSummary(mockSummary);
         setIsSimulated(true);
+
+        // Auto-naming sinkronisasi jika nama sesi diawali kosong
+        if (typeof window !== 'undefined' && localStorage.getItem(`gwasena_auto_name_${analysisId}`) === 'true') {
+          const cur = useAnalysisStore.getState().currentAnalysis;
+          if (cur) {
+            useAnalysisStore.getState().setCurrentAnalysis({
+              ...cur,
+              analysis_name: 'Analisis Bobot Umbi Bawang Putih',
+            });
+          }
+        }
+
         onUploadSuccess?.(mockSummary);
       }
     } catch (err) {
@@ -242,6 +266,20 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
       setUploadResult(res);
       setUploadSummary(res);
       setIsSimulated(false);
+
+      // Auto-naming sinkronisasi jika nama sesi diawali kosong
+      if (typeof window !== 'undefined' && localStorage.getItem(`gwasena_auto_name_${analysisId}`) === 'true') {
+        const cur = useAnalysisStore.getState().currentAnalysis;
+        const autoBase = phenotypeFile?.name ? phenotypeFile.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ') : 'Genomik';
+        const newName = `Analisis Asosiasi ${autoBase}`;
+        if (cur) {
+          useAnalysisStore.getState().setCurrentAnalysis({
+            ...cur,
+            analysis_name: newName,
+          });
+        }
+      }
+
       onUploadSuccess?.(res);
     } catch (err) {
       const isNetworkError = !err.status || err.status === 0 || err.code === 'ERR_NETWORK';

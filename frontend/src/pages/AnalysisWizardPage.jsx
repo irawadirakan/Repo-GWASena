@@ -17,6 +17,7 @@ import Step5Annotation from '../components/wizard/Step5Annotation.jsx';
 import Step6Export from '../components/wizard/Step6Export.jsx';
 import AccessDeniedState from '../components/common/AccessDeniedState.jsx';
 import ErrorMessageArea from '../components/common/ErrorMessageArea.jsx';
+import ErrorBoundary from '../components/common/ErrorBoundary.jsx';
 
 /**
  * AnalysisWizardPage - Kontainer Orkestrasi Sesi Analisis GWAS (Figma Aligned)
@@ -40,9 +41,23 @@ export default function AnalysisWizardPage() {
   const [error, setError] = useState(null);
   const [isAccessDenied, setIsAccessDenied] = useState(false);
 
+  // Proteksi null-safety terhadap rute tidak valid / undefined
+  useEffect(() => {
+    if (!id || id === 'undefined' || id === 'null') {
+      console.warn('ID sesi tidak valid, mengalihkan ke dashboard...');
+      navigate('/dashboard', { replace: true });
+    }
+  }, [id, navigate]);
+
   async function loadAnalysis() {
+    if (!id || id === 'undefined' || id === 'null') {
+      setIsLoading(false);
+      return;
+    }
+
     // Jangan tindih state lokal jika sedang dalam proses simulasi komputasi aktif
     if (useAnalysisStore.getState().isSimulated && useAnalysisStore.getState().isComputing) {
+      setIsLoading(false);
       return;
     }
 
@@ -52,25 +67,41 @@ export default function AnalysisWizardPage() {
 
     try {
       const data = await analysisService.getAnalysisDetail(id);
-      setCurrentAnalysis(data);
+      if (data) {
+        setCurrentAnalysis(data);
 
-      // Jika analisis sudah selesai, otomatis muat hasil lengkap dan plot asli dari backend
-      if (data.status === 'selesai') {
-        try {
-          const fullResults = await analysisService.getFullAnalysisResults(id);
-          useAnalysisStore.getState().setResults(fullResults);
-          useAnalysisStore.getState().setIsSimulated(false);
-        } catch (rErr) {
-          console.warn('Gagal memuat hasil asosiasi sesi selesai:', rErr);
+        // Jika analisis sudah selesai, otomatis muat hasil lengkap dan plot asli dari backend
+        if (data.status === 'selesai') {
+          try {
+            const fullResults = await analysisService.getFullAnalysisResults(id);
+            useAnalysisStore.getState().setResults(fullResults);
+            useAnalysisStore.getState().setIsSimulated(false);
+          } catch (rErr) {
+            console.warn('Gagal memuat hasil asosiasi sesi selesai:', rErr);
+          }
         }
       }
     } catch (err) {
-      if (err.status === 403) {
+      if (err?.status === 403) {
         setIsAccessDenied(true);
-      } else if (isSimulated || useAnalysisStore.getState().isSimulated) {
-        console.warn('Backend tidak tersedia dalam mode simulasi, mempertahankan sesi lokal:', err);
       } else {
-        setError(err);
+        console.warn('Backend detail sesi tidak dapat diakses atau offline:', err);
+        // Fallback: pastikan sesi lokal tetap memiliki data dasar yang valid agar tidak crash
+        const existing = useAnalysisStore.getState().currentAnalysis;
+        if (!existing || (existing.id !== id && existing.analysis_id !== id)) {
+          const autoNamed =
+            typeof window !== 'undefined' && localStorage.getItem(`gwasena_auto_name_${id}`);
+          setCurrentAnalysis({
+            analysis_id: id,
+            id: id,
+            analysis_name: autoNamed ? 'Analisis Tanpa Judul' : `Analisis GWAS #${id}`,
+            status: 'draft',
+            organism: 'Allium sativum (Bawang Putih)',
+          });
+        }
+        if (err?.status !== 0 && err?.status !== 404 && !isSimulated && !useAnalysisStore.getState().isSimulated) {
+          setError(err);
+        }
       }
     } finally {
       setIsLoading(false);
@@ -78,7 +109,7 @@ export default function AnalysisWizardPage() {
   }
 
   useEffect(() => {
-    if (id) {
+    if (id && id !== 'undefined' && id !== 'null') {
       loadAnalysis();
     }
   }, [id]);
@@ -96,12 +127,21 @@ export default function AnalysisWizardPage() {
     );
   }
 
-  const statusKey = currentAnalysis?.status?.toLowerCase() || 'draft';
+  // Objek sesi aman dengan fallback null-safety
+  const safeSession = currentAnalysis || {
+    analysis_id: id || 'local',
+    id: id || 'local',
+    analysis_name: `Analisis GWAS #${id || ''}`,
+    status: 'draft',
+    organism: 'Allium sativum (Bawang Putih)',
+  };
+
+  const statusKey = safeSession?.status?.toLowerCase() || 'draft';
   const statusConfig = ANALYSIS_STATUSES[statusKey] || ANALYSIS_STATUSES.draft;
   const availableTraits =
     uploadSummary?.fenotipe?.daftar_sifat ||
     uploadSummary?.fenotipe?.sifat_tersedia ||
-    currentAnalysis?.sifat_tersedia ||
+    safeSession?.sifat_tersedia ||
     [];
 
   return (
@@ -130,7 +170,7 @@ export default function AnalysisWizardPage() {
 
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
-              {currentAnalysis?.analysis_name || `Analisis GWAS #${id}`}
+              {safeSession?.analysis_name || `Analisis GWAS #${id}`}
             </h1>
 
             {/* Badge Status */}
@@ -156,7 +196,7 @@ export default function AnalysisWizardPage() {
         <div className="flex items-center gap-2 self-start sm:self-auto">
           <div className="glass-subcard px-4 py-2 text-sm flex items-center gap-2 text-slate-800 dark:text-slate-100 font-bold shadow-sm">
             <Dna className="h-4 w-4 text-[#0284C7] dark:text-[#06B6D4]" />
-            <span>{currentAnalysis?.organism || 'Genomic Association Suite'}</span>
+            <span>{safeSession?.organism || 'Genomic Association Suite'}</span>
           </div>
         </div>
       </div>
@@ -167,14 +207,14 @@ export default function AnalysisWizardPage() {
       <WizardStepper
         activeStep={activeStep}
         onStepClick={(stepNum) => setActiveStep(stepNum)}
-        status={currentAnalysis?.status}
+        status={safeSession?.status}
       />
 
-      {/* ── Konten Langkah Aktif (3-Layer High Separation Glass) ── */}
-      <div
-        key={activeStep}
-        className="figma-card p-6 sm:p-8 animate-step-transition"
-      >
+      {/* ── Konten Langkah Aktif dengan Proteksi Error Boundary Lokal ── */}
+      <ErrorBoundary key={activeStep}>
+        <div
+          className="figma-card p-6 sm:p-8 animate-step-transition"
+        >
         {activeStep === 1 && (
           <Step1Upload
             analysisId={id}
@@ -231,11 +271,12 @@ export default function AnalysisWizardPage() {
         {activeStep === 6 && (
           <Step6Export
             analysisId={id}
-            analysis={currentAnalysis}
+            analysis={safeSession}
             onNavigateStep={(stepNum) => setActiveStep(stepNum)}
           />
         )}
-      </div>
+        </div>
+      </ErrorBoundary>
     </div>
   );
 }

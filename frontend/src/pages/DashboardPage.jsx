@@ -12,6 +12,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { useAuthStore } from '../store/useAuthStore.js';
+import { useAnalysisStore } from '../store/useAnalysisStore.js';
 import { analysisService } from '../services/analysisService.js';
 import ErrorMessageArea from '../components/common/ErrorMessageArea.jsx';
 
@@ -31,27 +32,36 @@ export default function DashboardPage() {
 
   const [meta, setMeta] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [analysisName, setAnalysisName] = useState('Analisis Asosiasi Genomik 2026');
+  const [sessionName, setSessionName] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState(null);
 
   // ── State Autocomplete Riwayat Nama Sesi ──
   const [sessionHistory, setSessionHistory] = useState(() => {
-    if (typeof window === 'undefined') return DEFAULT_SESSION_NAMES;
+    if (typeof window === 'undefined') return [];
     try {
       const stored = localStorage.getItem('gwasena_session_names_history');
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) return parsed.filter(Boolean);
       }
     } catch {
-      // Fallback ke default
+      // ignore
     }
-    return DEFAULT_SESSION_NAMES;
+    return [];
   });
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
   const dropdownRef = useRef(null);
   const inputContainerRef = useRef(null);
+
+  const openNewSessionModal = () => {
+    setSessionName('');
+    setError(null);
+    setIsDropdownOpen(false);
+    setIsFocused(false);
+    setIsModalOpen(true);
+  };
 
   // Tutup dropdown saat klik di luar
   useEffect(() => {
@@ -70,6 +80,7 @@ export default function DashboardPage() {
   }, []);
 
   const handleDeleteHistoryItem = (e, itemToDelete) => {
+    e.preventDefault();
     e.stopPropagation();
     const updated = sessionHistory.filter((item) => item !== itemToDelete);
     setSessionHistory(updated);
@@ -79,7 +90,7 @@ export default function DashboardPage() {
   };
 
   const handleSelectHistoryItem = (item) => {
-    setAnalysisName(item);
+    setSessionName(item);
     setIsDropdownOpen(false);
   };
 
@@ -102,10 +113,10 @@ export default function DashboardPage() {
   }, []);
 
   const handleCreateAnalysis = async (e) => {
-    e.preventDefault();
-    const trimmed = analysisName.trim();
-    // Auto-naming ala ChatGPT/GDocs jika pengguna mengosongkan input (Evaluasi Tester Poin 9)
-    const finalSessionName = trimmed || 'Analisis Genomik Otomatis';
+    if (e && e.preventDefault) e.preventDefault();
+    const trimmed = (sessionName || '').trim();
+    // Penanganan Nama Default & ID Sesi yang Aman
+    const finalSessionName = trimmed || 'Analisis Tanpa Judul';
 
     if (trimmed) {
       const updatedHistory = [
@@ -121,25 +132,58 @@ export default function DashboardPage() {
     setIsSubmitting(true);
     setError(null);
 
+    const fallbackId = Date.now().toString();
+
     try {
-      const res = await analysisService.createAnalysis(finalSessionName);
+      let createdSession = null;
+      try {
+        createdSession = await analysisService.createAnalysis(finalSessionName);
+      } catch (apiErr) {
+        console.warn('API backend createAnalysis gagal atau offline, menggunakan inisiasi sesi lokal:', apiErr);
+        createdSession = {
+          analysis_id: fallbackId,
+          id: fallbackId,
+          analysis_name: finalSessionName,
+          status: 'draft',
+          organism: 'Allium sativum (Bawang Putih)',
+          created_at: new Date().toISOString(),
+          is_local_fallback: true,
+        };
+      }
+
+      const targetId = createdSession?.analysis_id || createdSession?.id || fallbackId;
+
+      // Inisialisasi sesi di useAnalysisStore
+      const { setCurrentAnalysis, setActiveStep } = useAnalysisStore.getState();
+      setCurrentAnalysis({
+        analysis_id: targetId,
+        id: targetId,
+        analysis_name: finalSessionName,
+        status: 'draft',
+        organism: createdSession?.organism || 'Allium sativum (Bawang Putih)',
+      });
+      setActiveStep(1);
+
       // Simpan flag jika nama sesi perlu dinamai otomatis saat berkas diunggah
       if (!trimmed && typeof window !== 'undefined') {
-        localStorage.setItem(`gwasena_auto_name_${res.analysis_id}`, 'true');
+        localStorage.setItem(`gwasena_auto_name_${targetId}`, 'true');
       }
+
       setIsModalOpen(false);
-      navigate(`/analyses/${res.analysis_id}`);
+      navigate(`/analyses/${targetId}`);
     } catch (err) {
-      setError(err);
+      console.error('Fatal error saat inisiasi sesi:', err);
+      navigate(`/analyses/${fallbackId}`);
+    } finally {
       setIsSubmitting(false);
     }
   };
 
   const org = meta?.organisme;
 
-  // Filter riwayat yang sesuai dengan ketikan input
+  // Filter riwayat yang sesuai dengan ketikan input (hanya jika ada riwayat valid)
   const filteredHistory = sessionHistory.filter((item) =>
-    item.toLowerCase().includes((analysisName || '').toLowerCase())
+    item && item.toLowerCase().includes((sessionName || '').toLowerCase().trim())
   );
 
   return (
@@ -205,7 +249,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Kartu 1: Analisis Baru (Primary CTA Card) */}
         <div
-          onClick={() => setIsModalOpen(true)}
+          onClick={openNewSessionModal}
           className="flex flex-col justify-between figma-card p-6 sm:p-8 hover:-translate-y-1 hover:border-[#5B4DFE]/40 active:scale-[0.985] group cursor-pointer transition-all duration-200"
         >
           <div>
@@ -232,7 +276,7 @@ export default function DashboardPage() {
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
-                setIsModalOpen(true);
+                openNewSessionModal();
               }}
               className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 py-3 px-4 text-sm font-semibold text-white shadow-sm hover:-translate-y-[1px] hover:shadow-md active:scale-[0.98] transition-all duration-100 font-sans"
             >
@@ -300,7 +344,7 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
           {/* Kartu 1: 1. Unggah & Validasi */}
           <div
-            onClick={() => setIsModalOpen(true)}
+            onClick={openNewSessionModal}
             className="group relative figma-card p-6 flex flex-col justify-between cursor-pointer border border-transparent hover:border-[#06B6D4]/60 dark:hover:border-[#06B6D4]/50 transition-all duration-200 ease-out hover:-translate-y-1.5 hover:scale-[1.01] hover:shadow-[0_16px_36px_-10px_rgba(6,182,212,0.30)] active:scale-[0.99]"
           >
             <div>
@@ -327,7 +371,7 @@ export default function DashboardPage() {
 
           {/* Kartu 2: 2. Penyaringan QC & Model */}
           <div
-            onClick={() => setIsModalOpen(true)}
+            onClick={openNewSessionModal}
             className="group relative figma-card p-6 flex flex-col justify-between cursor-pointer border border-transparent hover:border-[#5B4DFE]/60 dark:hover:border-[#5B4DFE]/50 transition-all duration-200 ease-out hover:-translate-y-1.5 hover:scale-[1.01] hover:shadow-[0_16px_36px_-10px_rgba(91,77,254,0.30)] active:scale-[0.99]"
           >
             <div>
@@ -405,34 +449,41 @@ export default function DashboardPage() {
             <ErrorMessageArea error={error} onDismiss={() => setError(null)} />
 
             <form onSubmit={handleCreateAnalysis} className="space-y-4">
-              {/* Field Nama Sesi Analisis dengan Custom Autocomplete Dropdown */}
+              {/* Field Nama Sesi */}
               <div ref={inputContainerRef} className="relative">
                 <label
-                  htmlFor="analysisName"
+                  htmlFor="sessionName"
                   className="block text-xs sm:text-sm font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200 mb-1.5 font-sans"
                 >
                   Nama Sesi Analisis
                 </label>
                 <div className="relative">
                   <input
-                    id="analysisName"
+                    id="sessionName"
                     type="text"
                     autoComplete="off"
-                    value={analysisName}
-                    onFocus={() => setIsDropdownOpen(true)}
-                    onClick={() => setIsDropdownOpen(true)}
-                    onChange={(e) => {
-                      setAnalysisName(e.target.value);
+                    value={sessionName}
+                    onFocus={() => {
+                      setIsFocused(true);
                       setIsDropdownOpen(true);
                     }}
-                    placeholder="Kosongkan untuk penamaan otomatis (ala ChatGPT/GDocs) atau ketik nama..."
-                    className="w-full rounded-xl border border-slate-300 dark:border-white/10 bg-[#F1F4FD] dark:bg-[#0F172E] py-2.5 px-3.5 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:border-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-600 font-medium transition-all"
+                    onBlur={() => {
+                      setTimeout(() => setIsFocused(false), 200);
+                    }}
+                    onChange={(e) => {
+                      setSessionName(e.target.value);
+                      setIsDropdownOpen(true);
+                    }}
+                    placeholder="Contoh: Analisis Asosiasi Genomik 2026"
+                    className="w-full rounded-xl border border-slate-300 dark:border-white/10 bg-[#F1F4FD] dark:bg-[#0F172E] py-2.5 pl-3.5 pr-10 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:border-[#5B4DFE] focus:outline-none focus:ring-1 focus:ring-[#5B4DFE] font-medium transition-all"
                   />
-                  {analysisName && (
+                  {sessionName.trim().length > 0 && (
                     <button
                       type="button"
-                      onClick={() => setAnalysisName('')}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                      onClick={() => setSessionName('')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+                      title="Hapus isian nama sesi"
+                      aria-label="Kosongkan nama sesi"
                     >
                       <X className="h-4 w-4" />
                     </button>
@@ -443,8 +494,8 @@ export default function DashboardPage() {
                   Opsional: Kosongkan untuk penamaan otomatis mengikuti berkas/sifat fenotipe di Langkah 1.
                 </span>
 
-                {/* Custom Autocomplete Dropdown Riwayat Nama Sesi */}
-                {isDropdownOpen && sessionHistory.length > 0 && (
+                {/* Custom Autocomplete Dropdown Riwayat Nama Sesi (Hanya tampil jika isFocused dan filteredHistory.length > 0) */}
+                {isDropdownOpen && isFocused && filteredHistory.length > 0 && (
                   <div
                     ref={dropdownRef}
                     className="absolute left-0 right-0 top-full mt-1.5 z-50 rounded-2xl border border-slate-200 dark:border-white/10 bg-white/95 dark:bg-[#0F172E]/95 backdrop-blur-xl shadow-xl overflow-hidden animate-dropdown-in max-h-56 overflow-y-auto"
@@ -454,42 +505,41 @@ export default function DashboardPage() {
                         <History className="h-3 w-3 text-[#06B6D4]" />
                         <span>Riwayat Nama Sesi</span>
                       </span>
-                      <span className="text-[10px] text-slate-500 dark:text-slate-400">Pilih atau hapus</span>
+                      <button
+                        type="button"
+                        onClick={() => setIsDropdownOpen(false)}
+                        className="text-[10px] font-semibold text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white px-1.5 py-0.5 rounded hover:bg-slate-200 dark:hover:bg-white/10 transition-colors"
+                        title="Tutup riwayat"
+                      >
+                        Tutup
+                      </button>
                     </div>
 
                     <div className="py-1">
-                      {filteredHistory.length > 0 ? (
-                        filteredHistory.map((item, idx) => (
-                          <div
-                            key={idx}
-                            onClick={() => handleSelectHistoryItem(item)}
-                            className="flex items-center justify-between px-3.5 py-2 hover:bg-slate-100 dark:hover:bg-white/10 cursor-pointer transition-colors group text-xs text-slate-800 dark:text-slate-200"
+                      {filteredHistory.map((item, idx) => (
+                        <div
+                          key={idx}
+                          onClick={() => handleSelectHistoryItem(item)}
+                          className="flex items-center justify-between px-3.5 py-2 hover:bg-slate-100 dark:hover:bg-white/10 cursor-pointer transition-colors group text-xs text-slate-800 dark:text-slate-200"
+                        >
+                          <span className="truncate pr-2 font-medium group-hover:text-blue-600 dark:group-hover:text-[#06B6D4] transition-colors">
+                            {item}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={(e) => handleDeleteHistoryItem(e, item)}
+                            title="Hapus item riwayat ini"
+                            aria-label={`Hapus ${item} dari riwayat`}
+                            className="rounded p-1 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 transition-all opacity-80 group-hover:opacity-100 shrink-0"
                           >
-                            <span className="truncate pr-2 font-medium group-hover:text-blue-600 dark:group-hover:text-[#06B6D4] transition-colors">
-                              {item}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={(e) => handleDeleteHistoryItem(e, item)}
-                              title="Hapus item riwayat ini"
-                              aria-label={`Hapus ${item} dari riwayat`}
-                              className="rounded p-1 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 transition-all opacity-80 group-hover:opacity-100 shrink-0"
-                            >
-                              <X className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        ))
-                      ) : (
-                        <div className="px-3.5 py-2.5 text-center text-xs text-slate-500 dark:text-slate-400">
-                          Tidak ada riwayat yang cocok.
+                            <X className="h-3.5 w-3.5" />
+                          </button>
                         </div>
-                      )}
+                      ))}
                     </div>
                   </div>
                 )}
               </div>
-
-
 
               <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-200 dark:border-white/10">
                 <button
@@ -502,7 +552,7 @@ export default function DashboardPage() {
                 </button>
                 <button
                   type="submit"
-                  disabled={isSubmitting || !analysisName.trim()}
+                  disabled={isSubmitting}
                   className="inline-flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 px-5 py-2 text-xs font-semibold text-white shadow-sm hover:-translate-y-[1px] hover:shadow-md active:scale-[0.98] disabled:opacity-60 disabled:transform-none transition-all duration-100 font-sans"
                 >
                   {isSubmitting ? (
