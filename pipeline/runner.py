@@ -162,6 +162,7 @@ def run_pipeline(
     manhattan = sorted(
         (
             {"snp_id": r["snp_id"], "chromosome": r["chromosome"], "position": r["position"],
+             "p_value": r["p_value"], "beta": r["beta"],  # info saat titik diklik (AC-08.2)
              "neglog10p": round(float(-np.log10(max(r["p_value"], 1e-300))), 4), "signifikan": r["signifikan"]}
             for r in snp_results if r["p_value"] is not None
         ),

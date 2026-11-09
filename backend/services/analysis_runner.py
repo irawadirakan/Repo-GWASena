@@ -210,3 +210,24 @@ def dispatch(analysis_id: int, background_tasks: BackgroundTasks) -> str:
         return "celery"
     background_tasks.add_task(run_analysis, analysis_id)
     return "background"
+
+
+def recover_stuck_analyses() -> int:
+    """Menandai gagal analisis yang tertinggal berstatus antre/berjalan setelah server dimulai ulang.
+
+    Pada mode latar belakang FastAPI, proses analisis ikut berhenti ketika server mati,
+    sehingga statusnya tidak akan pernah berubah dan sesi terkunci selamanya. Bila Celery
+    worker aktif, analisis dibiarkan karena mungkin masih dikerjakan worker.
+    """
+    if settings.PIPELINE_MODE == "celery" or (settings.PIPELINE_MODE == "auto" and _worker_available()):
+        return 0
+    with SessionLocal() as db:
+        macet = db.scalars(select(Analysis).where(
+            Analysis.status.in_([AnalysisStatus.ANTRE, AnalysisStatus.BERJALAN]))).all()
+        for a in macet:
+            a.status = AnalysisStatus.GAGAL
+            db.add(AnalysisLog(analysis_id=a.analysis_id, stage=None, status="gagal",
+                               message="Analisis terhenti karena server dimulai ulang.\n"
+                                       "Jalankan ulang analisis dengan menekan tombol Jalankan."))
+        db.commit()
+        return len(macet)

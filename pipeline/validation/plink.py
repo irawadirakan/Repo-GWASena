@@ -111,8 +111,13 @@ def read_plink(bed_path: str | Path) -> GenotypeData:
     codes = np.stack([(packed >> shift) & 0b11 for shift in (0, 2, 4, 6)], axis=2).reshape(m, -1)[:, :n]
     dosage_all = _CODE_TO_DOSAGE[codes].T  # (sampel, snp)
 
-    keep = [j for j in range(m) if a1[j] in _BASES and a2[j] in _BASES and a1[j] != a2[j]]
-    skipped = {"bukan_snp": m - len(keep)} if len(keep) < m else {}
+    snp_ok = [a1[j] in _BASES and a2[j] in _BASES and a1[j] != a2[j] for j in range(m)]
+    # posisi 0 atau negatif (mis. -9) = SNP belum dipetakan ke genom; tidak bisa diplot/dianotasi
+    keep = [j for j in range(m) if snp_ok[j] and pos[j] > 0]
+    skipped = {k: v for k, v in {
+        "bukan_snp": m - sum(snp_ok),
+        "posisi_tidak_diketahui": sum(1 for j in range(m) if snp_ok[j] and pos[j] <= 0),
+    }.items() if v}
     if not keep:
         raise ValidationError("Berkas PLINK tidak memuat SNP bialelik yang dapat dianalisis.")
 

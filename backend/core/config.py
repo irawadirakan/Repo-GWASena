@@ -16,7 +16,7 @@ def _as_bool(value: str) -> bool:
 
 class Settings:
     APP_NAME: str = "GWASena API"
-    APP_VERSION: str = "0.2.0"
+    APP_VERSION: str = "0.3.0"
     APP_ENV: str = os.getenv("APP_ENV", "development")
 
     DATABASE_URL: str = os.getenv(
@@ -39,6 +39,9 @@ class Settings:
     # Autentikasi (FR-01). Ganti SECRET_KEY di .env dengan teks acak yang panjang.
     SECRET_KEY: str = os.getenv("SECRET_KEY", "dev-ganti-kunci-ini-di-env")
     TOKEN_EXPIRE_HOURS: int = int(os.getenv("TOKEN_EXPIRE_HOURS", "12"))
+    # Akun demo (kata sandi password123, termasuk akun admin) hanya untuk pengembangan dan
+    # pengujian. Otomatis mati bila APP_ENV=production.
+    SEED_DEMO_USERS: bool = _as_bool(os.getenv("SEED_DEMO_USERS", "false" if os.getenv("APP_ENV") == "production" else "true"))
 
     # Login Google (FR-01): Client ID OAuth dari Google Cloud Console, sama dengan
     # VITE_GOOGLE_CLIENT_ID di frontend. Kosong = login Google dimatikan (503).

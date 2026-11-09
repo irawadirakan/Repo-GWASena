@@ -18,6 +18,23 @@ def check_redis() -> dict:
         return {"ok": False, "error": str(exc).splitlines()[0]}
 
 
+def check_features() -> dict:
+    """Fitur pendukung yang bergantung pada paket atau pengaturan tambahan."""
+    try:
+        import matplotlib  # noqa: F401
+        png = {"ok": True}
+    except ImportError:
+        png = {"ok": False, "error": "matplotlib belum terpasang; ekspor PNG tidak tersedia."}
+    gff3 = settings.ANNOTATION_GFF3
+    return {
+        "ekspor_png": png,
+        "anotasi_gff3": {"ok": gff3.is_file(), "berkas": gff3.name},
+        "login_google": {"ok": bool(settings.GOOGLE_CLIENT_ID),
+                         **({} if settings.GOOGLE_CLIENT_ID else {"error": "GOOGLE_CLIENT_ID belum diisi."})},
+        "mode_pipeline": settings.PIPELINE_MODE,
+    }
+
+
 @router.get("")
 def health():
     db = check_database()
@@ -28,6 +45,7 @@ def health():
         "version": settings.APP_VERSION,
         "environment": settings.APP_ENV,
         "components": {"api": {"ok": True}, "database": db, "redis": rd},
+        "fitur": check_features(),
     }
 
 

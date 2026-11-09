@@ -12,9 +12,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend import models  # noqa: F401  (mendaftarkan semua 12 tabel)
-from backend.api import analyses, auth, health, meta
+from backend.api import admin, analyses, auth, health, meta
+from backend.core import errors
 from backend.core.config import settings
 from backend.core.database import init_db
+from backend.services.analysis_runner import recover_stuck_analyses
 
 logger = logging.getLogger("gwasena")
 
@@ -29,6 +31,12 @@ async def lifespan(app: FastAPI):
         except Exception as exc:  # noqa: BLE001
             # Aplikasi tetap menyala agar /api/health bisa menunjukkan masalahnya.
             logger.error("Gagal terhubung/membuat tabel DB: %s", exc)
+    try:
+        n = recover_stuck_analyses()
+        if n:
+            logger.warning("%s analisis yang terhenti saat server mati ditandai gagal.", n)
+    except Exception as exc:  # noqa: BLE001
+        logger.error("Gagal memeriksa analisis yang terhenti: %s", exc)
     yield
 
 
@@ -47,8 +55,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-for r in (health.router, meta.router, auth.router, analyses.router):
+for r in (health.router, meta.router, auth.router, analyses.router, admin.router):
     app.include_router(r)
+
+errors.register(app)
 
 
 @app.get("/", include_in_schema=False)
