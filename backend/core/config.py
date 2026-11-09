@@ -21,7 +21,9 @@ class Settings:
 
     DATABASE_URL: str = os.getenv(
         "DATABASE_URL",
-        "postgresql://postgres:renoipb@localhost:5432/gwasena_database",
+        # Nilai bawaan sama dengan .env.example. Kredensial pribadi (mis. kata sandi PostgreSQL
+        # di laptop masing-masing) cukup ditulis di berkas .env, jangan di kode.
+        "postgresql+psycopg://gwasena:gwasena@localhost:5432/gwasena",
     )
     REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 
@@ -35,8 +37,12 @@ class Settings:
     MAX_UPLOAD_MB: int = int(os.getenv("MAX_UPLOAD_MB", "200"))
 
     # Autentikasi (FR-01). Ganti SECRET_KEY di .env dengan teks acak yang panjang.
-    SECRET_KEY: str = os.getenv("SECRET_KEY", "gwasena_secret_key_super_aman_2026")
+    SECRET_KEY: str = os.getenv("SECRET_KEY", "dev-ganti-kunci-ini-di-env")
     TOKEN_EXPIRE_HOURS: int = int(os.getenv("TOKEN_EXPIRE_HOURS", "12"))
+
+    # Login Google (FR-01): Client ID OAuth dari Google Cloud Console, sama dengan
+    # VITE_GOOGLE_CLIENT_ID di frontend. Kosong = login Google dimatikan (503).
+    GOOGLE_CLIENT_ID: str = os.getenv("GOOGLE_CLIENT_ID", "").strip()
 
     # Cara menjalankan pipeline:
     #   auto       -> pakai Celery bila worker aktif, selain itu dijalankan di latar belakang FastAPI
