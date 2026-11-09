@@ -307,7 +307,7 @@ export default function Step6Export({ analysisId, analysis, onNavigateStep }) {
               </span>
             </div>
             <p className="text-xs sm:text-sm font-serif leading-relaxed text-slate-800 dark:text-slate-200">
-              Unduh data statistik asosiasi genomik lengkap dari server backend: Chr, Pos, SNP_ID, Ref, Alt, Beta, SE, P_Value, Bonferroni, dan Q_Value FDR.
+              Ekspor seluruh data statistik asosiasi genomik dalam format CSV, termasuk informasi SNP, posisi genomik, nilai signifikansi, dan estimasi efek genetik.
             </p>
           </div>
 
@@ -420,8 +420,7 @@ export default function Step6Export({ analysisId, analysis, onNavigateStep }) {
               </span>
             </div>
             <p className="text-xs sm:text-sm font-serif leading-relaxed text-slate-800 dark:text-slate-200">
-              Hasilkan laporan interpretasi ilmiah komprehensif berisi parameter QC, evaluasi inflasi &lambda; (lambda GC),
-              gambar plot resolusi tinggi, tabel SNP signifikan, dan pemetaan gen fungsional GFF3.
+              Hasilkan laporan komprehensif yang mencakup evaluasi kualitas data (QC), estimasi inflasi genomik (&lambda; GC), visualisasi hasil analisis beresolusi tinggi, daftar SNP signifikan, serta anotasi gen berdasarkan referensi GFF3.
             </p>
           </div>
 

@@ -4,11 +4,9 @@ import {
   FileCheck2,
   ShieldCheck,
   BarChart3,
-  CheckCircle2,
   ArrowRight,
   Sparkles,
   Layers,
-  ChevronRight,
 } from 'lucide-react';
 import BrandLogo from '../components/common/BrandLogo.jsx';
 
@@ -23,6 +21,7 @@ export default function IntroPage() {
 
   const completeIntroAndNavigate = (targetPath) => {
     localStorage.setItem('gwasena_intro_completed', 'true');
+    localStorage.setItem('gwasena_has_logged_in', 'true');
     navigate(targetPath);
   };
 
@@ -62,47 +61,45 @@ export default function IntroPage() {
 
   return (
     <div className="w-full max-w-5xl py-6 px-4 animate-fade-in flex flex-col items-center text-center">
-      {/* Tombol Pojok Kanan Atas: Lewati ke Masuk */}
-      <div className="w-full flex justify-end mb-4">
-        <button
-          type="button"
-          onClick={() => completeIntroAndNavigate('/login')}
-          className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 dark:border-white/10 bg-white/80 dark:bg-white/5 px-4 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:border-[#5B4DFE] hover:-translate-y-[1px] active:scale-95 transition-all duration-100 backdrop-blur-md shadow-sm"
-        >
-          <span>Lewati ke Masuk</span>
-          <ChevronRight className="h-3.5 w-3.5" />
-        </button>
-      </div>
+      {/* ── Babak 1: Hero Section dengan Dark Radial Gradient Overlay / Backdrop Vignette ── */}
+      <div className="relative w-full max-w-4xl mx-auto rounded-3xl p-6 sm:p-10 flex flex-col items-center overflow-hidden">
+        {/* Lapisan Dark Radial Gradient Vignette untuk Kontras Sempurna di Dark & Light Mode */}
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 -z-10 rounded-3xl bg-slate-900/30 dark:bg-slate-950/65 backdrop-blur-[6px] border border-slate-200/50 dark:border-white/5 shadow-2xl"
+          style={{
+            backgroundImage:
+              'radial-gradient(circle at center, rgba(8, 13, 36, 0.75) 0%, rgba(8, 13, 36, 0.92) 80%, rgba(8, 13, 36, 0.98) 100%)',
+          }}
+        />
 
-      {/* ── Babak 1: Hero Section ── */}
-      <div className="flex flex-col items-center">
-        {/* Badge Identitas */}
-        <div className="inline-flex items-center gap-2 rounded-full border border-cyan-300 dark:border-[#06B6D4]/30 bg-cyan-50 dark:bg-[#06B6D4]/10 px-4 py-1.5 text-xs font-semibold text-cyan-900 dark:text-[#06B6D4] backdrop-blur-md mb-4 shadow-sm">
+        {/* Badge Identitas Terupdate */}
+        <div className="inline-flex items-center gap-2 rounded-full border border-cyan-400/40 dark:border-[#06B6D4]/40 bg-cyan-100/80 dark:bg-[#06B6D4]/15 px-4 py-1.5 text-xs font-bold text-cyan-950 dark:text-[#06B6D4] backdrop-blur-md mb-4 shadow-sm">
           <Sparkles className="h-3.5 w-3.5 text-cyan-700 dark:text-[#06B6D4] animate-pulse" />
-          <span>GWASena 2.0 · Platform Genome-Wide Association Study Terpadu</span>
+          <span>GWASena · Integrated GWAS Platform</span>
         </div>
 
-        {/* Brand Display */}
-        <div className="mb-2">
-          <BrandLogo size="xl" showTagline={false} />
+        {/* Brand Display (Logo Transparan Bersih Tanpa Kotak Card Putih) */}
+        <div className="mb-2 bg-transparent p-0 border-0 shadow-none">
+          <BrandLogo size="xl" showTagline={false} className="bg-transparent" />
         </div>
 
         {/* Editorial Subtitle / Tagline in Neuton Serif */}
-        <p className="font-serif italic text-lg sm:text-xl font-bold text-[#5B4DFE] dark:text-[#38BDF8] tracking-wide mb-3">
+        <p className="font-serif italic text-lg sm:text-xl font-bold text-[#5B4DFE] dark:text-[#38BDF8] tracking-wide mb-3 drop-shadow-sm">
           From Genotype to Discovery
         </p>
 
-        {/* Headline Ilmiah (Source Sans Pro font-sans) */}
-        <h1 className="max-w-3xl text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-slate-900 dark:text-white leading-[1.18]">
+        {/* Headline Ilmiah (Font Plus Jakarta Sans / Heading) */}
+        <h1 className="max-w-3xl text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-slate-950 dark:text-white leading-[1.18] drop-shadow-[0_2px_10px_rgba(0,0,0,0.45)]">
           Eksplorasi Asosiasi Genomik Tanpa Batas{' '}
-          <span className="bg-gradient-to-r from-[#06B6D4] via-[#5B4DFE] to-indigo-400 bg-clip-text text-transparent">
+          <span className="bg-gradient-to-r from-[#06B6D4] via-[#6366F1] to-indigo-300 bg-clip-text text-transparent">
             dalam Satu Alur Terpadu.
           </span>
         </h1>
 
-        {/* Narasi Pacing (Neuton Editorial Font) */}
-        <p className="mt-4 max-w-2xl font-serif text-base sm:text-lg text-slate-600 dark:text-slate-300 leading-relaxed">
-          Dirancang untuk peneliti agronomi, pemulia genetik, dan akademisi bioinformatika. Mengeliminasi kerumitan perintah CLI (PLINK 2 & GAPIT) dengan panduan parameter ilmiah yang transparan dan alur kerja terpadu.
+        {/* Narasi Pacing Deskripsi Hero Terupdate */}
+        <p className="mt-4 max-w-2xl font-serif text-base sm:text-lg text-slate-800 dark:text-slate-200 leading-relaxed drop-shadow-sm font-medium">
+          Eksplorasi potensi genetik melalui platform GWAS yang mengintegrasikan pemrosesan data, analisis statistik, dan interpretasi hasil.
         </p>
       </div>
 
@@ -151,7 +148,7 @@ export default function IntroPage() {
         </div>
       </div>
 
-      {/* ── Babak 3: How GWASena Works (Sequential Steps) ── */}
+      {/* ── Babak 3: How GWASena Works (Sequential Steps - Tanpa Badge Terverifikasi) ── */}
       <div className="mt-12 w-full max-w-4xl">
         <div className="flex items-center justify-center gap-2 mb-6">
           <Layers className="h-4 w-4 text-[#06B6D4]" />
@@ -171,10 +168,6 @@ export default function IntroPage() {
                 <h4 className="mt-1.5 text-sm sm:text-base font-bold tracking-tight text-slate-900 dark:text-white">{ws.title}</h4>
                 <p className="mt-1 text-xs sm:text-[13px] text-slate-700 dark:text-slate-300 leading-relaxed font-medium">{ws.desc}</p>
               </div>
-              <div className="mt-4 flex items-center gap-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-400">
-                <CheckCircle2 className="h-4 w-4" />
-                <span>Terverifikasi Sistem</span>
-              </div>
             </div>
           ))}
         </div>
@@ -192,7 +185,7 @@ export default function IntroPage() {
             onClick={() => completeIntroAndNavigate('/login')}
             className="flex-1 figma-btn-primary"
           >
-            <span>Masuk ke Akun</span>
+            <span>Mulai Sekarang!</span>
             <ArrowRight className="h-4 w-4" />
           </button>
 

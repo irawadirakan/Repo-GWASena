@@ -28,6 +28,9 @@ export const useAuthStore = create((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const user = await authService.getMe();
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('gwasena_has_logged_in', 'true');
+      }
       set({
         user,
         token,
@@ -56,6 +59,9 @@ export const useAuthStore = create((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const res = await authService.login(username, password);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('gwasena_has_logged_in', 'true');
+      }
       set({
         token: res.access_token,
         user: res.pengguna,
@@ -85,7 +91,7 @@ export const useAuthStore = create((set, get) => ({
   },
 
   /**
-   * Keluar dari sesi (tidak menghapus flag intro)
+   * Keluar dari sesi (tidak menghapus flag intro / pernah login)
    */
   logout: () => {
     authService.logout();

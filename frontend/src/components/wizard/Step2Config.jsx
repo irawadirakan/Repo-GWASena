@@ -153,6 +153,14 @@ export default function Step2Config({
         </p>
       </div>
 
+      {/* ── Banner Panduan Parameter [EDU-HINT] (Hanya Tampil di Langkah 2) ── */}
+      <div className="flex items-center gap-3 rounded-2xl border border-cyan-300 dark:border-cyan-500/30 bg-cyan-50/90 dark:bg-cyan-950/30 p-3.5 sm:p-4 text-xs sm:text-sm text-cyan-950 dark:text-cyan-200 backdrop-blur-md shadow-sm">
+        <span className="text-lg shrink-0">💡</span>
+        <p className="font-sans leading-relaxed">
+          <strong className="font-bold">Panduan Parameter:</strong> Klik atau arahkan kursor ke ikon tanda tanya (?) di pojok setiap kartu untuk membaca penjelasan ilmiah dan fungsi bagian tersebut.
+        </p>
+      </div>
+
       <ErrorMessageArea error={error} onDismiss={() => setError(null)} />
 
       {/* Banner 501 Transparan & Opsi Simulasi UI */}
@@ -434,7 +442,7 @@ export default function Step2Config({
               <div className="rounded-xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 p-3.5 text-xs sm:text-sm text-slate-800 dark:text-slate-200 leading-relaxed flex items-start gap-2.5 font-medium">
                 <Info className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
                 <span className="leading-relaxed">
-                  <strong>Catatan Ambang HWE & Kinship:</strong> Opsional (Nonaktif secara bawaan — direkomendasikan tetap nonaktif untuk populasi klonal, vegetatif, atau struktur silang spesifik). Jika diaktifkan pada populasi alami/kawin acak, sesuaikan ambang agar varian biologis penting tidak tereliminasi.
+                  <strong>Catatan Penggunaan Filter HWE & Kinship:</strong> Filter ini bersifat opsional dan dinonaktifkan secara default. Aktifkan hanya jika sesuai dengan struktur dan sistem reproduksi populasi yang dianalisis.
                 </span>
               </div>
             </div>
@@ -503,10 +511,10 @@ export default function Step2Config({
                 </div>
                 <EduHintTooltip hintKey="glm" />
               </div>
-              <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed font-sans">
-                General Linear Model. Menguji asosiasi dengan kovariat PC dari PCA. Komputasi cepat,
-                cocok untuk populasi tanpa struktur kekerabatan yang kompleks.
-              </p>
+              <div className="space-y-1.5 text-xs sm:text-[13px] text-slate-700 dark:text-slate-300 leading-relaxed font-sans font-medium">
+                <p>Menguji asosiasi antara SNP dan sifat fenotipe dengan menggunakan kovariat struktur populasi (PC1–PC3) sebagai efek tetap.</p>
+                <p>Komputasi lebih cepat dan sesuai untuk populasi dengan tingkat kekerabatan rendah.</p>
+              </div>
             </div>
 
             {/* Model 2: MLM (Rekomendasi Struktur Populasi Kompleks) */}
@@ -537,16 +545,10 @@ export default function Step2Config({
                   <EduHintTooltip hintKey="mlm" />
                 </div>
               </div>
-              <p className="text-xs sm:text-[13px] text-slate-700 dark:text-slate-300 leading-relaxed font-sans font-medium">
-                Mixed Linear Model. Menggabungkan kovariat PCA (efek tetap) DAN matriks kekerabatan
-                genetik / <em>Kinship</em> (efek acak). Sangat direkomendasikan untuk populasi dengan struktur kekerabatan kompleks atau klonal guna menekan temuan positif palsu.
-              </p>
-              {model === 'MLM' && (
-                <div className="mt-3 flex items-center gap-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-400 animate-fade-down">
-                  <CheckCircle2 className="h-4 w-4 stroke-[2.5] animate-pop-in" />
-                  <span>Matriks Kinship disertakan secara otomatis</span>
-                </div>
-              )}
+              <div className="space-y-1.5 text-xs sm:text-[13px] text-slate-700 dark:text-slate-300 leading-relaxed font-sans font-medium">
+                <p>Menguji asosiasi antara SNP dan sifat fenotipe dengan menggabungkan kovariat struktur populasi (PC1–PC3) sebagai efek tetap dan matriks kekerabatan genetik (Kinship) sebagai efek acak.</p>
+                <p>Lebih sesuai untuk populasi dengan struktur kekerabatan atau hubungan genetik yang kompleks.</p>
+              </div>
             </div>
           </div>
         </div>

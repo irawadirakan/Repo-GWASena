@@ -656,13 +656,30 @@ export default function Step3Computation({ analysisId, onComplete }) {
                 </span>
               </div>
               <div className="flex items-center gap-2">
+                {/* Badge Countdown Waktu */}
                 <span className="px-2.5 py-0.5 rounded-full text-xs font-mono bg-cyan-100/90 dark:bg-[#06B6D4]/20 text-cyan-900 dark:text-cyan-300 border border-cyan-300/60 dark:border-[#06B6D4]/30 flex items-center gap-1.5 shadow-sm font-bold">
                   <span className={`h-1.5 w-1.5 rounded-full ${isHovered ? 'bg-amber-500' : 'bg-cyan-500 animate-pulse'}`} />
                   {isHovered ? 'DIJEDA' : `${countdown}s`}
                 </span>
-                <span className="font-mono text-xs font-bold text-slate-600 dark:text-slate-300">
-                  {tipIndex + 1} / {TIPS_EDUKATIF.length}
-                </span>
+                {/* Tombol Panah Navigasi */}
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={handlePrevTip}
+                    className="rounded-lg border border-slate-300 dark:border-white/10 bg-white/90 dark:bg-white/5 p-1 hover:bg-slate-200 dark:hover:bg-white/10 active:scale-90 text-slate-800 dark:text-slate-200 transition-all duration-100 shadow-sm"
+                    title="Sebelumnya (Reset 6s)"
+                  >
+                    <ChevronLeft className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleNextTip}
+                    className="rounded-lg border border-slate-300 dark:border-white/10 bg-white/90 dark:bg-white/5 p-1 hover:bg-slate-200 dark:hover:bg-white/10 active:scale-90 text-slate-800 dark:text-slate-200 transition-all duration-100 shadow-sm"
+                    title="Berikutnya (Reset 6s)"
+                  >
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -678,37 +695,11 @@ export default function Step3Computation({ analysisId, onComplete }) {
             </div>
 
             {/* Konten Tips Berotasi dengan Efek Transisi Fade-In */}
-            <div key={tipIndex} className="min-h-[92px] space-y-1.5 animate-fade-in">
+            <div key={tipIndex} className="min-h-[80px] space-y-1.5 animate-fade-in pt-1">
               <h6 className="text-sm font-sans font-bold text-slate-900 dark:text-white">{currentTip?.judul}</h6>
               <p className="text-xs sm:text-sm font-serif leading-relaxed text-slate-800 dark:text-slate-200 italic">
                 &ldquo;{currentTip?.teks}&rdquo;
               </p>
-            </div>
-
-            {/* Kontrol Navigasi Manual & Teks Hitung Mundur */}
-            <div className="flex items-center justify-between pt-2 border-t border-slate-200 dark:border-white/10 text-xs">
-              <span className="text-slate-700 dark:text-slate-300 text-xs font-sans flex items-center gap-1.5 font-semibold">
-                <span className={`h-2 w-2 rounded-full ${isHovered ? 'bg-amber-500' : 'bg-cyan-500 animate-pulse'}`} />
-                {isHovered ? 'Rotasi dijeda (kursor diarahkan)' : `Berotasi otomatis dalam ${countdown}s`}
-              </span>
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={handlePrevTip}
-                  className="rounded-lg border border-slate-300 dark:border-white/10 bg-white/90 dark:bg-white/5 p-1.5 hover:bg-slate-200 dark:hover:bg-white/10 active:scale-90 text-slate-800 dark:text-slate-200 transition-all duration-100 shadow-sm"
-                  title="Sebelumnya (Reset 6s)"
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={handleNextTip}
-                  className="rounded-lg border border-slate-300 dark:border-white/10 bg-white/90 dark:bg-white/5 p-1.5 hover:bg-slate-200 dark:hover:bg-white/10 active:scale-90 text-slate-800 dark:text-slate-200 transition-all duration-100 shadow-sm"
-                  title="Berikutnya (Reset 6s)"
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </button>
-              </div>
             </div>
           </div>
         </div>

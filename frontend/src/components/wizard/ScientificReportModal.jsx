@@ -47,8 +47,15 @@ function cleanAnnotationDescription(desc, geneId, snpId) {
  * ReportHeader — Komponen Header Resmi GWASena Reusable
  * Ditampilkan konsisten dan identik di setiap halaman PDF dengan logo resmi dan klasifikasi dokumen.
  */
-function ReportHeader({ analysisId, currentPage = 1, totalPages = 2 }) {
-  const currentYear = new Date().getFullYear();
+function ReportHeader({ analysisId, currentPage = 1, totalPages = 2, dynamicExportDate }) {
+  const exportDateStr =
+    dynamicExportDate ||
+    new Date().toLocaleDateString('id-ID', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    });
+
   return (
     <header className="border-b-2 border-[#17243B] pb-2.5 mb-3 print-avoid-break">
       <div className="flex items-center justify-between gap-4">
@@ -70,7 +77,7 @@ function ReportHeader({ analysisId, currentPage = 1, totalPages = 2 }) {
           </div>
         </div>
 
-        {/* Sisi Kanan: Klasifikasi Riset, Referensi & Paginasi */}
+        {/* Sisi Kanan: Klasifikasi Riset, Tanggal Ekspor Dinamis & Paginasi */}
         <div className="text-right font-sans">
           <div className="inline-flex items-center gap-1.5 rounded bg-[#F4F7FB] border border-[#DCE4EF] px-2 py-0.5 mb-0.5">
             <span className="h-1.5 w-1.5 rounded-full bg-[#159B72]" />
@@ -79,11 +86,9 @@ function ReportHeader({ analysisId, currentPage = 1, totalPages = 2 }) {
             </span>
           </div>
           <p className="font-mono text-[9.5px] font-bold text-[#17243B] leading-tight">
-            REF: DOC-GWAS-{analysisId || '1'}-{currentYear}
+            Tanggal Ekspor: {exportDateStr}
           </p>
-          <div className="flex items-center justify-end gap-2 text-[8.5px] font-medium text-[#64748B] mt-0.5">
-            <span className="text-[#159B72] font-semibold">Status: Terverifikasi 100%</span>
-            <span>&bull;</span>
+          <div className="flex items-center justify-end text-[8.5px] font-medium text-[#64748B] mt-0.5">
             <span className="font-mono font-bold text-[#17243B]">Halaman {currentPage} dari {totalPages}</span>
           </div>
         </div>
@@ -350,10 +355,21 @@ export default function ScientificReportModal({
     analysis?.analysis_name ||
     summary?.analysis_name ||
     `Analisis Asosiasi Genomik #${analysisId || '1'}`;
-  const organismName =
-    summary?.organism ||
+  const organismCandidate =
+    uploadSummary?.genotipe?.organisme ||
+    uploadSummary?.fenotipe?.organisme ||
+    uploadSummary?.organisme ||
+    uploadSummary?.metadata?.organisme ||
     analysis?.organism ||
-    'Allium sativum (Bawang Putih)';
+    summary?.organism;
+
+  const organismName =
+    organismCandidate && organismCandidate !== 'Genomic Reference Cohort'
+      ? organismCandidate
+      : (uploadSummary?.genotipe?.nama_berkas?.toLowerCase()?.includes('bawang') ||
+         analysis?.analysis_name?.toLowerCase()?.includes('bawang')
+          ? 'Allium sativum (Bawang Putih)'
+          : (organismCandidate || 'Allium sativum (Bawang Putih)'));
   const traitName =
     asosiasi?.trait ||
     summary?.trait ||

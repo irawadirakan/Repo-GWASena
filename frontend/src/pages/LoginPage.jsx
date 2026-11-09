@@ -35,6 +35,11 @@ export default function LoginPage() {
     try {
       await login(username.trim(), password);
 
+      // Tandai bahwa pengguna sudah pernah login di peramban ini
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('gwasena_has_logged_in', 'true');
+      }
+
       // Arahkan ke rute awal jika sebelumnya dialihkan oleh ProtectedRoute
       const destination = location.state?.from?.pathname || '/dashboard';
       navigate(destination, { replace: true });
@@ -162,11 +167,11 @@ export default function LoginPage() {
             )}
           </button>
 
-          {/* Opsi Akses Demo Instan (Pengujian UI & Backend Offline) */}
+          {/* Opsi Akses Demo Instan */}
           <div className="relative flex py-1 items-center">
             <div className="flex-grow border-t border-slate-200 dark:border-white/10"></div>
             <span className="flex-shrink mx-2 text-xs uppercase tracking-wider text-slate-600 dark:text-slate-300 font-bold">
-              atau mode pengujian
+              Ingin coba GWASena?
             </span>
             <div className="flex-grow border-t border-slate-200 dark:border-white/10"></div>
           </div>
@@ -175,6 +180,9 @@ export default function LoginPage() {
             type="button"
             onClick={async () => {
               try {
+                if (typeof window !== 'undefined') {
+                  localStorage.setItem('gwasena_has_logged_in', 'true');
+                }
                 await login('peneliti_ipb', 'password123');
                 navigate('/dashboard');
               } catch (e) {
@@ -184,7 +192,7 @@ export default function LoginPage() {
             className="w-full figma-btn-secondary py-2.5 text-xs sm:text-sm font-bold cursor-pointer"
           >
             <Sparkles className="h-4 w-4 text-[#0284C7] dark:text-[#06B6D4]" />
-            <span>Masuk Cepat (Akun Peneliti Demo)</span>
+            <span>Jelajahi Mode Demo</span>
           </button>
         </form>
 
