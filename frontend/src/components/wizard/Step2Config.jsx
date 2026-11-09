@@ -251,7 +251,7 @@ export default function Step2Config({
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* 1. Missingness per Sampel (mind) */}
+            {/* 1. Missingness per Sampel (mind) - Evaluasi Tester Poin 12 */}
             <div className="space-y-2 glass-subcard p-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
@@ -261,25 +261,26 @@ export default function Step2Config({
                   <EduHintTooltip hintKey="mind" />
                 </div>
                 <span className="font-mono text-xs font-bold text-[#5B4DFE] dark:text-[#06B6D4] tabular-nums">
-                  {mind}
+                  {Number(mind).toFixed(2)}
                 </span>
               </div>
               <input
                 id="mind"
                 type="range"
-                min={QC_PARAM_RANGES.mind.min}
-                max={QC_PARAM_RANGES.mind.max}
-                step={QC_PARAM_RANGES.mind.step}
+                min="0.00"
+                max="0.50"
+                step="0.01"
                 value={mind}
                 onChange={(e) => setMind(e.target.value)}
                 className="w-full accent-[#5B4DFE] dark:accent-[#06B6D4] cursor-pointer"
               />
-              <span className="text-xs sm:text-[13px] text-slate-700 dark:text-slate-300 block font-sans font-medium">
-                Default: 0.10 (buang sampel dengan missing data &gt; 10%)
-              </span>
+              <div className="flex items-center justify-between text-[11px] font-sans font-medium text-slate-700 dark:text-slate-300">
+                <span>Rentang nilai: 0.00 – 0.50</span>
+                <span>Default: 0.10 (&gt;10% sampel hilang disaring)</span>
+              </div>
             </div>
 
-            {/* 2. Missingness per SNP (geno) */}
+            {/* 2. Missingness per SNP (geno) - Evaluasi Tester Poin 12 */}
             <div className="space-y-2 glass-subcard p-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
@@ -289,25 +290,26 @@ export default function Step2Config({
                   <EduHintTooltip hintKey="geno" />
                 </div>
                 <span className="font-mono text-sm font-bold text-[#0284C7] dark:text-[#06B6D4] tabular-nums">
-                  {geno}
+                  {Number(geno).toFixed(2)}
                 </span>
               </div>
               <input
                 id="geno"
                 type="range"
-                min={QC_PARAM_RANGES.geno.min}
-                max={QC_PARAM_RANGES.geno.max}
-                step={QC_PARAM_RANGES.geno.step}
+                min="0.00"
+                max="0.50"
+                step="0.01"
                 value={geno}
                 onChange={(e) => setGeno(e.target.value)}
                 className="w-full accent-[#0284C7] dark:accent-[#06B6D4] cursor-pointer"
               />
-              <span className="text-xs sm:text-[13px] text-slate-700 dark:text-slate-300 block font-sans font-medium">
-                Default: 0.10 (buang SNP yang hilang pada &gt; 10% populasi)
-              </span>
+              <div className="flex items-center justify-between text-[11px] font-sans font-medium text-slate-700 dark:text-slate-300">
+                <span>Rentang nilai: 0.00 – 0.50</span>
+                <span>Default: 0.10 (&gt;10% SNP hilang disaring)</span>
+              </div>
             </div>
 
-            {/* 3. Minor Allele Frequency (maf) */}
+            {/* 3. Minor Allele Frequency (maf) - Evaluasi Tester Poin 12 */}
             <div className="space-y-2 glass-subcard p-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
@@ -317,22 +319,23 @@ export default function Step2Config({
                   <EduHintTooltip hintKey="maf" />
                 </div>
                 <span className="font-mono text-sm font-bold text-[#0284C7] dark:text-[#06B6D4] tabular-nums">
-                  {maf}
+                  {Number(maf).toFixed(2)}
                 </span>
               </div>
               <input
                 id="maf"
                 type="range"
-                min={QC_PARAM_RANGES.maf.min}
-                max={QC_PARAM_RANGES.maf.max}
-                step={QC_PARAM_RANGES.maf.step}
+                min="0.01"
+                max="0.50"
+                step="0.01"
                 value={maf}
                 onChange={(e) => setMaf(e.target.value)}
                 className="w-full accent-[#0284C7] dark:accent-[#06B6D4] cursor-pointer"
               />
-              <span className="text-xs sm:text-[13px] text-slate-700 dark:text-slate-300 block font-sans font-medium">
-                Default: 0.05 (saring varian langka &lt; 5%)
-              </span>
+              <div className="flex items-center justify-between text-[11px] font-sans font-medium text-slate-700 dark:text-slate-300">
+                <span>Rentang nilai: 0.01 – 0.50</span>
+                <span>Default: 0.05 (saring alel &lt;5%)</span>
+              </div>
             </div>
 
             {/* 4. Relatedness / Kinship Cutoff (king_cutoff) */}
@@ -382,15 +385,10 @@ export default function Step2Config({
                 onChange={(e) => setKingCutoff(e.target.value)}
                 className={`w-full accent-[#0284C7] dark:accent-[#06B6D4] ${isKingActive ? 'cursor-pointer' : 'cursor-not-allowed opacity-40'}`}
               />
-              <span className="text-xs sm:text-[13px] text-slate-700 dark:text-slate-300 block font-sans font-medium">
-                {isKingActive ? (
-                  'Nilai rekomendasi: 0.177 (hubungan derajat pertama / klon kembar)'
-                ) : (
-                  <span className="text-amber-800 dark:text-amber-300 font-semibold">
-                    Nonaktif secara bawaan untuk tanaman klonal
-                  </span>
-                )}
-              </span>
+              <div className="flex items-center justify-between text-[11px] font-sans font-medium text-slate-700 dark:text-slate-300">
+                <span>Rentang nilai: 0.05 – 0.50</span>
+                <span>Rekomendasi: 0.177 (Nonaktif secara bawaan)</span>
+              </div>
             </div>
 
             {/* 5. Hardy-Weinberg Equilibrium (hwe) - Input khusus dengan catatan agronomi */}
@@ -466,10 +464,8 @@ export default function Step2Config({
             </span>
           </div>
 
-          <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed font-sans">
-            Principal Component Analysis (PCA) dijalankan secara otomatis setelah tahap QC untuk
-            menghasilkan <strong>3 komponen utama (PC1–PC3)</strong> sebagai kovariat struktur populasi.
-            Tahap ini <strong>tidak dapat dilewati</strong> demi mencegah temuan asosiasi positif palsu akibat stratifikasi geografis aksesi.
+          <p className="text-xs sm:text-[13px] text-slate-700 dark:text-slate-300 leading-relaxed font-sans font-medium">
+            Principal Component Analysis (PCA) dihitung secara deterministik menggunakan dekomposisi nilai singular (SVD / PLINK 2 <code>--pca 3</code>) setelah tahap QC untuk menghasilkan <strong>3 komponen utama (PC1–PC3)</strong> sebagai kovariat struktur populasi. Tahap ini <strong>tidak dapat dilewati</strong> demi mencegah temuan asosiasi positif palsu (<em>spurious associations</em>) akibat stratifikasi geografis atau kekerabatan aksesi.
           </p>
         </div>
 
@@ -488,64 +484,58 @@ export default function Step2Config({
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Model 1: GLM */}
+            {/* Model 1: GLM (Centered Header, Tanpa Radio Dot, Evaluasi Reno Override) */}
             <div
               onClick={() => setModel('GLM')}
-              className={`glass-subcard p-5 cursor-pointer transition-all duration-150 active:scale-[0.985] ${
+              className={`glass-subcard p-6 cursor-pointer transition-all duration-200 active:scale-[0.985] rounded-3xl ${
                 model === 'GLM'
-                  ? 'border-[#5B4DFE] dark:border-[#5B4DFE] ring-2 ring-[#5B4DFE]/40 bg-indigo-50/80 dark:bg-[#5B4DFE]/15'
+                  ? 'border-[#5B4DFE] dark:border-[#5B4DFE] ring-2 ring-[#5B4DFE]/40 bg-indigo-50/80 dark:bg-[#5B4DFE]/15 shadow-md'
                   : 'hover:border-slate-400 hover:-translate-y-[1px]'
               }`}
             >
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2.5">
-                  <input
-                    type="radio"
-                    name="model"
-                    value="GLM"
-                    checked={model === 'GLM'}
-                    onChange={() => setModel('GLM')}
-                    className="accent-[#5B4DFE] h-4 w-4 cursor-pointer"
-                  />
-                  <span className="text-base font-bold text-slate-900 dark:text-white font-sans">GLM</span>
+              <div className="relative text-center pb-3 border-b border-slate-200/80 dark:border-white/10 mb-3.5">
+                <div className="absolute right-0 top-0">
+                  <EduHintTooltip hintKey="glm" />
                 </div>
-                <EduHintTooltip hintKey="glm" />
+                <h4 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white font-sans">
+                  GLM
+                </h4>
+                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 font-sans mt-0.5">
+                  (General Linear Model)
+                </p>
               </div>
-              <div className="space-y-1.5 text-xs sm:text-[13px] text-slate-700 dark:text-slate-300 leading-relaxed font-sans font-medium">
+              <div className="space-y-2 text-xs sm:text-[13px] text-slate-700 dark:text-slate-300 leading-relaxed font-sans font-medium">
                 <p>Menguji asosiasi antara SNP dan sifat fenotipe dengan menggunakan kovariat struktur populasi (PC1–PC3) sebagai efek tetap.</p>
                 <p>Komputasi lebih cepat dan sesuai untuk populasi dengan tingkat kekerabatan rendah.</p>
               </div>
             </div>
 
-            {/* Model 2: MLM (Rekomendasi Struktur Populasi Kompleks) */}
+            {/* Model 2: MLM (Centered Header, Tanpa Radio Dot, Evaluasi Reno Override) */}
             <div
               onClick={() => setModel('MLM')}
-              className={`glass-subcard p-5 cursor-pointer transition-all duration-150 active:scale-[0.985] ${
+              className={`glass-subcard p-6 cursor-pointer transition-all duration-200 active:scale-[0.985] rounded-3xl ${
                 model === 'MLM'
-                  ? 'border-cyan-600 dark:border-[#06B6D4] ring-2 ring-cyan-500/40 bg-cyan-50/80 dark:bg-[#06B6D4]/15'
+                  ? 'border-cyan-600 dark:border-[#06B6D4] ring-2 ring-cyan-500/40 bg-cyan-50/80 dark:bg-[#06B6D4]/15 shadow-md'
                   : 'hover:border-slate-400 hover:-translate-y-[1px]'
               }`}
             >
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2.5">
-                  <input
-                    type="radio"
-                    name="model"
-                    value="MLM"
-                    checked={model === 'MLM'}
-                    onChange={() => setModel('MLM')}
-                    className="accent-[#06B6D4] h-4 w-4 cursor-pointer"
-                  />
-                  <span className="text-base font-bold text-slate-900 dark:text-white font-sans">MLM</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="rounded-full bg-cyan-100 dark:bg-[#06B6D4]/20 border border-cyan-300 dark:border-[#06B6D4]/30 px-2.5 py-0.5 text-xs font-bold text-cyan-900 dark:text-[#06B6D4] font-sans">
+              <div className="relative text-center pb-3 border-b border-slate-200/80 dark:border-white/10 mb-3.5">
+                <div className="absolute left-0 top-0">
+                  <span className="rounded-full bg-cyan-100 dark:bg-[#06B6D4]/20 border border-cyan-300 dark:border-[#06B6D4]/30 px-2.5 py-0.5 text-[11px] font-bold text-cyan-900 dark:text-[#06B6D4] font-sans">
                     Direkomendasikan
                   </span>
+                </div>
+                <div className="absolute right-0 top-0">
                   <EduHintTooltip hintKey="mlm" />
                 </div>
+                <h4 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white font-sans">
+                  MLM
+                </h4>
+                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 font-sans mt-0.5">
+                  (Mixed Linear Model)
+                </p>
               </div>
-              <div className="space-y-1.5 text-xs sm:text-[13px] text-slate-700 dark:text-slate-300 leading-relaxed font-sans font-medium">
+              <div className="space-y-2 text-xs sm:text-[13px] text-slate-700 dark:text-slate-300 leading-relaxed font-sans font-medium">
                 <p>Menguji asosiasi antara SNP dan sifat fenotipe dengan menggabungkan kovariat struktur populasi (PC1–PC3) sebagai efek tetap dan matriks kekerabatan genetik (Kinship) sebagai efek acak.</p>
                 <p>Lebih sesuai untuk populasi dengan struktur kekerabatan atau hubungan genetik yang kompleks.</p>
               </div>
@@ -553,7 +543,7 @@ export default function Step2Config({
           </div>
         </div>
 
-        {/* ── Bagian E: Koreksi Multiple Testing & Alpha ── */}
+        {/* ─── Bagian E: Koreksi Multiple Testing & Alpha ── */}
         <div className="figma-card p-6 space-y-4">
           <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-3">
             <div className="flex items-center gap-2.5">
@@ -564,7 +554,7 @@ export default function Step2Config({
                 Koreksi Multiple Testing & Ambang Signifikansi
               </h3>
             </div>
-            <span className="text-xs text-slate-500 dark:text-slate-400 font-sans">Pengendalian Positif Palsu</span>
+            <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 font-sans">Pilih Salah Satu atau Keduanya</span>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -602,22 +592,85 @@ export default function Step2Config({
               </div>
             </label>
 
-            {/* Input Alpha */}
-            <div className="glass-subcard p-4 space-y-1.5">
+            {/* Input Alpha (Spinner responsif, step 0.01, format konsisten 0.10 - Evaluasi Tester Poin 16) */}
+            <div className="glass-subcard p-4 space-y-2">
               <label htmlFor="alpha" className="block text-sm font-bold text-slate-900 dark:text-white font-sans">
                 Ambang Alpha Signifikansi
               </label>
-              <input
-                id="alpha"
-                type="number"
-                min={0.001}
-                max={0.1}
-                step={0.005}
-                value={alpha}
-                onChange={(e) => setAlpha(e.target.value)}
-                className="w-full font-mono text-sm font-bold text-slate-900 dark:text-[#06B6D4] bg-white dark:bg-[#121B38] rounded-xl border border-slate-300 dark:border-white/10 py-2 px-3 focus:outline-none focus:border-[#0284C7]"
-              />
-              <span className="text-xs text-slate-700 dark:text-slate-300 block font-sans font-medium">Default standar riset: 0.05</span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const current = parseFloat(alpha) || 0.05;
+                    const nextVal = Math.max(0.01, current - 0.01);
+                    setAlpha(nextVal.toFixed(2));
+                  }}
+                  className="h-9 w-9 rounded-xl border border-slate-300 dark:border-white/10 bg-white dark:bg-[#121B38] font-bold text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 active:scale-95 transition-all text-sm flex items-center justify-center cursor-pointer shadow-xs"
+                  title="Kurangi 0.01"
+                >
+                  -
+                </button>
+                <input
+                  id="alpha"
+                  type="number"
+                  min="0.01"
+                  max="0.10"
+                  step="0.01"
+                  value={alpha}
+                  onChange={(e) => setAlpha(e.target.value)}
+                  className="flex-1 font-mono text-sm font-bold text-slate-900 dark:text-[#06B6D4] bg-white dark:bg-[#121B38] rounded-xl border border-slate-300 dark:border-white/10 py-2 px-3 text-center focus:outline-none focus:border-[#0284C7]"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const current = parseFloat(alpha) || 0.05;
+                    const nextVal = Math.min(0.10, current + 0.01);
+                    setAlpha(nextVal.toFixed(2));
+                  }}
+                  className="h-9 w-9 rounded-xl border border-slate-300 dark:border-white/10 bg-white dark:bg-[#121B38] font-bold text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 active:scale-95 transition-all text-sm flex items-center justify-center cursor-pointer shadow-xs"
+                  title="Tambah 0.01"
+                >
+                  +
+                </button>
+              </div>
+
+              {/* Preset Buttons Konsisten 2 Desimal */}
+              <div className="flex items-center gap-1.5 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setAlpha('0.01')}
+                  className={`px-2 py-0.5 rounded-lg text-[11px] font-mono font-bold transition-all cursor-pointer ${
+                    alpha === '0.01'
+                      ? 'bg-[#5B4DFE] text-white'
+                      : 'bg-slate-100 dark:bg-white/5 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-white/10'
+                  }`}
+                >
+                  0.01
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAlpha('0.05')}
+                  className={`px-2 py-0.5 rounded-lg text-[11px] font-mono font-bold transition-all cursor-pointer ${
+                    alpha === '0.05'
+                      ? 'bg-[#5B4DFE] text-white'
+                      : 'bg-slate-100 dark:bg-white/5 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-white/10'
+                  }`}
+                >
+                  0.05
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAlpha('0.10')}
+                  className={`px-2 py-0.5 rounded-lg text-[11px] font-mono font-bold transition-all cursor-pointer ${
+                    alpha === '0.10'
+                      ? 'bg-[#5B4DFE] text-white'
+                      : 'bg-slate-100 dark:bg-white/5 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-white/10'
+                  }`}
+                >
+                  0.10
+                </button>
+                <span className="text-[11px] text-slate-500 ml-1 font-medium">(Default: 0.05)</span>
+              </div>
             </div>
           </div>
         </div>

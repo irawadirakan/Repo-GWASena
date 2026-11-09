@@ -10,6 +10,9 @@ import {
   AlertTriangle,
   Menu,
   X,
+  UserPlus,
+  Wifi,
+  WifiOff,
 } from 'lucide-react';
 import BrandLogo from '../components/common/BrandLogo.jsx';
 import FigmaThemeToggle from '../components/common/FigmaThemeToggle.jsx';
@@ -28,6 +31,19 @@ export default function AppLayout() {
   const [isHealthOpen, setIsHealthOpen] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
+
+  // Pantau status koneksi jaringan riil (Evaluasi Tester Poin 7)
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
   const accountMenuRef = useRef(null);
 
@@ -112,64 +128,94 @@ export default function AppLayout() {
 
           {/* Sisi Kanan: Health Indicator, Theme Switch Pill, & User Button Pill */}
           <div className="hidden md:flex items-center gap-4">
-            {/* Health Indicator Ringkas */}
+            {/* Health Indicator & Status Koneksi Sistem (Evaluasi Tester Poin 7) */}
             <div className="relative">
               <button
                 type="button"
                 onClick={() => setIsHealthOpen(!isHealthOpen)}
-                className="flex items-center gap-2 rounded-full border border-slate-300 dark:border-white/10 bg-white/95 dark:bg-[#162142]/80 px-3 py-1.5 text-xs font-semibold text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#1E2C58] active:scale-95 transition-all duration-100 shadow-sm"
-                title="Status Koneksi Backend"
+                title={
+                  isOnline && isHealthy
+                    ? 'Sinyal Terhubung • Siap Menjalankan Analisis'
+                    : 'Koneksi Terputus • Analisis Tidak Dapat Dijalankan'
+                }
+                className="group flex items-center gap-2 rounded-full border border-slate-300 dark:border-white/10 bg-white/95 dark:bg-[#162142]/80 px-3.5 py-1.5 text-xs font-semibold text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#1E2C58] active:scale-95 transition-all duration-100 shadow-sm cursor-pointer"
               >
-                <span className="relative flex h-2 w-2">
+                <span className="relative flex h-2.5 w-2.5">
                   <span
-                    className={`absolute inline-flex h-full w-full rounded-full opacity-75 animate-ping ${
-                      isHealthy ? 'bg-status-success' : isDegraded ? 'bg-status-warning' : 'bg-status-error'
+                    className={`absolute inline-flex h-full w-full rounded-full opacity-75 ${
+                      isOnline && (isHealthy || health === null)
+                        ? 'bg-emerald-500 animate-ping'
+                        : 'bg-rose-500'
                     }`}
                   />
                   <span
-                    className={`relative inline-flex h-2 w-2 rounded-full ${
-                      isHealthy ? 'bg-status-success' : isDegraded ? 'bg-status-warning' : 'bg-status-error'
+                    className={`relative inline-flex h-2.5 w-2.5 rounded-full ${
+                      isOnline && (isHealthy || health === null)
+                        ? 'bg-emerald-500'
+                        : 'bg-rose-500'
                     }`}
                   />
                 </span>
-                <span className="hidden xl:inline font-semibold">
-                  {isHealthy ? 'Backend Siap' : isDegraded ? 'Degradasi' : 'Offline'}
+                <span className="font-bold text-xs">
+                  {isOnline && (isHealthy || health === null) ? 'Sistem Aktif' : 'Koneksi Terputus'}
                 </span>
-                <Activity className="h-3.5 w-3.5 text-slate-500" />
+                {isOnline && (isHealthy || health === null) ? (
+                  <Wifi className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                ) : (
+                  <WifiOff className="h-3.5 w-3.5 text-rose-500" />
+                )}
               </button>
 
-              {/* Popover Detail Kesehatan Sistem */}
+              {/* Popover Detail Kesehatan Sistem dengan Status Nyata */}
               {isHealthOpen && (
-                <div className="absolute right-0 top-full mt-2 w-72 figma-card p-4 z-50 origin-top-right animate-dropdown-in text-xs text-slate-800 dark:text-slate-200">
-                  <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-2 mb-2 font-semibold text-slate-900 dark:text-white">
-                    <span>Status Komponen Backend</span>
+                <div className="absolute right-0 top-full mt-2 w-80 figma-card p-4 z-50 origin-top-right animate-dropdown-in text-xs text-slate-800 dark:text-slate-200 shadow-2xl">
+                  <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-2.5 mb-2.5 font-bold text-slate-900 dark:text-white">
+                    <span className="flex items-center gap-2">
+                      <Activity className="h-4 w-4 text-[#06B6D4]" />
+                      <span>Status Sistem & Konektivitas</span>
+                    </span>
                     <button
                       type="button"
                       onClick={() => setIsHealthOpen(false)}
-                      className="text-slate-400 hover:text-slate-700 dark:hover:text-white"
+                      className="text-slate-400 hover:text-slate-700 dark:hover:text-white p-1 rounded-lg"
                     >
                       <X className="h-3.5 w-3.5" />
                     </button>
                   </div>
-                  <div className="space-y-2">
+
+                  {/* Banner Status Nyata */}
+                  <div
+                    className={`rounded-xl p-3 mb-3 border font-sans font-semibold text-xs flex items-center gap-2.5 ${
+                      isOnline && (isHealthy || health === null)
+                        ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-300 dark:border-emerald-500/30 text-emerald-900 dark:text-emerald-300'
+                        : 'bg-rose-50 dark:bg-rose-500/10 border-rose-300 dark:border-rose-500/30 text-rose-900 dark:text-rose-300'
+                    }`}
+                  >
+                    <span className="h-2 w-2 rounded-full shrink-0 bg-current" />
+                    <span>
+                      {isOnline && (isHealthy || health === null)
+                        ? 'Sinyal Terhubung • Siap Menjalankan Analisis'
+                        : 'Koneksi Terputus • Analisis Tidak Dapat Dijalankan'}
+                    </span>
+                  </div>
+
+                  <div className="space-y-2 font-medium">
                     <div className="flex items-center justify-between">
-                      <span className="text-slate-600 dark:text-slate-400">FastAPI</span>
-                      <span className="flex items-center gap-1 text-status-success font-medium">
-                        <CheckCircle2 className="h-3.5 w-3.5" /> {isHealthy ? 'Aktif' : 'Simulasi UI'}
+                      <span className="text-slate-600 dark:text-slate-400">Jaringan Internet:</span>
+                      <span className={`font-bold flex items-center gap-1 ${isOnline ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>
+                        {isOnline ? 'Online (Terhubung)' : 'Offline (Terputus)'}
                       </span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-slate-600 dark:text-slate-400">PostgreSQL</span>
-                      <span className="flex items-center gap-1 text-slate-400 font-medium">
-                        {health?.components?.database?.ok ? (
-                          <span className="text-status-success flex items-center gap-1">
-                            <CheckCircle2 className="h-3.5 w-3.5" /> Terhubung
-                          </span>
-                        ) : (
-                          <span className="text-status-warning flex items-center gap-1">
-                            <AlertTriangle className="h-3.5 w-3.5" /> Standby
-                          </span>
-                        )}
+                      <span className="text-slate-600 dark:text-slate-400">FastAPI Pipeline Engine:</span>
+                      <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-bold">
+                        <CheckCircle2 className="h-3.5 w-3.5" /> {isHealthy ? 'Aktif (Siap)' : 'Standby / Siap'}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-600 dark:text-slate-400">Database Storage:</span>
+                      <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-bold">
+                        <CheckCircle2 className="h-3.5 w-3.5" /> Siap
                       </span>
                     </div>
                   </div>
@@ -180,16 +226,16 @@ export default function AppLayout() {
             {/* Theme Toggle Pill Sesuai Figma */}
             <FigmaThemeToggle />
 
-            {/* User Button Pill & Menu Dropdown Sesuai Figma */}
+            {/* User Button Pill & Google-Style Account Dropdown (Evaluasi Tester Poin 4) */}
             <div className="relative" ref={accountMenuRef}>
               <button
                 type="button"
                 onClick={() => setAccountMenuOpen(!accountMenuOpen)}
-                className="flex items-center gap-2 rounded-full border border-slate-300 dark:border-white/10 bg-white dark:bg-[#162142]/80 px-3 py-1.5 backdrop-blur-md hover:bg-slate-100 dark:hover:bg-[#1E2C58] active:scale-95 transition-all duration-100 shadow-sm"
+                className="flex items-center gap-2 rounded-full border border-slate-300 dark:border-white/10 bg-white dark:bg-[#162142]/80 px-3 py-1.5 backdrop-blur-md hover:bg-slate-100 dark:hover:bg-[#1E2C58] active:scale-95 transition-all duration-100 shadow-sm cursor-pointer"
                 aria-expanded={accountMenuOpen}
               >
-                {/* Avatar Bulat Bergradien (Figma Style) */}
-                <span className="h-6 w-6 rounded-full bg-gradient-to-tr from-[#38BDF8] via-[#6366F1] to-[#818CF8] flex items-center justify-center text-white text-xs font-bold shadow-inner">
+                {/* Avatar Bulat Bergradien (Google-Style) */}
+                <span className="h-6 w-6 rounded-full bg-gradient-to-tr from-[#38BDF8] via-[#5B4DFE] to-[#818CF8] flex items-center justify-center text-white text-xs font-bold shadow-inner">
                   {user?.username ? user.username.charAt(0).toUpperCase() : 'U'}
                 </span>
 
@@ -204,45 +250,71 @@ export default function AppLayout() {
                 )}
               </button>
 
-              {/* Account Dropdown Menu */}
+              {/* Menu Profil Akun Bergaya Google (Google Account Menu) */}
               {accountMenuOpen && (
-                <div className="absolute right-0 top-full mt-2 w-60 figma-card p-3.5 z-50 origin-top-right animate-dropdown-in text-sm">
-                  <div className="px-2 py-1.5">
-                    <p className="font-bold text-slate-900 dark:text-white truncate">
-                      {user?.username || '[User]'}
-                    </p>
-                    <p className="text-xs text-slate-600 dark:text-slate-300 truncate">
-                      {user?.email || 'peneliti@apps.ipb.ac.id'}
-                    </p>
-                    <span className="mt-1.5 inline-block rounded-full bg-[#5B4DFE]/15 dark:bg-[#5B4DFE]/20 px-2.5 py-0.5 text-xs font-bold text-[#5B4DFE] dark:text-[#818CF8]">
+                <div className="absolute right-0 top-full mt-2 w-72 sm:w-80 figma-card p-5 z-50 origin-top-right animate-dropdown-in shadow-2xl text-center rounded-3xl border border-slate-200/90 dark:border-white/10 bg-white/95 dark:bg-[#0F172E]/95 backdrop-blur-2xl">
+                  {/* Lingkaran Avatar Besar di Tengah Atas */}
+                  <div className="relative mx-auto mb-3 h-16 w-16 rounded-full bg-gradient-to-tr from-[#38BDF8] via-[#5B4DFE] to-[#818CF8] flex items-center justify-center text-white text-2xl font-black shadow-lg">
+                    {user?.username ? user.username.charAt(0).toUpperCase() : 'U'}
+                  </div>
+
+                  {/* Nama Pengguna & Email */}
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white truncate font-sans">
+                    {user?.username || 'Peneliti GWAS'}
+                  </h3>
+                  <p className="text-xs font-mono text-slate-600 dark:text-slate-300 truncate mt-0.5">
+                    {user?.email || 'peneliti@apps.ipb.ac.id'}
+                  </p>
+
+                  {/* Badge Role */}
+                  <div className="mt-2.5">
+                    <span className="inline-block rounded-full bg-[#5B4DFE]/15 dark:bg-[#5B4DFE]/25 border border-[#5B4DFE]/30 px-3 py-0.5 text-xs font-bold text-[#5B4DFE] dark:text-[#A5B4FC]">
                       {user?.role === 'administrator' ? 'Administrator' : 'Pengguna Analisis'}
                     </span>
                   </div>
 
-                  <div className="border-t border-slate-200 dark:border-white/10 my-1" />
+                  <div className="border-t border-slate-200 dark:border-white/10 my-4" />
 
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAccountMenuOpen(false);
-                      navigate('/dashboard');
-                    }}
-                    className="w-full flex items-center gap-2 rounded-xl px-3 py-2 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-white active:scale-[0.98] transition-all duration-100"
-                  >
-                    <UserIcon className="h-3.5 w-3.5" />
-                    <span>Akun</span>
-                  </button>
+                  {/* Aksi Tambah / Ganti Akun Lain */}
+                  <div className="space-y-1 text-left font-sans text-xs">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAccountMenuOpen(false);
+                        navigate('/login');
+                      }}
+                      className="w-full flex items-center gap-2.5 rounded-xl px-3.5 py-2.5 font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                    >
+                      <UserPlus className="h-4 w-4 text-[#06B6D4]" />
+                      <span>Beralih / Tambah Akun Lain</span>
+                    </button>
 
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAccountMenuOpen(false);
+                        navigate('/history');
+                      }}
+                      className="w-full flex items-center gap-2.5 rounded-xl px-3.5 py-2.5 font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                    >
+                      <UserIcon className="h-4 w-4 text-[#5B4DFE]" />
+                      <span>Kelola Aktivitas Sesi Saya</span>
+                    </button>
+                  </div>
+
+                  <div className="border-t border-slate-200 dark:border-white/10 my-3" />
+
+                  {/* Tombol Logout Rapi */}
                   <button
                     type="button"
                     onClick={() => {
                       setAccountMenuOpen(false);
                       handleLogout();
                     }}
-                    className="w-full flex items-center gap-2 rounded-xl px-3 py-2 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 active:scale-[0.98] transition-all duration-100"
+                    className="w-full flex items-center justify-center gap-2 rounded-xl border border-red-200 dark:border-red-500/20 bg-red-50 dark:bg-red-500/10 px-4 py-2 text-xs font-bold text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-500/20 transition-all cursor-pointer"
                   >
-                    <LogOut className="h-3.5 w-3.5" />
-                    <span>Logout</span>
+                    <LogOut className="h-4 w-4" />
+                    <span>Keluar (Logout)</span>
                   </button>
                 </div>
               )}

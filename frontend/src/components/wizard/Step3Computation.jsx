@@ -384,53 +384,84 @@ export default function Step3Computation({ analysisId, onComplete }) {
         </div>
       )}
 
-      {/* ── Area Pesan Kesalahan / Status Gagal (Poin #4) ── */}
-      {isFailed && (
-        <div className="rounded-3xl border border-rose-300 dark:border-rose-500/40 bg-rose-50/90 dark:bg-rose-500/10 p-6 space-y-4 shadow-xl animate-fade-in backdrop-blur-md">
-          <div className="flex items-center gap-2.5 text-rose-700 dark:text-rose-400">
-            <XCircle className="h-6 w-6 shrink-0" />
-            <h3 className="text-base font-bold font-sans">
-              Komputasi Pipeline GWAS Gagal Dijalankan
-            </h3>
+      {/* ─── Area Pesan Kesalahan / Status Gagal (Evaluasi Tester Poin 18) ─── */}
+      {isFailed && (() => {
+        const errText = typeof error === 'string' ? error : (error?.message || error?.pesan || '');
+        const isQcTooStrict = /qc|sampel|sedikit|filter|maf|geno|mind|hwe|kinship/i.test(errText);
+        const isFileCorrupted = /format|berkas|file|vcf|csv|kolom|parse|bialel/i.test(errText);
+
+        return (
+          <div className="rounded-3xl border border-rose-300 dark:border-rose-500/40 bg-rose-50/90 dark:bg-rose-500/10 p-6 space-y-4 shadow-xl animate-fade-in backdrop-blur-md">
+            <div className="flex items-center gap-2.5 text-rose-700 dark:text-rose-400">
+              <XCircle className="h-6 w-6 shrink-0" />
+              <h3 className="text-base font-bold font-sans">
+                Komputasi Pipeline GWAS Gagal Dijalankan
+              </h3>
+            </div>
+
+            <ErrorMessageArea error={error} type="error" />
+
+            {/* Rekomendasi Tindakan Spesifik Berdasarkan Jenis Galat (Evaluasi Tester Poin 18) */}
+            <div className="rounded-2xl p-4 border bg-white/80 dark:bg-[#070C1D]/80 border-rose-200 dark:border-rose-500/20 text-xs sm:text-sm font-sans space-y-2">
+              <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
+                <span>Rekomendasi Tindakan Korektif Ilmiah:</span>
+              </div>
+              {isQcTooStrict ? (
+                <p className="text-rose-900 dark:text-rose-200 leading-relaxed font-medium">
+                  <strong>Masalah disebabkan oleh ambang filter Quality Control yang terlalu ketat.</strong> Sampel atau varian SNP tersaring habis sebelum uji statistik dimulai. Disarankan menekan tombol <strong>"Kembali ke Konfigurasi QC & Model"</strong> untuk melonggarkan ambang missingness atau MAF.
+                </p>
+              ) : isFileCorrupted ? (
+                <p className="text-rose-900 dark:text-rose-200 leading-relaxed font-medium">
+                  <strong>Masalah disebabkan oleh format atau integritas berkas data yang tidak valid.</strong> Pastikan berkas VCF memuat varian bialelik dan tabel CSV fenotipe memiliki Sample ID yang 100% cocok. Disarankan menekan tombol <strong>"Kembali ke Unggah & Validasi"</strong>.
+                </p>
+              ) : (
+                <p className="text-slate-700 dark:text-slate-300 leading-relaxed font-medium">
+                  Masalah dapat disebabkan oleh ambang filter Quality Control yang terlalu ketat atau ketidakcocokan format berkas. Silakan gunakan tombol navigasi di bawah untuk menyesuaikan parameter atau memeriksa kembali berkas input Anda.
+                </p>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3 pt-3 border-t border-rose-200 dark:border-rose-500/20">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsFailed(false);
+                  setError(null);
+                  setActiveStep(2);
+                }}
+                className={`inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-xs font-bold transition-all active:scale-95 cursor-pointer shadow-md ${
+                  isQcTooStrict
+                    ? 'bg-[#5B4DFE] hover:bg-[#4F46E5] text-white ring-2 ring-[#5B4DFE]/40'
+                    : 'bg-[#5B4DFE] hover:bg-[#4F46E5] text-white'
+                }`}
+              >
+                <ArrowLeft className="h-4 w-4" />
+                <span>Kembali ke Konfigurasi QC & Model (Langkah 2)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setIsFailed(false);
+                  setError(null);
+                  setActiveStep(1);
+                }}
+                className={`inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-xs font-semibold transition-all active:scale-95 cursor-pointer shadow-xs ${
+                  isFileCorrupted
+                    ? 'bg-[#0284C7] hover:bg-[#0369A1] text-white font-bold ring-2 ring-[#0284C7]/40'
+                    : 'border border-slate-300 dark:border-white/10 bg-white dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 text-slate-800 dark:text-slate-200'
+                }`}
+              >
+                <ArrowLeft className="h-4 w-4" />
+                <span>Kembali ke Unggah & Validasi (Langkah 1)</span>
+              </button>
+            </div>
           </div>
+        );
+      })()}
 
-          <ErrorMessageArea error={error} type="error" />
-
-          <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-            Silakan periksa kembali berkas yang diunggah atau sesuaikan parameter filter Quality Control agar tidak menyaring seluruh data sampel/SNP.
-          </p>
-
-          <div className="flex flex-wrap items-center gap-3 pt-3 border-t border-rose-200 dark:border-rose-500/20">
-            <button
-              type="button"
-              onClick={() => {
-                setIsFailed(false);
-                setError(null);
-                setActiveStep(2);
-              }}
-              className="inline-flex items-center gap-2 rounded-xl bg-[#5B4DFE] hover:bg-[#4F46E5] px-5 py-2.5 text-xs font-bold text-white shadow-md shadow-[#5B4DFE]/30 transition-all active:scale-95"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              <span>Kembali ke Konfigurasi (Langkah 2)</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setIsFailed(false);
-                setError(null);
-                setActiveStep(1);
-              }}
-              className="inline-flex items-center gap-2 rounded-xl border border-slate-300 dark:border-white/10 bg-white dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 px-5 py-2.5 text-xs font-semibold text-slate-800 dark:text-slate-200 transition-all active:scale-95"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              <span>Kembali ke Unggah Data (Langkah 1)</span>
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ── Progress Bar Utama (Poin #3) ── */}
+      {/* ─── Progress Bar Utama (Poin #3) ── */}
       <div className="rounded-2xl glass-subcard p-4 sm:p-5 space-y-2.5">
         <div className="flex items-center justify-between text-xs">
           <div className="flex items-center gap-2">

@@ -55,10 +55,10 @@ export default function LoginPage() {
         {/* Header Form */}
         <div className="text-center mb-6">
           <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white font-sans">
-            Masuk ke Akun
+            Masuk ke GWASena
           </h1>
           <p className="mt-1.5 font-serif text-sm text-slate-600 dark:text-slate-300">
-            Masukkan kredensial akun peneliti Anda untuk melanjutkan riset
+            Masukkan kredensial akun Anda untuk mengakses platform analisis.
           </p>
         </div>
 
@@ -161,7 +161,7 @@ export default function LoginPage() {
               </>
             ) : (
               <>
-                <span>Masuk ke Akun</span>
+                <span>Masuk ke Dashboard</span>
                 <ArrowRight className="h-4 w-4" />
               </>
             )}
@@ -199,7 +199,7 @@ export default function LoginPage() {
         {/* Footer Kartu Form */}
         <div className="mt-6 border-t border-slate-200 dark:border-white/10 pt-4 text-center space-y-2">
           <p className="text-xs sm:text-sm text-slate-700 dark:text-slate-300 font-medium">
-            Belum memiliki akun peneliti?{' '}
+            Belum memiliki akun?{' '}
             <Link
               to="/register"
               className="font-bold text-[#0284C7] dark:text-[#06B6D4] hover:underline transition-colors"

@@ -10,6 +10,7 @@ import {
   Loader2,
   CheckCircle2,
   Sparkles,
+  Info,
 } from 'lucide-react';
 import { useAnalysisStore } from '../../store/useAnalysisStore.js';
 import { analysisService } from '../../services/analysisService.js';
@@ -158,6 +159,15 @@ export default function Step5Annotation({ analysisId, onNavigateStep }) {
     });
   }, [flattenedGenes, searchQuery]);
 
+  // Hitung jumlah relasi SNP ke beberapa kandidat gen dalam jendela (Evaluasi Tester Poin 22)
+  const snpToGeneCount = useMemo(() => {
+    const counts = {};
+    filteredGenes.forEach((g) => {
+      counts[g.snp_id] = (counts[g.snp_id] || 0) + 1;
+    });
+    return counts;
+  }, [filteredGenes]);
+
   const isUnavailable = annotationData?.status === 'tidak_tersedia' || isSimulateFallback;
   const windowKb = Math.round((annotationData?.jendela_bp || 50000) / 1000);
 
@@ -303,6 +313,20 @@ export default function Step5Annotation({ analysisId, onNavigateStep }) {
             </div>
           </div>
 
+          {/* Banner Penjelasan Relasi 1 SNP ke Banyak Gen (Evaluasi Tester Poin 22) */}
+          <div className="rounded-2xl border border-cyan-300/80 dark:border-cyan-500/30 bg-cyan-50/80 dark:bg-cyan-500/10 p-3.5 text-xs text-slate-800 dark:text-slate-200 flex items-start gap-2.5">
+            <Info className="h-4 w-4 text-[#06B6D4] shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <span className="font-bold text-slate-900 dark:text-white font-sans">
+                Penjelasan Baris Tabel & Relasi SNP ke Kandidat Gen (Jendela ±{windowKb} kb):
+              </span>
+              <p className="text-slate-700 dark:text-slate-300 leading-relaxed font-sans font-medium">
+                Satu titik SNP signifikan dapat menghasilkan lebih dari satu baris dalam tabel jika terdapat beberapa gen yang berdekatan dalam rentang koordinat (hulu, hilir, maupun intragenik). GWASena memetakan seluruh gen dalam rentang jendela analisis untuk memberikan konteks arsitektur genetik yang komprehensif.
+              </p>
+            </div>
+          </div>
+
+
           {filteredGenes.length === 0 ? (
             <div className="py-8 text-center text-xs text-slate-600 dark:text-slate-400 font-sans">
               <BookOpen className="h-6 w-6 mx-auto mb-2 text-slate-400" />
@@ -330,12 +354,19 @@ export default function Step5Annotation({ analysisId, onNavigateStep }) {
                       className="hover:bg-slate-50/80 dark:hover:bg-white/5 transition-colors"
                     >
                       <td className="py-3 px-3.5 font-mono font-bold text-[#0284C7] dark:text-[#06B6D4]">
-                        <div className="flex items-center gap-1.5">
-                          <span>{gene.snp_id}</span>
-                          {gene.signifikan && (
-                            <span className="rounded-full bg-emerald-100 dark:bg-emerald-500/20 px-2 py-0.5 text-[10px] font-sans font-bold text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-500/30">
-                              Signifikan
-                            </span>
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-1.5">
+                            <span>{gene.snp_id}</span>
+                            {gene.signifikan && (
+                              <span className="rounded-full bg-emerald-100 dark:bg-emerald-500/20 px-2 py-0.5 text-[10px] font-sans font-bold text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-500/30">
+                                Signifikan
+                              </span>
+                            )}
+                          </div>
+                          {snpToGeneCount[gene.snp_id] > 1 && (
+                            <div className="text-[10px] font-sans font-bold text-cyan-800 dark:text-cyan-300 bg-cyan-100/80 dark:bg-[#06B6D4]/15 border border-cyan-300 dark:border-[#06B6D4]/30 rounded-full px-2 py-0.5 w-fit">
+                              1 SNP → {snpToGeneCount[gene.snp_id]} Gen Terdekat
+                            </div>
                           )}
                         </div>
                       </td>

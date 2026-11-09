@@ -257,13 +257,15 @@ export default function ManhattanPlot({
       responsive: true,
       displayModeBar: true,
       displaylogo: false,
-      modeBarButtonsToRemove: ['lasso2d', 'select2d'],
+      scrollZoom: true,
+      doubleClick: 'reset+autosize',
+      modeBarButtonsToRemove: ['lasso2d', 'select2d', 'sendDataToCloud', 'toggleSpikelines'],
       toImageButtonOptions: {
         format: 'png',
-        filename: 'gwasena_manhattan_plot',
-        height: 600,
-        width: 1000,
-        scale: 2,
+        filename: 'gwasena_manhattan_plot_hd',
+        height: 1080,
+        width: 1920,
+        scale: 3,
       },
     };
 

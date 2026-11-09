@@ -104,23 +104,29 @@ export default function DashboardPage() {
   const handleCreateAnalysis = async (e) => {
     e.preventDefault();
     const trimmed = analysisName.trim();
-    if (!trimmed) return;
+    // Auto-naming ala ChatGPT/GDocs jika pengguna mengosongkan input (Evaluasi Tester Poin 9)
+    const finalSessionName = trimmed || 'Analisis Genomik Otomatis';
 
-    // Simpan ke riwayat localStorage (prepend & dedup)
-    const updatedHistory = [
-      trimmed,
-      ...sessionHistory.filter((s) => s.toLowerCase() !== trimmed.toLowerCase()),
-    ].slice(0, 10);
-    setSessionHistory(updatedHistory);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('gwasena_session_names_history', JSON.stringify(updatedHistory));
+    if (trimmed) {
+      const updatedHistory = [
+        trimmed,
+        ...sessionHistory.filter((s) => s.toLowerCase() !== trimmed.toLowerCase()),
+      ].slice(0, 10);
+      setSessionHistory(updatedHistory);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('gwasena_session_names_history', JSON.stringify(updatedHistory));
+      }
     }
 
     setIsSubmitting(true);
     setError(null);
 
     try {
-      const res = await analysisService.createAnalysis(trimmed);
+      const res = await analysisService.createAnalysis(finalSessionName);
+      // Simpan flag jika nama sesi perlu dinamai otomatis saat berkas diunggah
+      if (!trimmed && typeof window !== 'undefined') {
+        localStorage.setItem(`gwasena_auto_name_${res.analysis_id}`, 'true');
+      }
       setIsModalOpen(false);
       navigate(`/analyses/${res.analysis_id}`);
     } catch (err) {
@@ -144,7 +150,7 @@ export default function DashboardPage() {
           <div className="space-y-2">
             <div className="inline-flex items-center gap-2 rounded-full border border-cyan-300 dark:border-[#06B6D4]/30 bg-cyan-50 dark:bg-[#06B6D4]/10 px-3 py-1 text-xs font-semibold text-cyan-900 dark:text-[#06B6D4]">
               <Sprout className="h-3.5 w-3.5 text-cyan-700 dark:text-[#06B6D4]" />
-              <span>Platform Riset Asosiasi Genomik Terpadu (GWAS Suite)</span>
+              <span>Alur Kerja Analisis Asosiasi Genomik GWASena</span>
             </div>
 
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white font-sans">
@@ -158,21 +164,37 @@ export default function DashboardPage() {
             </p>
           </div>
 
-          {/* Quick Species Badge */}
-          {org && (
-            <div className="shrink-0 glass-subcard p-4 text-sm space-y-1.5 min-w-[220px]">
-              <span className="font-bold text-slate-900 dark:text-white block font-sans">Spesimen Aktif:</span>
-              <div className="font-serif text-[#0284C7] dark:text-[#06B6D4] font-bold italic text-base">
-                {org.nama_ilmiah}
+          {/* Ringkasan Aktivitas Riset (Evaluasi Tester Poin 8) */}
+          <div className="shrink-0 glass-subcard p-4 text-xs sm:text-sm space-y-2 min-w-[240px] border border-cyan-400/40 dark:border-cyan-500/20 bg-white/80 dark:bg-[#121B38]/80 shadow-sm rounded-2xl">
+            <div className="flex items-center justify-between border-b border-slate-200/80 dark:border-white/10 pb-1.5">
+              <span className="font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider text-[11px] font-sans flex items-center gap-1.5">
+                <Sparkles className="h-3 w-3 text-[#06B6D4]" />
+                <span>Ringkasan Aktivitas Riset</span>
+              </span>
+              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" title="Ruang Kerja Siap" />
+            </div>
+
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-600 dark:text-slate-400">Sesi Tersimpan:</span>
+                <span className="font-mono font-bold text-slate-900 dark:text-white">
+                  {sessionHistory.length} Sesi Terdaftar
+                </span>
               </div>
-              <div className="text-slate-700 dark:text-slate-300 font-semibold font-sans">
-                {org.ploidi} · {org.jumlah_kromosom} Pasang Kromosom
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-600 dark:text-slate-400">Ruang Kerja:</span>
+                <span className="font-sans font-semibold text-emerald-600 dark:text-emerald-400">
+                  Siap untuk Analisis
+                </span>
               </div>
-              <div className="text-xs text-slate-600 dark:text-slate-300 font-medium font-sans">
-                Ukuran Genom: {org.ukuran_genom_perkiraan}
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-600 dark:text-slate-400">Model Referensi:</span>
+                <span className="font-serif italic font-bold text-[#0284C7] dark:text-[#06B6D4]">
+                  {org?.nama_ilmiah || 'Allium sativum L.'}
+                </span>
               </div>
             </div>
-          )}
+          </div>
         </div>
 
         {/* Subtle decorative glow */}
@@ -192,7 +214,7 @@ export default function DashboardPage() {
                 <Dna className="h-6 w-6" />
               </div>
               <span className="rounded-full bg-cyan-50 dark:bg-[#5B4DFE]/15 px-3 py-1 text-xs font-bold text-cyan-800 dark:text-[#06B6D4] border border-cyan-200 dark:border-[#06B6D4]/20 font-sans">
-                Alur Wizard 6 Langkah
+                6 Tahap Terpandu
               </span>
             </div>
 
@@ -201,8 +223,7 @@ export default function DashboardPage() {
             </h2>
 
             <p className="mt-2 text-sm text-slate-600 dark:text-slate-300 leading-relaxed font-sans">
-              Jalankan siklus terpadu: unggah VCF & fenotipe CSV, penyaringan Quality Control, kovariat
-              PCA otomatis, model GLM/MLM, hingga visualisasi Manhattan Plot interaktif.
+              Unggah berkas VCF/PLINK & fenotipe CSV, jalankan penyaringan QC dan PCA otomatis, uji model GLM/MLM, hingga eksplorasi Manhattan Plot interaktif.
             </p>
           </div>
 
@@ -396,7 +417,6 @@ export default function DashboardPage() {
                   <input
                     id="analysisName"
                     type="text"
-                    required
                     autoComplete="off"
                     value={analysisName}
                     onFocus={() => setIsDropdownOpen(true)}
@@ -405,7 +425,7 @@ export default function DashboardPage() {
                       setAnalysisName(e.target.value);
                       setIsDropdownOpen(true);
                     }}
-                    placeholder="Contoh: GWAS Penanda Sifat Kuantitatif 2026"
+                    placeholder="Kosongkan untuk penamaan otomatis (ala ChatGPT/GDocs) atau ketik nama..."
                     className="w-full rounded-xl border border-slate-300 dark:border-white/10 bg-[#F1F4FD] dark:bg-[#0F172E] py-2.5 px-3.5 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:border-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-600 font-medium transition-all"
                   />
                   {analysisName && (
@@ -420,7 +440,7 @@ export default function DashboardPage() {
                 </div>
 
                 <span className="mt-1 block text-xs text-slate-600 dark:text-slate-300 font-medium font-sans">
-                  Beri nama deskriptif sesuai sifat target atau kohort populasi yang diuji.
+                  Opsional: Kosongkan untuk penamaan otomatis mengikuti berkas/sifat fenotipe di Langkah 1.
                 </span>
 
                 {/* Custom Autocomplete Dropdown Riwayat Nama Sesi */}
@@ -469,12 +489,7 @@ export default function DashboardPage() {
                 )}
               </div>
 
-              <div className="glass-subcard p-3.5 text-xs sm:text-sm text-slate-700 dark:text-slate-200 space-y-1">
-                <div className="font-bold text-slate-900 dark:text-white font-sans">Tahap Berikutnya:</div>
-                <p className="font-sans leading-relaxed">
-                  Setelah sesi dibuat, Anda akan diarahkan ke <strong>Langkah 1 (Unggah Data)</strong> untuk memilih berkas genotipe (.vcf / .bed) dan fenotipe (.csv).
-                </p>
-              </div>
+
 
               <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-200 dark:border-white/10">
                 <button

@@ -57,6 +57,8 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState(uploadSummary || null);
   const [error, setError] = useState(null);
+  const [showStructureModal, setShowStructureModal] = useState(false);
+  const [structureTab, setStructureTab] = useState('vcf');
 
   const [isDraggingGeno, setIsDraggingGeno] = useState(false);
   const [isDraggingBim, setIsDraggingBim] = useState(false);
@@ -304,6 +306,50 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
     onNext?.();
   };
 
+  // Handler unduh contoh file langsung ke browser pengguna (Evaluasi Tester Poin 10)
+  const handleDownloadSampleFile = (type) => {
+    let content = '';
+    let filename = '';
+    let mime = 'text/plain';
+
+    if (type === 'vcf') {
+      filename = 'garlic_sample_benchmark.vcf';
+      mime = 'text/vcf';
+      content = `##fileformat=VCFv4.2
+##FILTER=<ID=PASS,Description="All filters passed">
+##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">
+##contig=<ID=chr1,length=180000000>
+##contig=<ID=chr2,length=175000000>
+##contig=<ID=chr3,length=190000000>
+#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO	FORMAT	sample_01	sample_02	sample_03	sample_04	sample_05
+chr1	124050	snp_chr1_0001	A	G	99	PASS	.	GT	0/0	0/1	0/0	1/1	0/1
+chr1	285620	snp_chr1_0002	C	T	99	PASS	.	GT	0/1	0/0	0/0	0/1	0/0
+chr2	145890	snp_chr2_0001	G	A	99	PASS	.	GT	1/1	0/1	0/0	0/0	0/1
+chr3	21745450	snp_chr3_0042	T	C	99	PASS	.	GT	0/1	1/1	0/0	1/1	0/1
+`;
+    } else {
+      filename = 'garlic_phenotype_sample.csv';
+      mime = 'text/csv';
+      content = `sample_id,bobot_umbi_g,diameter_umbi_mm,jumlah_siung
+sample_01,42.5,38.2,11
+sample_02,39.1,35.0,9
+sample_03,45.8,40.1,12
+sample_04,36.4,33.5,8
+sample_05,48.2,42.0,13
+`;
+    }
+
+    const blob = new Blob([content], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* ── Header Langkah ── */}
@@ -337,22 +383,30 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2 self-stretch sm:self-auto">
+        <div className="flex flex-wrap items-center gap-2 self-stretch sm:self-auto">
           <button
             type="button"
             onClick={() => handleUseSampleData('vcf')}
-            className="figma-btn-primary cursor-pointer whitespace-nowrap text-xs sm:text-sm px-4 py-2"
+            className="figma-btn-primary cursor-pointer whitespace-nowrap text-xs px-3.5 py-2"
           >
-            <Dna className="h-4 w-4" />
-            <span>Contoh VCF</span>
+            <Dna className="h-3.5 w-3.5" />
+            <span>Pakai VCF</span>
           </button>
           <button
             type="button"
             onClick={() => handleUseSampleData('plink')}
-            className="rounded-2xl border border-cyan-400/80 dark:border-cyan-500/30 bg-cyan-50 dark:bg-[#06B6D4]/15 px-4 py-2 text-xs sm:text-sm font-sans font-bold text-cyan-900 dark:text-[#06B6D4] hover:bg-cyan-100 dark:hover:bg-[#06B6D4]/25 transition-all shadow-xs cursor-pointer whitespace-nowrap"
+            className="rounded-2xl border border-cyan-400/80 dark:border-cyan-500/30 bg-cyan-50 dark:bg-[#06B6D4]/15 px-3.5 py-2 text-xs font-sans font-bold text-cyan-900 dark:text-[#06B6D4] hover:bg-cyan-100 dark:hover:bg-[#06B6D4]/25 transition-all shadow-xs cursor-pointer whitespace-nowrap"
           >
-            <Layers className="h-4 w-4 inline mr-1" />
-            <span>Contoh PLINK (.bed)</span>
+            <Layers className="h-3.5 w-3.5 inline mr-1" />
+            <span>Pakai PLINK</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowStructureModal(true)}
+            className="rounded-2xl border border-slate-300 dark:border-white/10 bg-white dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 px-3.5 py-2 text-xs font-sans font-bold text-slate-800 dark:text-slate-200 transition-all shadow-xs cursor-pointer whitespace-nowrap flex items-center gap-1.5"
+          >
+            <Eye className="h-3.5 w-3.5 text-[#5B4DFE] dark:text-[#06B6D4]" />
+            <span>Lihat Struktur / Unduh Contoh</span>
           </button>
         </div>
       </div>
@@ -477,7 +531,7 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
                       <span className="text-sm font-bold text-slate-900 dark:text-white">
                         Pilih atau Seret Berkas VCF ke Sini
                       </span>
-                      <span className="mt-1 text-xs text-slate-600 dark:text-slate-300 font-medium">Maksimal 200 MB</span>
+                      <span className="mt-1 text-xs text-slate-600 dark:text-slate-300 font-medium">Maks. ukuran berkas: 50 MB</span>
                     </div>
                   )}
 
@@ -697,7 +751,7 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
                   <span className="text-sm font-bold text-slate-900 dark:text-white">
                     Pilih atau Seret Berkas CSV ke Sini
                   </span>
-                  <span className="mt-1 text-xs text-slate-600 dark:text-slate-300 font-medium">Encoding UTF-8</span>
+                  <span className="mt-1 text-xs text-slate-600 dark:text-slate-300 font-medium">Maks. ukuran berkas: 10 MB (UTF-8)</span>
                 </div>
               )}
 
@@ -843,6 +897,109 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
           </div>
         </div>
       )}
+
+      {/* ── Modal Pratinjau Struktur Kolom & Unduh Berkas Contoh (Evaluasi Tester Poin 10) ── */}
+      {showStructureModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="w-full max-w-2xl figma-card p-6 sm:p-7 shadow-2xl space-y-4 animate-modal-in rounded-3xl border border-slate-200/90 dark:border-white/10 bg-white/95 dark:bg-[#0F172E]/95 backdrop-blur-2xl">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-3.5">
+              <div className="flex items-center gap-2">
+                <Table className="h-5 w-5 text-[#5B4DFE] dark:text-[#06B6D4]" />
+                <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white font-sans tracking-tight">
+                  Pratinjau Struktur Kolom & Unduh Contoh Dataset
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowStructureModal(false)}
+                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-700 dark:hover:text-white transition-all cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Tab Selector */}
+            <div className="flex items-center gap-2 border-b border-slate-200 dark:border-white/10 pb-2 text-xs font-bold font-sans">
+              <button
+                type="button"
+                onClick={() => setStructureTab('vcf')}
+                className={`px-4 py-2 rounded-xl transition-all cursor-pointer ${
+                  structureTab === 'vcf'
+                    ? 'bg-[#5B4DFE] text-white shadow-sm'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                1. Format Genotipe (VCF)
+              </button>
+              <button
+                type="button"
+                onClick={() => setStructureTab('csv')}
+                className={`px-4 py-2 rounded-xl transition-all cursor-pointer ${
+                  structureTab === 'csv'
+                    ? 'bg-[#5B4DFE] text-white shadow-sm'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                2. Format Fenotipe (CSV)
+              </button>
+            </div>
+
+            {structureTab === 'vcf' ? (
+              <div className="space-y-3 text-xs">
+                <p className="text-slate-700 dark:text-slate-300 font-medium">
+                  Berkas VCF (Variant Call Format) wajib memuat kolom standar dan kode genotipe bialelik (<code>0/0</code> homozigot referensi, <code>0/1</code> heterozigot, <code>1/1</code> homozigot alternatif).
+                </p>
+                <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-[#070C1D] p-3 font-mono text-[11px] text-slate-800 dark:text-slate-200 leading-relaxed max-h-48">
+                  <div className="text-slate-400">##fileformat=VCFv4.2</div>
+                  <div className="text-slate-400">##FORMAT=&lt;ID=GT,Number=1,Type=String,Description="Genotype"&gt;</div>
+                  <div className="font-bold text-cyan-600 dark:text-cyan-400">#CHROM POS ID REF ALT QUAL FILTER INFO FORMAT sample_01 sample_02 ...</div>
+                  <div>chr1 124050 snp_chr1_0001 A G 99 PASS . GT 0/0 0/1 1/1</div>
+                  <div>chr1 285620 snp_chr1_0002 C T 99 PASS . GT 0/1 0/0 0/0</div>
+                  <div>chr2 145890 snp_chr2_0001 G A 99 PASS . GT 1/1 0/1 0/0</div>
+                  <div>chr3 21745450 snp_chr3_0042 T C 99 PASS . GT 0/1 1/1 0/1</div>
+                </div>
+                <div className="flex items-center justify-between pt-2">
+                  <span className="text-[11px] text-slate-500">Maks. ukuran berkas: 50 MB (.vcf / .vcf.gz)</span>
+                  <button
+                    type="button"
+                    onClick={() => handleDownloadSampleFile('vcf')}
+                    className="figma-btn-primary py-2 px-3.5 text-xs cursor-pointer flex items-center gap-1.5"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    <span>Unduh Contoh VCF (garlic.vcf)</span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3 text-xs">
+                <p className="text-slate-700 dark:text-slate-300 font-medium">
+                  Berkas CSV fenotipe wajib memiliki kolom identitas sampel (<code>sample_id</code>) yang 100% cocok dengan nama sampel di berkas VCF, diikuti 1 atau lebih kolom sifat kuantitatif.
+                </p>
+                <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-[#070C1D] p-3 font-mono text-[11px] text-slate-800 dark:text-slate-200 leading-relaxed max-h-48">
+                  <div className="font-bold text-emerald-600 dark:text-emerald-400">sample_id,bobot_umbi_g,diameter_umbi_mm,jumlah_siung</div>
+                  <div>sample_01,42.5,38.2,11</div>
+                  <div>sample_02,39.1,35.0,9</div>
+                  <div>sample_03,45.8,40.1,12</div>
+                  <div>sample_04,36.4,33.5,8</div>
+                  <div>sample_05,48.2,42.0,13</div>
+                </div>
+                <div className="flex items-center justify-between pt-2">
+                  <span className="text-[11px] text-slate-500">Maks. ukuran berkas: 10 MB (.csv UTF-8)</span>
+                  <button
+                    type="button"
+                    onClick={() => handleDownloadSampleFile('csv')}
+                    className="figma-btn-primary py-2 px-3.5 text-xs cursor-pointer flex items-center gap-1.5"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    <span>Unduh Contoh CSV (phenotype.csv)</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
