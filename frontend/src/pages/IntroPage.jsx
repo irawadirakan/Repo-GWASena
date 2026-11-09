@@ -61,15 +61,15 @@ export default function IntroPage() {
 
   return (
     <div className="w-full max-w-5xl py-6 px-4 animate-fade-in flex flex-col items-center text-center">
-      {/* ── Babak 1: Hero Section dengan Dark Radial Gradient Overlay / Backdrop Vignette ── */}
-      <div className="relative w-full max-w-4xl mx-auto rounded-3xl p-6 sm:p-10 flex flex-col items-center overflow-hidden">
-        {/* Lapisan Dark Radial Gradient Vignette untuk Kontras Sempurna di Dark & Light Mode */}
+      {/* ── Babak 1: Hero Section (Shape gelap HANYA di Dark Mode, dihilangkan penuh di Light Mode) ── */}
+      <div className="relative w-full max-w-4xl mx-auto rounded-3xl p-6 sm:p-10 flex flex-col items-center">
+        {/* Lapisan Dark Radial Gradient Vignette: HANYA aktif di Dark Mode, dihilangkan di Light Mode */}
         <div
           aria-hidden="true"
-          className="absolute inset-0 -z-10 rounded-3xl bg-slate-900/30 dark:bg-slate-950/65 backdrop-blur-[6px] border border-slate-200/50 dark:border-white/5 shadow-2xl"
+          className="hidden dark:block absolute inset-0 -z-10 rounded-3xl bg-slate-950/70 backdrop-blur-[6px] border border-white/5 shadow-2xl pointer-events-none"
           style={{
             backgroundImage:
-              'radial-gradient(circle at center, rgba(8, 13, 36, 0.75) 0%, rgba(8, 13, 36, 0.92) 80%, rgba(8, 13, 36, 0.98) 100%)',
+              'radial-gradient(circle at center, rgba(8, 13, 36, 0.70) 0%, rgba(8, 13, 36, 0.90) 85%, rgba(8, 13, 36, 0.98) 100%)',
           }}
         />
 
@@ -85,20 +85,20 @@ export default function IntroPage() {
         </div>
 
         {/* Editorial Subtitle / Tagline in Neuton Serif */}
-        <p className="font-serif italic text-lg sm:text-xl font-bold text-[#5B4DFE] dark:text-[#38BDF8] tracking-wide mb-3 drop-shadow-sm">
+        <p className="font-serif italic text-lg sm:text-xl font-bold text-[#5B4DFE] dark:text-[#38BDF8] tracking-wide mb-3">
           From Genotype to Discovery
         </p>
 
         {/* Headline Ilmiah (Font Plus Jakarta Sans / Heading) */}
-        <h1 className="max-w-3xl text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-slate-950 dark:text-white leading-[1.18] drop-shadow-[0_2px_10px_rgba(0,0,0,0.45)]">
+        <h1 className="max-w-3xl text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-slate-900 dark:text-white leading-[1.18] dark:drop-shadow-[0_2px_10px_rgba(0,0,0,0.45)]">
           Eksplorasi Asosiasi Genomik Tanpa Batas{' '}
-          <span className="bg-gradient-to-r from-[#06B6D4] via-[#6366F1] to-indigo-300 bg-clip-text text-transparent">
+          <span className="bg-gradient-to-r from-[#06B6D4] via-[#5B4DFE] to-indigo-500 bg-clip-text text-transparent">
             dalam Satu Alur Terpadu.
           </span>
         </h1>
 
         {/* Narasi Pacing Deskripsi Hero Terupdate */}
-        <p className="mt-4 max-w-2xl font-serif text-base sm:text-lg text-slate-800 dark:text-slate-200 leading-relaxed drop-shadow-sm font-medium">
+        <p className="mt-4 max-w-2xl font-serif text-base sm:text-lg text-slate-700 dark:text-slate-200 leading-relaxed font-medium">
           Eksplorasi potensi genetik melalui platform GWAS yang mengintegrasikan pemrosesan data, analisis statistik, dan interpretasi hasil.
         </p>
       </div>
