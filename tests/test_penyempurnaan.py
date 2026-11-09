@@ -5,7 +5,9 @@ from sqlalchemy import select
 
 from backend.core.database import SessionLocal
 from backend.main import app
-from backend.models import Analysis, AnalysisLog, AnalysisStatus, User
+import pytest
+
+from backend.models import Analysis, AnalysisLog, AnalysisStatus, Sample, User
 from backend.services.analysis_runner import recover_stuck_analyses
 from pipeline.validation import read_phenotype_csv
 from tests.test_alur_utama import CSV, VCF, _login, _upload
@@ -222,3 +224,33 @@ def test_snp_tanpa_posisi_dilewati(tmp_path):
     write_plink(g, tmp_path / "x.bed")
     h = read_genotype(tmp_path / "x.bed")
     assert h.n_snps == g.n_snps - 1 and h.skipped == {"posisi_tidak_diketahui": 1}
+
+
+def test_maf_dan_missing_rate_snp_tersimpan():
+    """Kolom snps.maf dan snps.missing_rate terisi dan sesuai hitungan manual."""
+    import numpy as np
+    from backend.models import SNP
+    from pipeline.validation import read_genotype
+
+    with TestClient(app) as c:
+        h = _login(c, "uji_maf")
+        aid = _selesai(c, h, "Uji MAF")
+    g = read_genotype(VCF)
+    with SessionLocal() as db:
+        snp = db.scalars(select(SNP).where(SNP.analysis_id == aid).order_by(SNP.snp_id)).all()
+        sampel = db.scalars(select(Sample).where(Sample.analysis_id == aid).order_by(Sample.sample_id)).all()
+    assert len(snp) == g.n_snps and all(s.missing_rate is not None for s in snp)
+    lolos = [i for i, s in enumerate(sampel) if s.passed_qc]
+    gs = g.dosage[lolos]
+    for j in (0, 41, 250):
+        f = np.nanmean(gs[:, j]) / 2
+        assert snp[j].maf == pytest.approx(min(f, 1 - f), abs=1e-6)
+        assert snp[j].missing_rate == pytest.approx(np.isnan(gs[:, j]).mean(), abs=1e-6)
+    # SNP yang tersaring karena MAF memang punya MAF < 0,05
+    assert all(s.maf < 0.05 or s.missing_rate > 0.1 for s in snp if not s.passed_qc)
+
+
+def test_role_bawaan_konsisten():
+    from backend.models import User
+
+    assert User.__table__.c.role.default.arg == "pengguna_analisis"

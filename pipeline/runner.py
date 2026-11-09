@@ -102,6 +102,14 @@ def run_pipeline(
             "Tidak ada SNP yang lolos QC.",
             ["Longgarkan ambang MAF, missingness SNP, atau HWE."],
         )
+    # MAF dan proporsi genotipe hilang setiap SNP (semua varian, termasuk yang tersaring),
+    # dihitung pada sampel yang lolos QC; disimpan ke kolom snps.maf dan snps.missing_rate
+    g_s = geno.dosage[s_idx]
+    with np.errstate(invalid="ignore"):
+        frek = np.nanmean(g_s, axis=0) / 2.0
+    maf_all = np.minimum(frek, 1 - frek)
+    miss_all = np.isnan(g_s).mean(axis=0)
+    del g_s
     g = geno.dosage[np.ix_(s_idx, v_idx)]
     y = y_all[s_idx]
     samples_kept = [geno.samples[i] for i in s_idx]
@@ -175,6 +183,10 @@ def run_pipeline(
         "qc": qc.as_dict(geno.n_samples, geno.n_snps),
         # dipakai backend untuk menandai kolom passed_qc pada tabel samples dan snps
         "qc_lolos": {"sampel": samples_kept, "varian_index": [int(j) for j in v_idx]},
+        "statistik_snp": {
+            "maf": [None if not np.isfinite(x) else round(float(x), 6) for x in maf_all],
+            "missing_rate": [round(float(x), 6) for x in miss_all],
+        },
         "varian_dilewati": geno.skipped,
         "pca": pca.as_dict(samples_kept),
         "asosiasi": {

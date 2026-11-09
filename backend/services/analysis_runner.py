@@ -134,12 +134,17 @@ def _save_results(db, analysis_id: int, result: dict) -> None:
         for s in db.scalars(select(Sample).where(Sample.dataset_id == geno_ds.dataset_id)).all():
             s.passed_qc = s.sample_code in sampel_lolos
         varian_lolos = set(lolos.get("varian_index") or [])
-        gagal = [pk for i, pk in enumerate(snp_ids) if i not in varian_lolos]
-        db.execute(update(SNP).where(SNP.dataset_id == geno_ds.dataset_id).values(passed_qc=True),
-                   execution_options={"synchronize_session": False})
-        for k in range(0, len(gagal), 1000):
-            db.execute(update(SNP).where(SNP.snp_id.in_(gagal[k:k + 1000])).values(passed_qc=False),
-                       execution_options={"synchronize_session": False})
+        stat = result.get("statistik_snp") or {}
+        maf, miss = stat.get("maf") or [], stat.get("missing_rate") or []
+        baris_snp = [
+            {"snp_id": pk, "passed_qc": i in varian_lolos,
+             "maf": maf[i] if i < len(maf) else None,
+             "missing_rate": miss[i] if i < len(miss) else None}
+            for i, pk in enumerate(snp_ids)
+        ]
+        # ORM bulk UPDATE berdasarkan primary key (snp_id), dikirim per 5.000 baris
+        for k in range(0, len(baris_snp), 5000):
+            db.execute(update(SNP), baris_snp[k:k + 5000])
 
     # Nilai PC yang dipakai sebagai kovariat disimpan sebagai bagian parameter analisis (AC-04.2)
     param = db.scalar(select(AnalysisParameter).where(AnalysisParameter.analysis_id == analysis_id))
