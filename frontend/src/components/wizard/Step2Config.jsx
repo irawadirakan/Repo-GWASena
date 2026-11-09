@@ -506,7 +506,9 @@ export default function Step2Config({
               </div>
               <div className="space-y-2 text-xs sm:text-[13px] text-slate-700 dark:text-slate-300 leading-relaxed font-sans font-medium">
                 <p>Menguji asosiasi antara SNP dan sifat fenotipe dengan menggunakan kovariat struktur populasi (PC1–PC3) sebagai efek tetap.</p>
-                <p>Komputasi lebih cepat dan sesuai untuk populasi dengan tingkat kekerabatan rendah.</p>
+                <p className="text-emerald-600 dark:text-emerald-400 font-medium text-xs sm:text-sm mt-2">
+                  Komputasi lebih cepat dan sesuai untuk populasi dengan tingkat kekerabatan rendah.
+                </p>
               </div>
             </div>
 
@@ -537,7 +539,9 @@ export default function Step2Config({
               </div>
               <div className="space-y-2 text-xs sm:text-[13px] text-slate-700 dark:text-slate-300 leading-relaxed font-sans font-medium">
                 <p>Menguji asosiasi antara SNP dan sifat fenotipe dengan menggabungkan kovariat struktur populasi (PC1–PC3) sebagai efek tetap dan matriks kekerabatan genetik (Kinship) sebagai efek acak.</p>
-                <p>Lebih sesuai untuk populasi dengan struktur kekerabatan atau hubungan genetik yang kompleks.</p>
+                <p className="text-emerald-600 dark:text-emerald-400 font-medium text-xs sm:text-sm mt-2">
+                  Lebih sesuai untuk populasi dengan struktur kekerabatan atau hubungan genetik yang kompleks.
+                </p>
               </div>
             </div>
           </div>
