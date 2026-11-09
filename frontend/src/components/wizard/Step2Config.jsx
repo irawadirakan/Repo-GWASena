@@ -11,6 +11,7 @@ import {
   AlertTriangle,
   Play,
   Sparkles,
+  HelpCircle,
 } from 'lucide-react';
 import { DEFAULT_ANALYSIS_CONFIG, QC_PARAM_RANGES } from '../../constants/defaultParams.js';
 import EduHintTooltip from '../common/EduHintTooltip.jsx';
@@ -596,19 +597,29 @@ export default function Step2Config({
               </div>
             </label>
 
-            {/* Ambang Alpha Signifikansi dengan Quick-Select Chips */}
-            <div className="flex-1 min-w-[240px] p-4 rounded-2xl bg-white/60 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800/80 shadow-sm flex flex-col justify-between">
+            {/* Ambang Alpha Signifikansi dengan Edu-Hint & Interactive Chips */}
+            <div className="flex-1 min-w-[260px] p-4 rounded-2xl bg-white/70 dark:bg-slate-900/50 border border-slate-200/90 dark:border-slate-800/90 shadow-sm flex flex-col justify-between backdrop-blur-md">
               <div>
-                <label htmlFor="alpha" className="block text-xs sm:text-sm font-semibold text-slate-900 dark:text-slate-100 mb-2">
-                  Ambang Alpha Signifikansi
-                </label>
-                
-                {/* Input Box dengan Format 2 Desimal / Step Presisi */}
+                {/* Header Label + Ikon EDU-HINT (?) */}
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-1.5">
+                    <label htmlFor="alpha" className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100 font-sans">
+                      Ambang Alpha Signifikansi
+                    </label>
+                    {/* Tombol Edu-Hint Interaktif (Draggable Floating Panel) */}
+                    <EduHintTooltip hintKey="alpha" />
+                  </div>
+                  <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 font-mono">
+                    α = {isNaN(Number(alpha)) ? '0.05' : Number(alpha).toFixed(2)}
+                  </span>
+                </div>
+
+                {/* Kotak Input Angka */}
                 <div className="relative mb-3">
                   <input
                     id="alpha"
                     type="number"
-                    step="0.005"
+                    step="0.01"
                     min="0.0001"
                     max="0.20"
                     value={alpha}
@@ -616,43 +627,46 @@ export default function Step2Config({
                       const val = parseFloat(e.target.value);
                       setAlpha(isNaN(val) ? '' : val);
                     }}
-                    className="w-full px-3.5 py-2 text-sm sm:text-base font-semibold text-center rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white shadow-inner focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
+                    className="w-full px-3.5 py-2 text-sm sm:text-base font-bold text-center rounded-xl bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white shadow-inner focus:outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 transition-all font-mono"
                   />
                 </div>
 
-                {/* Tombol Kapsul Preset / Rekomendasi (Chips) */}
+                {/* Tombol Kapsul Preset Interaktif Berwarna Jelas (Clickable Chips) */}
                 <div className="flex flex-wrap gap-1.5 mb-2.5">
+                  {/* 1. Ketat (Nuansa Biru / Indigo) */}
                   <button
                     type="button"
                     onClick={() => setAlpha(0.01)}
-                    className={`px-2.5 py-1 text-xs rounded-lg font-medium transition-all ${
+                    className={`px-2.5 py-1 text-xs rounded-lg font-bold border transition-all duration-150 active:scale-95 cursor-pointer ${
                       Number(alpha) === 0.01
-                        ? 'bg-blue-600 text-white shadow-sm ring-1 ring-blue-500'
-                        : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                        ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-500/30 ring-2 ring-blue-400/40'
+                        : 'bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200/80 dark:bg-blue-950/40 dark:hover:bg-blue-900/50 dark:text-blue-300 dark:border-blue-800/60'
                     }`}
                   >
                     0.01 (Ketat)
                   </button>
 
+                  {/* 2. Standar — Default (Nuansa Cyan / Teal) */}
                   <button
                     type="button"
                     onClick={() => setAlpha(0.05)}
-                    className={`px-2.5 py-1 text-xs rounded-lg font-medium transition-all ${
+                    className={`px-2.5 py-1 text-xs rounded-lg font-bold border transition-all duration-150 active:scale-95 cursor-pointer ${
                       Number(alpha) === 0.05
-                        ? 'bg-cyan-600 text-white shadow-sm ring-1 ring-cyan-500'
-                        : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                        ? 'bg-teal-600 text-white border-teal-600 shadow-md shadow-teal-500/30 ring-2 ring-teal-400/40'
+                        : 'bg-teal-50 hover:bg-teal-100 text-teal-700 border-teal-200/80 dark:bg-teal-950/40 dark:hover:bg-teal-900/50 dark:text-teal-300 dark:border-teal-800/60'
                     }`}
                   >
                     0.05 (Standar — Default)
                   </button>
 
+                  {/* 3. Eksploratori (Nuansa Amber / Oranye / Violet) */}
                   <button
                     type="button"
                     onClick={() => setAlpha(0.10)}
-                    className={`px-2.5 py-1 text-xs rounded-lg font-medium transition-all ${
+                    className={`px-2.5 py-1 text-xs rounded-lg font-bold border transition-all duration-150 active:scale-95 cursor-pointer ${
                       Number(alpha) === 0.10
-                        ? 'bg-indigo-600 text-white shadow-sm ring-1 ring-indigo-500'
-                        : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                        ? 'bg-amber-600 text-white border-amber-600 shadow-md shadow-amber-500/30 ring-2 ring-amber-400/40'
+                        : 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-200/80 dark:bg-amber-950/40 dark:hover:bg-amber-900/50 dark:text-amber-300 dark:border-amber-800/60'
                     }`}
                   >
                     0.10 (Eksploratori)
@@ -660,8 +674,8 @@ export default function Step2Config({
                 </div>
               </div>
 
-              {/* Keterangan Nilai Valid */}
-              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+              {/* Keterangan Rentang Nilai Valid */}
+              <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
                 Nilai valid: 0.0001 – 0.20 (Rekomendasi standar: 0.05)
               </p>
             </div>

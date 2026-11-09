@@ -50,6 +50,11 @@ export const EDU_HINTS = {
     label: 'FDR (False Discovery Rate - Benjamini-Hochberg)',
     hint: 'Mengontrol proporsi temuan positif palsu (q-value). Lebih sensitif dan adaptif dibanding Bonferroni untuk sifat agronomi kuantitatif yang dipengaruhi banyak gen (poligenik).',
   },
+  alpha: {
+    label: 'Ambang Alpha Signifikansi (α)',
+    defaultValue: 0.05,
+    hint: 'Tingkat signifikansi statistik (Type I Error Rate) yang menentukan batas penolakan hipotesis nol. Nilai default 0.05 lazim digunakan. Nilai 0.01 lebih ketat untuk menekan temuan positif palsu, sedangkan 0.10 bersifat eksploratori untuk mendeteksi sinyal asosiasi yang lebih lemah pada sifat poligenik kompleks.',
+  },
 };
 
 export const TIPS_EDUKATIF = [
