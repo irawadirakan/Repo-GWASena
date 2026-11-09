@@ -231,12 +231,6 @@ export default function DashboardPage() {
                   Siap untuk Analisis
                 </span>
               </div>
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-slate-600 dark:text-slate-400">Model Referensi:</span>
-                <span className="font-serif italic font-bold text-[#0284C7] dark:text-[#06B6D4]">
-                  {org?.nama_ilmiah || 'Allium sativum L.'}
-                </span>
-              </div>
             </div>
           </div>
         </div>
@@ -336,9 +330,6 @@ export default function DashboardPage() {
               ALUR KERJA ANALISIS ASOSIASI GENOMIK GWASENA
             </h2>
           </div>
-          <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 font-sans hidden sm:inline">
-            Standar Pipeline Bioinformatika IPB University
-          </span>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
