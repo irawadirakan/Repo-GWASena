@@ -1,5 +1,5 @@
 """Skema masukan API (Pydantic). Keterangan field tampil di Swagger UI."""
-from typing import Literal
+from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -17,16 +17,21 @@ class LoginIn(BaseModel):
     password: str = Field(examples=["rahasia123"])
 
 
+class GoogleAuthRequest(BaseModel):
+    credential: Optional[str] = Field(None, description="Google JWT ID Token dari Google Identity Services")
+    email: Optional[str] = Field(None, max_length=120, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$", description="Alamat email Google pengguna")
+    name: Optional[str] = Field(None, max_length=150, description="Nama lengkap pengguna dari akun Google")
+    google_sub: Optional[str] = Field(None, max_length=150, description="ID unik subjek Google")
+
+
 class AnalysisCreate(BaseModel):
     analysis_name: str = Field(min_length=1, max_length=150,
                                examples=["GWAS bobot umbi bawang putih"])
 
 
-class BenchmarkLoadRequest(BaseModel):
-    format: str = Field("VCF", description="Format dataset benchmark ('VCF' atau 'PLINK')")
-    analysis_id: int | str | None = Field(
-        None, description="ID analisis aktif jika ada; jika kosong atau invalid/404, dibuatkan sesi baru"
-    )
+class AnalysisUpdate(BaseModel):
+    analysis_name: str = Field(min_length=1, max_length=150,
+                               examples=["Analisis genotipe_bawang_putih"])
 
 
 class ParameterIn(BaseModel):
@@ -52,7 +57,8 @@ class ParameterIn(BaseModel):
         None, gt=0, le=0.5,
         description="Ambang kinship KING untuk membuang sampel berkerabat dekat. "
                     "null = tidak difilter (sampel klonal akan banyak terbuang bila diaktifkan).")
-    n_pc: int = Field(3, ge=0, le=10, description="Jumlah komponen utama PCA sebagai kovariat")
+    # PCA wajib dijalankan (AC-04.1), jadi minimal 1 PC dipakai sebagai kovariat.
+    n_pc: int = Field(3, ge=1, le=10, description="Jumlah komponen utama PCA sebagai kovariat (1-10)")
     koreksi: list[Literal["bonferroni", "fdr"]] = Field(
         default_factory=lambda: ["bonferroni", "fdr"],
         description="Metode koreksi multiple testing")

@@ -12,8 +12,10 @@ PIPELINE_MODULES = [
     {"id": "M-04", "nama": "Quality Control", "fr": ["FR-03"], "status": "berfungsi"},
     {"id": "M-05", "nama": "Analisis Struktur Populasi (PCA)", "fr": ["FR-04"], "status": "berfungsi"},
     {"id": "M-06", "nama": "Uji Asosiasi dan Koreksi Multiple Testing", "fr": ["FR-05", "FR-06"], "status": "berfungsi"},
-    {"id": "M-07", "nama": "Anotasi Gen", "fr": ["FR-07"], "status": "belum"},
-    {"id": "M-08", "nama": "Visualisasi dan Ekspor Hasil", "fr": ["FR-08", "FR-09"], "status": "sebagian"},
+    {"id": "M-07", "nama": "Anotasi Gen (berkas GFF3 lokal)", "fr": ["FR-07"], "status": "berfungsi"},
+    {"id": "M-08", "nama": "Visualisasi dan Ekspor Hasil (CSV, PNG, Web Report)", "fr": ["FR-08", "FR-09"],
+     "status": "berfungsi"},
+    {"id": "M-09", "nama": "Panel Administrator", "fr": ["FR-13"], "status": "berfungsi"},
 ]
 
 
@@ -22,7 +24,7 @@ def meta():
     return {
         "organisme": GARLIC,
         "format_input": {
-            "genotipe": [".vcf", ".vcf.gz", ".bed + .bim + .fam (PLINK biner, menyusul)"],
+            "genotipe": [".vcf", ".vcf.gz", ".bed + .bim + .fam (PLINK biner)"],
             "fenotipe": [".csv"],
         },
         "modul": PIPELINE_MODULES,

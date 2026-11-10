@@ -102,19 +102,52 @@ def store_datasets(
     pheno: PhenotypeData,
     genotype_type: str = "vcf",
 ) -> dict:
-    ds_geno = Dataset(analysis_id=analysis_id, file_name=genotype_name, file_type=genotype_type,
-                      file_path=str(genotype_path), validation_status="valid")
-    ds_pheno = Dataset(analysis_id=analysis_id, file_name=phenotype_name, file_type="phenotype_csv",
-                       file_path=str(phenotype_path), validation_status="valid")
+    ds_geno = Dataset(
+        analysis_id=analysis_id,
+        file_name=genotype_name,
+        file_type=genotype_type,
+        file_path=str(genotype_path),
+        validation_status="valid",
+        sample_count=geno.n_samples,
+        snp_count=geno.n_snps,
+    )
+    ds_pheno = Dataset(
+        analysis_id=analysis_id,
+        file_name=phenotype_name,
+        file_type="phenotype_csv",
+        file_path=str(phenotype_path),
+        validation_status="valid",
+        sample_count=len(pheno.samples),
+        snp_count=0,
+    )
     db.add_all([ds_geno, ds_pheno])
     db.flush()
 
-    samples = [Sample(dataset_id=ds_geno.dataset_id, sample_code=s, variety=pheno.variety.get(s))
-               for s in geno.samples]
+    samples = [
+        Sample(
+            dataset_id=ds_geno.dataset_id,
+            analysis_id=analysis_id,
+            sample_code=s,
+            variety=pheno.variety.get(s),
+            passed_qc=True,
+        )
+        for s in geno.samples
+    ]
     db.add_all(samples)
-    snps = [SNP(dataset_id=ds_geno.dataset_id, variant_code=geno.ids[j], chromosome=geno.chrom[j],
-                position=geno.pos[j], ref_allele=geno.ref[j], alt_allele=geno.alt[j])
-            for j in range(geno.n_snps)]
+    snps = [
+        SNP(
+            dataset_id=ds_geno.dataset_id,
+            analysis_id=analysis_id,
+            variant_code=geno.ids[j],
+            snp_code=geno.ids[j],
+            chromosome=geno.chrom[j],
+            position=geno.pos[j],
+            ref_allele=geno.ref[j],
+            alt_allele=geno.alt[j],
+            passed_qc=True,
+        )
+        for j in range(geno.n_snps)
+    ]
     db.add_all(snps)
     db.flush()
 
@@ -125,16 +158,23 @@ def store_datasets(
         for i, s in enumerate(geno.samples):
             for j, snp in enumerate(snps):
                 v = geno.dosage[i, j]
-                rows.append({"sample_id": sample_pk[s], "snp_id": snp.snp_id,
-                             "genotype_value": None if v != v else int(v)})
+                rows.append({
+                    "sample_id": sample_pk[s],
+                    "snp_id": snp.snp_id,
+                    "genotype_value": None if v != v else int(v),
+                })
         db.execute(insert(Genotype), rows)
 
     pheno_rows = []
     for trait, values in pheno.traits.items():
         for idx, s in enumerate(pheno.samples):
             v = values[idx]
-            pheno_rows.append({"sample_id": sample_pk[s], "trait_name": trait,
-                               "phenotype_value": None if v != v else float(v)})
+            pheno_rows.append({
+                "sample_id": sample_pk[s],
+                "analysis_id": analysis_id,
+                "trait_name": trait,
+                "phenotype_value": None if v != v else float(v),
+            })
     db.execute(insert(Phenotype), pheno_rows)
 
     return {
@@ -150,6 +190,7 @@ def store_datasets(
             "nama_berkas": phenotype_name,
             "jumlah_sampel": len(pheno.samples),
             "sifat_tersedia": pheno.trait_names,
+            "kolom_diabaikan": pheno.ignored,
             "varietas_tercatat": len(pheno.variety),
         },
     }

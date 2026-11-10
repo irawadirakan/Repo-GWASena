@@ -115,6 +115,24 @@ export const useAnalysisStore = create((set, get) => ({
     }
   },
 
+  updateAnalysisName: async (name) => {
+    const cur = get().currentAnalysis;
+    const aid = cur?.analysis_id || cur?.id;
+    set((state) => ({
+      currentAnalysis: {
+        ...(state.currentAnalysis || {}),
+        analysis_name: name,
+      },
+    }));
+    if (aid && (typeof aid === 'number' || !String(aid).startsWith('sim-'))) {
+      try {
+        await analysisService.updateAnalysisName(aid, name);
+      } catch (e) {
+        console.warn('Gagal menyimpan nama analisis baru ke backend:', e);
+      }
+    }
+  },
+
   setUploadSummary: (summary) =>
     set((state) => {
       const valid = isSummaryValid(summary);

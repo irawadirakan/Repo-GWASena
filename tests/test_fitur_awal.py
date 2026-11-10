@@ -87,3 +87,27 @@ def test_kontrol_akses():
         assert c.get(f"/api/analyses/{aid}", headers=h2).status_code == 403
         assert c.post("/api/auth/login",
                       json={"username": "pemilik", "password": "salah-sandi"}).status_code == 401
+
+
+def test_tolak_email_dummy():
+    with TestClient(app) as c:
+        for bad_prefix in ["blablabla", "test", "dummy", "abc", "123", "asdf", "user"]:
+            r = c.post(
+                "/api/auth/register",
+                json={"username": f"user_{bad_prefix}", "email": f"{bad_prefix}" + "@contoh.com", "password": "rahasia123"},
+            )
+            assert r.status_code == 422
+        r2 = c.post(
+            "/api/auth/register",
+            json={"username": "validname", "email": "validname" + "@mailinator.com", "password": "rahasia123"},
+        )
+        assert r2.status_code == 422
+
+
+def test_rename_analisis_patch():
+    with TestClient(app) as c:
+        h = _login(c, "pengguna_patch")
+        aid = c.post("/api/analyses", json={"analysis_name": "Sesi Analisis Baru"}, headers=h).json()["analysis_id"]
+        res = c.patch(f"/api/analyses/{aid}", json={"analysis_name": "Analisis Bawang Putih Baru"}, headers=h)
+        assert res.status_code == 200
+        assert res.json()["analysis_name"] == "Analisis Bawang Putih Baru"

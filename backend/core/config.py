@@ -1,11 +1,13 @@
-"""Konfigurasi aplikasi dibaca dari berkas .env di root repositori."""
+"""Konfigurasi aplikasi dibaca dari berkas .env di root repositori dan backend/."""
 import os
 from pathlib import Path
 
 from dotenv import load_dotenv
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
-load_dotenv(ROOT_DIR / ".env")
+# Prioritaskan berkas konfigurasi tanpa menimpa environment variable yang sudah diset (mis. saat pengujian pytest)
+load_dotenv(ROOT_DIR / "backend" / ".env", override=False)
+load_dotenv(ROOT_DIR / ".env", override=False)
 
 
 def _as_bool(value: str) -> bool:
@@ -14,11 +16,13 @@ def _as_bool(value: str) -> bool:
 
 class Settings:
     APP_NAME: str = "GWASena API"
-    APP_VERSION: str = "0.2.0"
+    APP_VERSION: str = "0.3.0"
     APP_ENV: str = os.getenv("APP_ENV", "development")
 
     DATABASE_URL: str = os.getenv(
         "DATABASE_URL",
+        # Nilai bawaan sama dengan .env.example. Kredensial pribadi (mis. kata sandi PostgreSQL
+        # di laptop masing-masing) cukup ditulis di berkas .env, jangan di kode.
         "postgresql+psycopg://gwasena:gwasena@localhost:5432/gwasena",
     )
     REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
@@ -35,6 +39,13 @@ class Settings:
     # Autentikasi (FR-01). Ganti SECRET_KEY di .env dengan teks acak yang panjang.
     SECRET_KEY: str = os.getenv("SECRET_KEY", "dev-ganti-kunci-ini-di-env")
     TOKEN_EXPIRE_HOURS: int = int(os.getenv("TOKEN_EXPIRE_HOURS", "12"))
+    # Akun demo (kata sandi password123, termasuk akun admin) hanya untuk pengembangan dan
+    # pengujian. Otomatis mati bila APP_ENV=production.
+    SEED_DEMO_USERS: bool = _as_bool(os.getenv("SEED_DEMO_USERS", "false" if os.getenv("APP_ENV") == "production" else "true"))
+
+    # Login Google (FR-01): Client ID OAuth dari Google Cloud Console, sama dengan
+    # VITE_GOOGLE_CLIENT_ID di frontend. Kosong = login Google dimatikan (503).
+    GOOGLE_CLIENT_ID: str = os.getenv("GOOGLE_CLIENT_ID", "").strip()
 
     # Cara menjalankan pipeline:
     #   auto       -> pakai Celery bila worker aktif, selain itu dijalankan di latar belakang FastAPI
@@ -50,6 +61,10 @@ class Settings:
         ROOT_DIR / os.getenv("ANNOTATION_GFF3", "./data/contoh/anotasi_bawang_putih_contoh.gff3")
     ).resolve()
     ANNOTATION_WINDOW_BP: int = int(os.getenv("ANNOTATION_WINDOW_BP", "50000"))
+
+    # Smart downsampling Manhattan plot: di atas batas ini, titik non-signifikan diringkas
+    # agar grafik interaktif tetap ringan (SNP signifikan selalu dipertahankan).
+    MANHATTAN_MAX_POINTS: int = int(os.getenv("MANHATTAN_MAX_POINTS", "20000"))
 
 
 settings = Settings()

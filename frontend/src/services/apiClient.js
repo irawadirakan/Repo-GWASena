@@ -3,6 +3,79 @@
  * Acuan: docs/gwasena-v2/API_INTEGRATION.md & FRONTEND_ARCHITECTURE.md
  */
 
+/**
+ * Human-Friendly Error Formatter
+ * Menerjemahkan pesan galat teknis Pydantic / FastAPI menjadi kalimat bahasa Indonesia
+ * yang santun, jelas, dan ramah pengguna umum (tanpa kode teknis mentah).
+ */
+export function formatUserFriendlyError(err) {
+  if (!err) return null;
+
+  const translateSingle = (str) => {
+    if (!str || typeof str !== 'string') return str;
+    let s = str.trim();
+
+    // Galat unggah berkas genotipe
+    if (
+      s.toLowerCase().includes('genotipe') &&
+      (s.includes('UploadFile') || s.includes('Field required') || s.includes('str') || s.includes('expected') || s.includes('Value error'))
+    ) {
+      return 'Berkas Genotipe (.vcf atau PLINK .bed/.bim/.fam) belum dipilih atau formatnya tidak sesuai.';
+    }
+
+    // Galat unggah berkas fenotipe
+    if (
+      s.toLowerCase().includes('fenotipe') &&
+      (s.includes('UploadFile') || s.includes('Field required') || s.includes('str') || s.includes('expected') || s.includes('Value error'))
+    ) {
+      return 'Berkas Fenotipe (.csv) belum dipilih atau tidak terbaca.';
+    }
+
+    // Galat ketidakcocokan / ketiadaan Sample ID
+    if (
+      s.toLowerCase().includes('sample_id') ||
+      s.toLowerCase().includes('sampel tidak cocok') ||
+      s.toLowerCase().includes('sample mismatch') ||
+      s.toLowerCase().includes('tidak ditemukan pada berkas')
+    ) {
+      return "Kolom 'sample_id' tidak ditemukan pada berkas CSV atau terdapat ID sampel yang tidak cocok antara berkas Genotipe dan Fenotipe.";
+    }
+
+    // Pembersihan kode teknis FastAPI/Pydantic
+    s = s.replace(/^body\s*>\s*/i, '');
+    s = s.replace(/^Value error,\s*/i, '');
+    s = s.replace(/Expected UploadFile, received:\s*<class\s*'str'>/gi, 'Berkas belum diunggah atau tidak valid');
+    s = s.replace(/Field required/gi, 'Bidang ini wajib diisi');
+    s = s.replace(/Input should be a valid/gi, 'Format masukan harus berupa');
+    s = s.replace(/<class\s*'[^']+'>/gi, 'tipe data tidak sesuai');
+
+    return s;
+  };
+
+  if (typeof err === 'string') {
+    return translateSingle(err);
+  }
+
+  if (typeof err === 'object') {
+    const rawMessage = err.message || err.pesan || 'Terjadi kesalahan pada sistem.';
+    const cleanMessage = translateSingle(rawMessage);
+    const rawDetails = err.details || err.rincian || [];
+    const cleanDetails = Array.isArray(rawDetails)
+      ? rawDetails.map(translateSingle).filter(Boolean)
+      : [];
+
+    return {
+      ...err,
+      message: cleanMessage,
+      pesan: cleanMessage,
+      details: cleanDetails,
+      rincian: cleanDetails,
+    };
+  }
+
+  return err;
+}
+
 export class ApiError extends Error {
   constructor(message, status = 500, details = []) {
     super(message);
@@ -113,16 +186,32 @@ export async function request(endpoint, options = {}) {
       }
       // 3. Format validasi default FastAPI Pydantic: { detail: [{ msg, loc }] }
       else if (Array.isArray(data.detail)) {
-        message = 'Format masukan data tidak valid.';
-        details = data.detail.map((d) => (d.msg ? `${d.loc ? d.loc.join(' > ') + ': ' : ''}${d.msg}` : String(d)));
+        message = 'Format masukan data tidak valid atau berkas belum lengkap.';
+        details = data.detail.map((d) => {
+          const locStr = d.loc ? d.loc.join(' > ') : '';
+          const fullMsg = `${locStr ? locStr + ': ' : ''}${d.msg || ''}`;
+          // Terjemahkan langsung jika mengandung berkas genotipe/fenotipe
+          if (locStr.includes('genotipe')) {
+            return 'Berkas Genotipe (.vcf atau PLINK .bed/.bim/.fam) belum dipilih atau formatnya tidak sesuai.';
+          }
+          if (locStr.includes('fenotipe')) {
+            return 'Berkas Fenotipe (.csv) belum dipilih atau tidak terbaca.';
+          }
+          return fullMsg;
+        });
       } else if (data.message) {
         message = data.message;
         details = toArray(data.details || data.rincian);
       }
     }
 
+    // Normalisasi dengan Human-Friendly Error Formatter
+    const formatted = formatUserFriendlyError({ message, details });
+    message = formatted.message;
+    details = formatted.details;
+
     // Tangani 401 Unauthorized secara terpusat
-    if (res.status === 401 && !endpoint.includes('/api/auth/login')) {
+    if (res.status === 401 && !endpoint.includes('/api/auth/login') && !endpoint.includes('/api/auth/google')) {
       removeStoredToken();
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('gwasena:auth-expired'));
