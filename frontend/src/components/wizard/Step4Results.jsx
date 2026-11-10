@@ -90,7 +90,12 @@ export default function Step4Results({ analysisId, onNavigateStep }) {
 
   const handleSelectSnp = (snp) => {
     setSelectedSnp(snp);
-    detailCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setTimeout(() => {
+      const detailEl = document.getElementById('selected-snp-detail-card') || detailCardRef.current;
+      if (detailEl) {
+        detailEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    }, 50);
   };
 
   // Selected SNP State
@@ -322,7 +327,7 @@ export default function Step4Results({ analysisId, onNavigateStep }) {
               snps={snps}
               threshold={threshold}
               selectedSnpId={selectedSnp?.snp_id}
-              onSelectSnp={(snp) => setSelectedSnp(snp)}
+              onSelectSnp={(snp) => handleSelectSnp(snp)}
             />
             <p className="mt-2 text-xs sm:text-[13px] text-slate-700 dark:text-slate-300 font-medium">
               Petunjuk: Klik salah satu titik SNP pada Manhattan Plot untuk membuka kartu detail dan
@@ -344,8 +349,10 @@ export default function Step4Results({ analysisId, onNavigateStep }) {
       {/* ── Panel Detail SNP Terpilih ── */}
       {selectedSnp && (
         <div
+          ref={detailCardRef}
+          id="selected-snp-detail-card"
           key={selectedSnp.snp_id}
-          className="rounded-3xl figma-card border-white/80 dark:border-[#06B6D4]/50 p-5 sm:p-6 relative animate-pop-in animate-glow-brief"
+          className="rounded-3xl figma-card border-white/80 dark:border-[#06B6D4]/50 p-5 sm:p-6 relative animate-pop-in animate-glow-brief scroll-mt-24"
         >
           <button
             type="button"
@@ -477,6 +484,7 @@ export default function Step4Results({ analysisId, onNavigateStep }) {
                 <table className="w-full text-left text-sm">
                   <thead className="border-b border-slate-200 dark:border-white/10 text-xs text-slate-800 dark:text-slate-200 uppercase font-sans font-bold bg-slate-100/95 dark:bg-[#0B132C]/90">
                     <tr>
+                      <th className="py-3 px-3.5 w-12 text-center">NO.</th>
                       <th className="py-3 px-3.5">SNP ID (Kandidat Teratas)</th>
                       <th className="py-3 px-3.5">Kromosom</th>
                       <th className="py-3 px-3.5">Posisi (bp)</th>
@@ -488,13 +496,16 @@ export default function Step4Results({ analysisId, onNavigateStep }) {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-white/5 font-mono">
-                    {topSnps.map((snp) => (
+                    {topSnps.map((snp, idx) => (
                       <tr
                         key={snp.snp_id}
                         className={`hover:bg-slate-50/80 dark:hover:bg-white/5 transition-colors ${
-                          selectedSnp?.snp_id === snp.snp_id ? 'bg-cyan-50/80 dark:bg-[#06B6D4]/15' : ''
+                          selectedSnp?.snp_id === snp.snp_id ? 'bg-cyan-50/80 dark:bg-cyan-950/40 border-l-4 border-l-cyan-500' : ''
                         }`}
                       >
+                        <td className="py-3 px-3.5 text-center font-bold text-slate-500 dark:text-slate-400 text-xs">
+                          {idx + 1}
+                        </td>
                         <td className="py-3 px-3.5 font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
                           <Sparkles className="h-3.5 w-3.5 text-amber-500" />
                           <span>{snp.snp_id}</span>
@@ -518,7 +529,7 @@ export default function Step4Results({ analysisId, onNavigateStep }) {
                           <button
                             type="button"
                             onClick={() => handleSelectSnp(snp)}
-                            className="rounded-full border border-slate-300 dark:border-white/10 bg-white/90 dark:bg-[#162142] px-3.5 py-1 text-xs font-sans font-bold text-slate-800 dark:text-slate-200 hover:bg-[#0284C7] hover:text-white dark:hover:bg-[#06B6D4] dark:hover:text-[#0B132C] hover:-translate-y-[1px] active:scale-[0.97] transition-all duration-100 shadow-sm"
+                            className="px-3 py-1 text-xs font-semibold rounded-lg border border-cyan-500/40 text-cyan-700 dark:text-cyan-300 bg-cyan-50/60 dark:bg-cyan-950/40 hover:bg-cyan-100 dark:hover:bg-cyan-900/60 active:scale-95 transition-all cursor-pointer shadow-sm"
                           >
                             Pilih
                           </button>
@@ -551,7 +562,7 @@ export default function Step4Results({ analysisId, onNavigateStep }) {
                   <tr
                     key={snp.snp_id}
                     className={`hover:bg-slate-50/80 dark:hover:bg-white/5 transition-colors ${
-                      selectedSnp?.snp_id === snp.snp_id ? 'bg-cyan-50/80 dark:bg-[#06B6D4]/15' : ''
+                      selectedSnp?.snp_id === snp.snp_id ? 'bg-cyan-50/80 dark:bg-cyan-950/40 border-l-4 border-l-cyan-500' : ''
                     }`}
                   >
                     <td className="py-3 px-3.5 text-center font-bold text-slate-500 dark:text-slate-400 text-xs">{idx + 1}</td>
@@ -575,7 +586,7 @@ export default function Step4Results({ analysisId, onNavigateStep }) {
                       <button
                         type="button"
                         onClick={() => handleSelectSnp(snp)}
-                        className="rounded-full border border-slate-300 dark:border-white/10 bg-white/90 dark:bg-[#162142] px-3.5 py-1 text-xs font-sans font-bold text-slate-800 dark:text-slate-200 hover:bg-[#0284C7] hover:text-white dark:hover:bg-[#06B6D4] dark:hover:text-[#0B132C] hover:-translate-y-[1px] active:scale-[0.97] transition-all duration-100 shadow-sm"
+                        className="px-3 py-1 text-xs font-semibold rounded-lg border border-cyan-500/40 text-cyan-700 dark:text-cyan-300 bg-cyan-50/60 dark:bg-cyan-950/40 hover:bg-cyan-100 dark:hover:bg-cyan-900/60 active:scale-95 transition-all cursor-pointer shadow-sm"
                       >
                         Pilih
                       </button>
@@ -721,13 +732,16 @@ export default function Step4Results({ analysisId, onNavigateStep }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-white/5 font-mono">
-              {paginatedSnps.map((snp) => (
+              {paginatedSnps.map((snp, idx) => (
                 <tr
                   key={snp.snp_id}
                   className={`hover:bg-slate-50/80 dark:hover:bg-white/5 transition-colors ${
-                    selectedSnp?.snp_id === snp.snp_id ? 'bg-cyan-50/80 dark:bg-[#06B6D4]/15' : ''
+                    selectedSnp?.snp_id === snp.snp_id ? 'bg-cyan-50/80 dark:bg-cyan-950/40 border-l-4 border-l-cyan-500' : ''
                   }`}
                 >
+                  <td className="py-2.5 px-3 text-center font-bold text-slate-500 dark:text-slate-400 text-xs">
+                    {(page - 1) * pageSize + idx + 1}
+                  </td>
                   <td className="py-2.5 px-3 font-bold text-slate-900 dark:text-white">
                     <span className="flex items-center gap-1.5">
                       {snp.snp_id}
@@ -761,7 +775,7 @@ export default function Step4Results({ analysisId, onNavigateStep }) {
                     <button
                       type="button"
                       onClick={() => handleSelectSnp(snp)}
-                      className="rounded-full border border-slate-300 dark:border-white/10 bg-white/90 dark:bg-[#162142] px-3.5 py-1 text-xs font-sans font-bold text-slate-800 dark:text-slate-200 hover:text-[#0284C7] dark:hover:text-[#06B6D4] hover:-translate-y-[1px] active:scale-[0.97] transition-all duration-100 shadow-sm"
+                      className="px-3 py-1 text-xs font-semibold rounded-lg border border-cyan-500/40 text-cyan-700 dark:text-cyan-300 bg-cyan-50/60 dark:bg-cyan-950/40 hover:bg-cyan-100 dark:hover:bg-cyan-900/60 active:scale-95 transition-all cursor-pointer shadow-sm"
                     >
                       Pilih
                     </button>
