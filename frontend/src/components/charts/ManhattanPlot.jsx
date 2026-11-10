@@ -73,16 +73,28 @@ export default function ManhattanPlot({
       const c = Number(snp.chromosome) || 1;
       const offset = chrOffsets[c] || 0;
       const cumPos = offset + Number(snp.position);
-      const negLogP = snp.neg_log10_p ?? -Math.log10(snp.p_value);
+      const pVal = snp.p_value;
+      const negLogP = snp.neg_log10_p ?? snp.neglog10p ?? (pVal > 0 ? -Math.log10(pVal) : 0);
       const isSelected = selectedSnpId && snp.snp_id === selectedSnpId;
+      const pDisplay =
+        pVal !== null && pVal !== undefined && !isNaN(Number(pVal))
+          ? Number(pVal) < 0.0001
+            ? Number(pVal).toExponential(3)
+            : Number(pVal).toFixed(5)
+          : '-';
+      const betaRaw = snp.beta ?? snp.effect_size;
+      const betaDisplay =
+        betaRaw !== null && betaRaw !== undefined && !isNaN(Number(betaRaw))
+          ? `${Number(betaRaw) >= 0 ? '+' : ''}${Number(Number(betaRaw).toFixed(4))}`
+          : '-';
 
       const tooltipText =
         `<b>${snp.snp_id}</b><br>` +
         `Kromosom: ${c}<br>` +
         `Posisi: ${Number(snp.position).toLocaleString('id-ID')} bp<br>` +
-        `p-value: ${snp.p_value < 0.0001 ? Number(snp.p_value).toExponential(3) : Number(snp.p_value).toFixed(5)}<br>` +
-        `-log10(p): ${negLogP.toFixed(2)}<br>` +
-        `Effect Size (Beta): ${snp.effect_size >= 0 ? '+' : ''}${snp.effect_size}`;
+        `p-value: ${pDisplay}<br>` +
+        `-log10(p): ${Number(negLogP).toFixed(2)}<br>` +
+        `Effect Size (Beta): ${betaDisplay}`;
 
       if (isSelected) {
         xSel.push(cumPos);

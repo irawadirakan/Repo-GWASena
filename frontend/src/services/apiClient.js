@@ -8,7 +8,9 @@ export class ApiError extends Error {
     super(message);
     this.name = 'ApiError';
     this.status = status;
-    this.details = details;
+    this.details = Array.isArray(details) ? details : details ? [String(details)] : [];
+    this.pesan = message;
+    this.rincian = this.details;
   }
 }
 
@@ -91,14 +93,19 @@ export async function request(endpoint, options = {}) {
       (!data || typeof data === 'string' || !contentType.includes('application/json'))
     ) {
       message =
-        'Server backend di http://localhost:8000 sedang tidak aktif. Silakan jalankan backend FastAPI ("uvicorn backend.main:app --port 8000") atau gunakan tombol Masuk Cepat Akun Demo.';
+        'Server backend di http://localhost:8000 sedang tidak aktif atau tidak dapat dihubungi.';
     }
 
+    const toArray = (v) => (Array.isArray(v) ? v : typeof v === 'string' && v.trim() ? [v] : []);
+
     if (data && typeof data === 'object') {
-      // 1. Format galat 422 khusus GWASena: { detail: { pesan, rincian } }
+      // 1. Format galat khusus GWASena: { detail: { pesan, rincian } } atau top-level { pesan, rincian }
       if (data.detail && typeof data.detail === 'object' && !Array.isArray(data.detail)) {
-        message = data.detail.pesan || message;
-        details = Array.isArray(data.detail.rincian) ? data.detail.rincian : [];
+        message = data.detail.pesan || data.detail.message || message;
+        details = toArray(data.detail.rincian || data.detail.details);
+      } else if (data.pesan) {
+        message = data.pesan;
+        details = toArray(data.rincian || data.details);
       }
       // 2. Format standar FastAPI: { detail: "string" }
       else if (typeof data.detail === 'string') {
@@ -110,6 +117,7 @@ export async function request(endpoint, options = {}) {
         details = data.detail.map((d) => (d.msg ? `${d.loc ? d.loc.join(' > ') + ': ' : ''}${d.msg}` : String(d)));
       } else if (data.message) {
         message = data.message;
+        details = toArray(data.details || data.rincian);
       }
     }
 

@@ -153,7 +153,6 @@ export default function ScientificReportModal({
   annotationData,
   configParams = {},
   uploadSummary = {},
-  isSimulated = false,
   autoPrintOnOpen = false,
   autoDownloadOnOpen = false,
 }) {
@@ -197,7 +196,7 @@ export default function ScientificReportModal({
     let isMounted = true;
 
     async function loadPlotImages() {
-      if (!isOpen || !analysisId || isSimulated) return;
+      if (!isOpen || !analysisId) return;
 
       setLoadingImages(true);
       try {
@@ -224,7 +223,7 @@ export default function ScientificReportModal({
     return () => {
       isMounted = false;
     };
-  }, [isOpen, analysisId, isSimulated]);
+  }, [isOpen, analysisId]);
 
   // Smart Multi-Page A4 PDF Rendering (Render Halaman 1 -> addPage() -> Render Halaman 2)
   const handleDownloadPdf = async () => {
@@ -366,22 +365,22 @@ export default function ScientificReportModal({
   const organismName =
     organismCandidate && organismCandidate !== 'Genomic Reference Cohort'
       ? organismCandidate
-      : (uploadSummary?.genotipe?.nama_berkas?.toLowerCase()?.includes('bawang') ||
-         analysis?.analysis_name?.toLowerCase()?.includes('bawang')
-          ? 'Allium sativum (Bawang Putih)'
-          : (organismCandidate || 'Allium sativum (Bawang Putih)'));
+      : uploadSummary?.genotipe?.nama_berkas?.toLowerCase()?.includes('bawang') ||
+        analysis?.analysis_name?.toLowerCase()?.includes('bawang')
+      ? 'Allium sativum (Bawang Putih)'
+      : organismCandidate || '-';
   const traitName =
     asosiasi?.trait ||
     summary?.trait ||
     analysis?.parameter?.trait ||
     configParams?.trait ||
-    'bobot_umbi_g';
+    '-';
   const modelName =
     asosiasi?.model ||
     summary?.model ||
     analysis?.parameter?.model ||
     configParams?.model ||
-    'MLM (Mixed Linear Model)';
+    '-';
   const executionDate = analysis?.created_at
     ? new Date(analysis.created_at).toLocaleDateString('id-ID', {
         day: 'numeric',
@@ -401,42 +400,55 @@ export default function ScientificReportModal({
     'Peneliti Bioinformatika GWASena';
 
   // ── Metrik Kontrol Kualitas dengan Koreksi Retensi (TIDAK BOLEH > 100%) ──
-  const passedSamples = Number(qc?.sampel_lolos ?? summary?.samples_passed_qc ?? 39);
-  const rawTotalSamples = Number(
+  const rawPassedSamples = qc?.sampel_lolos ?? summary?.samples_passed_qc ?? null;
+  const passedSamples = rawPassedSamples !== null ? Number(rawPassedSamples) : null;
+  const rawTotalSamplesVal =
     qc?.sampel_awal ??
-      qc?.sampel_total ??
-      summary?.total_samples_analyzed ??
-      (passedSamples + (qc?.sampel_tersaring ?? 1))
-  );
-  const totalSamples = Math.max(rawTotalSamples, passedSamples);
-  const filteredSamples = Math.max(0, totalSamples - passedSamples);
+    qc?.sampel_total ??
+    summary?.total_samples_analyzed ??
+    rawPassedSamples;
+  const totalSamples =
+    rawTotalSamplesVal !== null
+      ? Math.max(Number(rawTotalSamplesVal), Number(passedSamples ?? 0))
+      : null;
+  const filteredSamples =
+    totalSamples !== null && passedSamples !== null ? Math.max(0, totalSamples - passedSamples) : null;
   const sampleRetentionPct =
-    totalSamples > 0
+    totalSamples > 0 && passedSamples !== null
       ? Math.min(100, (passedSamples / totalSamples) * 100).toFixed(1)
-      : '100.0';
+      : '-';
 
-  const passedSnps = Number(qc?.snp_lolos ?? summary?.snps_passed_qc ?? 500);
-  const rawTotalSnps = Number(
+  const rawPassedSnps = qc?.snp_lolos ?? summary?.snps_passed_qc ?? (snps.length > 0 ? snps.length : null);
+  const passedSnps = rawPassedSnps !== null ? Number(rawPassedSnps) : null;
+  const rawTotalSnpsVal =
     qc?.snp_awal ??
-      qc?.snp_total ??
-      summary?.total_snps_tested ??
-      snps.length ??
-      (passedSnps + (qc?.snp_tersaring ?? 4))
-  );
-  const totalSnps = Math.max(rawTotalSnps, passedSnps);
-  const filteredSnps = Math.max(0, totalSnps - passedSnps);
+    qc?.snp_total ??
+    summary?.total_snps_tested ??
+    rawPassedSnps;
+  const totalSnps =
+    rawTotalSnpsVal !== null
+      ? Math.max(Number(rawTotalSnpsVal), Number(passedSnps ?? 0))
+      : null;
+  const filteredSnps =
+    totalSnps !== null && passedSnps !== null ? Math.max(0, totalSnps - passedSnps) : null;
   const snpRetentionPct =
-    totalSnps > 0
+    totalSnps > 0 && passedSnps !== null
       ? Math.min(100, (passedSnps / totalSnps) * 100).toFixed(1)
-      : '100.0';
+      : '-';
 
   // Evaluasi Inflasi Genomik
-  const lambdaVal = Number(asosiasi?.lambda_gc ?? summary?.lambda_gc ?? 1.04);
-  const isLambdaControlled = lambdaVal <= 1.05;
-  const thresholdVal = Number(summary?.neg_log10_threshold ?? 3.98);
+  const rawLambdaVal = asosiasi?.lambda_gc ?? summary?.lambda_gc ?? null;
+  const hasLambda = rawLambdaVal !== null && rawLambdaVal !== undefined && !isNaN(Number(rawLambdaVal));
+  const lambdaVal = hasLambda ? Number(rawLambdaVal) : 0;
+  const isLambdaControlled = hasLambda && lambdaVal <= 1.05;
+  const rawThresholdVal = summary?.neg_log10_threshold ?? null;
+  const hasThreshold = rawThresholdVal !== null && rawThresholdVal !== undefined && !isNaN(Number(rawThresholdVal));
+  const thresholdVal = hasThreshold ? Number(rawThresholdVal) : 0;
   const bonfP = summary?.bonferroni_threshold
     ? fmtSci(summary.bonferroni_threshold, 2)
-    : fmtSci(Math.pow(10, -thresholdVal), 2);
+    : hasThreshold
+    ? fmtSci(Math.pow(10, -thresholdVal), 2)
+    : '-';
   const sigCount = asosiasi?.jumlah_signifikan ?? significantSnps.length;
 
   // Normalisasi & Pembersihan Kandidat Gen (GFF3 Lokal)
@@ -722,22 +734,22 @@ export default function ScientificReportModal({
                     <tbody className="divide-y divide-[#DCE4EF]/60 font-mono text-[10px]">
                       <tr>
                         <td className="py-0.5 px-2.5 font-sans text-[#202B3C]">Minor Allele Freq (MAF)</td>
-                        <td className="py-0.5 px-2 text-right font-bold text-[#17243B]">{configParams?.maf ?? 0.05}</td>
-                        <td className="py-0.5 px-2.5 text-right font-sans text-[#64748B]">&ge; 5% alel minor</td>
+                        <td className="py-0.5 px-2 text-right font-bold text-[#17243B]">{configParams?.qc?.maf ?? configParams?.maf ?? '-'}</td>
+                        <td className="py-0.5 px-2.5 text-right font-sans text-[#64748B]">&ge; ambang alel minor</td>
                       </tr>
                       <tr>
                         <td className="py-0.5 px-2.5 font-sans text-[#202B3C]">Sample Missingness (mind)</td>
-                        <td className="py-0.5 px-2 text-right font-bold text-[#17243B]">{configParams?.mind ?? 0.10}</td>
-                        <td className="py-0.5 px-2.5 text-right font-sans text-[#64748B]">&le; 10% data hilang</td>
+                        <td className="py-0.5 px-2 text-right font-bold text-[#17243B]">{configParams?.qc?.mind ?? configParams?.mind ?? '-'}</td>
+                        <td className="py-0.5 px-2.5 text-right font-sans text-[#64748B]">maks. missing per sampel</td>
                       </tr>
                       <tr>
                         <td className="py-0.5 px-2.5 font-sans text-[#202B3C]">SNP Missingness (geno)</td>
-                        <td className="py-0.5 px-2 text-right font-bold text-[#17243B]">{configParams?.geno ?? 0.10}</td>
-                        <td className="py-0.5 px-2.5 text-right font-sans text-[#64748B]">&le; 10% genotipe hilang</td>
+                        <td className="py-0.5 px-2 text-right font-bold text-[#17243B]">{configParams?.qc?.geno ?? configParams?.geno ?? '-'}</td>
+                        <td className="py-0.5 px-2.5 text-right font-sans text-[#64748B]">maks. missing per SNP</td>
                       </tr>
                       <tr>
                         <td className="py-0.5 px-2.5 font-sans text-[#202B3C]">Kovariat Struktur (PCA)</td>
-                        <td className="py-0.5 px-2 text-right font-bold text-[#17243B]">{configParams?.pca_covariates ?? 3} PC</td>
+                        <td className="py-0.5 px-2 text-right font-bold text-[#17243B]">{configParams?.n_pc ?? configParams?.pca_covariates ?? '-'} PC</td>
                         <td className="py-0.5 px-2.5 text-right font-sans text-[#64748B]">Sub-populasi</td>
                       </tr>
                     </tbody>
@@ -804,17 +816,17 @@ export default function ScientificReportModal({
                 <div className="p-2 rounded-lg border border-[#DCE4EF] bg-[#F4F7FB]">
                   <span className="text-[9px] font-bold text-[#64748B] uppercase block">Faktor Inflasi (λ<sub>GC</sub>)</span>
                   <span className="text-base font-mono font-black text-[#17243B] block mt-0.5">
-                    {lambdaVal.toFixed(3)}
+                    {hasLambda ? lambdaVal.toFixed(3) : '-'}
                   </span>
-                  <span className={`text-[8.5px] font-bold block mt-0.5 ${isLambdaControlled ? 'text-[#159B72]' : 'text-[#D97706]'}`}>
-                    {isLambdaControlled ? 'Terkontrol Optimal (≤ 1.05)' : 'Perlu Kovariat Tambahan'}
+                  <span className={`text-[8.5px] font-bold block mt-0.5 ${!hasLambda ? 'text-[#64748B]' : isLambdaControlled ? 'text-[#159B72]' : 'text-[#D97706]'}`}>
+                    {!hasLambda ? 'Metrik λGC belum tersedia' : isLambdaControlled ? 'Terkontrol Optimal (≤ 1.05)' : 'Perlu Kovariat Tambahan'}
                   </span>
                 </div>
 
                 <div className="p-2 rounded-lg border border-[#DCE4EF] bg-[#F4F7FB]">
                   <span className="text-[9px] font-bold text-[#64748B] uppercase block">Ambang Bonferroni</span>
                   <span className="text-base font-mono font-black text-[#168BCB] block mt-0.5">
-                    -log₁₀P = {thresholdVal.toFixed(2)}
+                    {hasThreshold ? `-log₁₀P = ${thresholdVal.toFixed(2)}` : '-'}
                   </span>
                   <span className="text-[8.5px] font-mono text-[#64748B] block mt-0.5">
                     p &lt; {bonfP}
@@ -843,8 +855,10 @@ export default function ScientificReportModal({
               </div>
 
               <div className="p-2 rounded-lg border-l-4 border-l-[#168BCB] border border-[#DCE4EF] bg-[#F4F7FB] text-[10px] text-[#202B3C] font-serif leading-relaxed">
-                <strong>Interpretasi Diagnostik Inflasi Genomik:</strong> Nilai λ<sub>GC</sub> = {lambdaVal.toFixed(3)}{' '}
-                {isLambdaControlled
+                <strong>Interpretasi Diagnostik Inflasi Genomik:</strong> Nilai λ<sub>GC</sub> = {hasLambda ? lambdaVal.toFixed(3) : '-'}{' '}
+                {!hasLambda
+                  ? 'belum tersedia dari ringkasan hasil komputasi sesi ini.'
+                  : isLambdaControlled
                   ? 'mengindikasikan bahwa struktur sub-populasi dan kekerabatan familial telah terkontrol dengan sangat baik oleh model asosiasi tanpa bias inflasi kriptik (false-positive association rate terkendali optimal).'
                   : 'menunjukkan adanya potensi stratifikasi populasi moderat yang memerlukan penyesuaian kovariat atau pemodelan campuran (MLM).'}
               </div>
@@ -881,7 +895,7 @@ export default function ScientificReportModal({
 
                 <div className="flex items-center justify-between text-[9.5px] font-serif text-[#64748B] pt-1.5 px-1">
                   <span>
-                    <strong>Gambar 1:</strong> Sebaran nilai -log₁₀(P) di sepanjang genom tanaman. Garis horizontal menandai ambang batas Bonferroni (-log₁₀P = {thresholdVal.toFixed(2)}).
+                    <strong>Gambar 1:</strong> Sebaran nilai -log₁₀(P) di sepanjang genom tanaman. Garis horizontal menandai ambang batas Bonferroni ({hasThreshold ? `-log₁₀P = ${thresholdVal.toFixed(2)}` : 'tidak tersedia'}).
                   </span>
                   <span className="font-mono text-[9px] text-[#168BCB] shrink-0 ml-2">
                     Resolusi Cetak: 300 DPI
@@ -922,7 +936,7 @@ export default function ScientificReportModal({
                   <span>Visualisasi Diagnostik: Quantile-Quantile (QQ) Plot & Evaluasi Null Hypothesis</span>
                 </h3>
                 <span className="font-mono text-[9.5px] text-[#64748B] font-bold">
-                  λ<sub>GC</sub> = {lambdaVal.toFixed(3)}
+                  λ<sub>GC</sub> = {hasLambda ? lambdaVal.toFixed(3) : '-'}
                 </span>
               </div>
 
@@ -973,8 +987,8 @@ export default function ScientificReportModal({
                   </div>
 
                   <div className="pt-1 border-t border-[#DCE4EF] flex items-center justify-between text-[9px] font-mono text-[#64748B]">
-                    <span>Metrik: λ<sub>GC</sub> = {lambdaVal.toFixed(3)}</span>
-                    <span className="text-[#159B72] font-semibold">Status: Model Valid & Terkalibrasi</span>
+                    <span>Metrik: λ<sub>GC</sub> = {hasLambda ? lambdaVal.toFixed(3) : '-'}</span>
+                    <span className="text-[#159B72] font-semibold">Status: Ringkasan Komputasi Sesi</span>
                   </div>
                 </div>
               </div>
@@ -1132,7 +1146,7 @@ export default function ScientificReportModal({
                   </div>
                   <p className="font-serif leading-relaxed text-[#64748B]">
                     {annotationData?.pesan ||
-                      'Anotasi gen fungsional dilewati atau berkas referensi genom GFF3 lokal belum dimuat di server. Sesuai prinsip ketahanan sistem GWASena 2.0 (AC-07.2), ketiadaan berkas anotasi tidak mempengaruhi keabsahan statistik hasil uji asosiasi utama. Seluruh nilai asosiasi genotipe-fenotipe pada Bagian II dan Bagian V tetap valid dan terverifikasi penuh untuk penelitian lebih lanjut.'}
+                      'Anotasi gen fungsional dilewati atau berkas referensi genom GFF3 lokal belum dimuat di server. Sesuai prinsip ketahanan sistem GWASena 2.0 (AC-07.2), ketiadaan berkas anotasi tidak mempengaruhi keabsahan statistik hasil uji asosiasi utama. Seluruh nilai asosiasi genotipe-fenotipe pada Bagian II dan Bagian V tetap valid dan tersimpan untuk penelitian lebih lanjut.'}
                   </p>
                 </div>
               )}
@@ -1145,7 +1159,7 @@ export default function ScientificReportModal({
                   <Check className="h-3 w-3 text-[#159B72]" />
                   <span>Pengesahan Integritas & Keterulangan Riset (Scientific Reproducibility)</span>
                 </span>
-                <span className="font-mono text-[8.5px] text-[#168BCB]">ISO-COMPLIANT COMPUTATION</span>
+                <span className="font-mono text-[8.5px] text-[#168BCB]">RINGKASAN KOMPUTASI GWASENA</span>
               </div>
               <p>
                 Laporan interpretasi ilmiah ini dihasilkan secara otomatis oleh sistem komputasi terpadu GWASena Core v2.4 berdasarkan data genotipe dan fenotipe terautentikasi. Seluruh hasil asosiasi statistik, koreksi berganda, dan visualisasi diagnostik dapat direproduksi secara independen untuk keperluan publikasi ilmiah dan program pemuliaan tanaman terarah.

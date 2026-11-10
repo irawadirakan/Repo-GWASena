@@ -1,124 +1,43 @@
 /**
  * Authentication Service GWASena 2.0
- * Acuan: docs/gwasena-v2/API_INTEGRATION.md
+ * Terhubung 100% ke endpoint autentikasi backend tanpa fallback token palsu.
  */
 
-import { apiClient, setStoredToken, removeStoredToken, getStoredToken } from './apiClient.js';
+import { apiClient, setStoredToken, removeStoredToken } from './apiClient.js';
 
 export const authService = {
   /**
-   * Login pengguna
+   * Login pengguna melalui backend API
    * @param {string} username - Username atau alamat email
    * @param {string} password - Kata sandi
    */
   async login(username, password) {
-    try {
-      const data = await apiClient.post('/api/auth/login', { username, password });
-      if (data?.access_token) {
-        setStoredToken(data.access_token);
-      }
-      return data;
-    } catch (err) {
-      // Jika kredensial salah 401 dari backend hidup, lempar galat asli
-      if (err.status === 401) {
-        throw err;
-      }
-      // Jika backend FastAPI offline (500/502/504 proxy error atau 0 network error),
-      // berikan sesi peneliti demo agar reviewer tidak terblokir
-      if (err.status === 0 || err.status === 500 || err.status === 502 || err.status === 504) {
-        const demoUser = {
-          access_token: 'gwasena_demo_token_' + Date.now(),
-          token_type: 'bearer',
-          berlaku_jam: 12,
-          pengguna: {
-            user_id: 1,
-            username: username || 'peneliti_ipb',
-            email: username?.includes('@') ? username : `${username || 'peneliti'}@apps.ipb.ac.id`,
-            role: 'pengguna_analisis',
-          },
-          is_demo_fallback: true,
-        };
-        setStoredToken(demoUser.access_token);
-        return demoUser;
-      }
-      throw err;
+    const data = await apiClient.post('/api/auth/login', { username, password });
+    if (!data?.access_token) {
+      throw new Error('Server autentikasi tidak mengembalikan token akses yang valid.');
     }
+    setStoredToken(data.access_token);
+    return data;
   },
 
   /**
-   * Login instan akun demo untuk peninjauan antarmuka tanpa backend
-   */
-  loginDemo() {
-    const demoUser = {
-      access_token: 'gwasena_demo_token_' + Date.now(),
-      token_type: 'bearer',
-      berlaku_jam: 12,
-      pengguna: {
-        user_id: 1,
-        username: 'peneliti_demo',
-        email: 'peneliti@apps.ipb.ac.id',
-        role: 'pengguna_analisis',
-      },
-      is_demo_fallback: true,
-    };
-    setStoredToken(demoUser.access_token);
-    return demoUser;
-  },
-
-  /**
-   * Registrasi akun peneliti baru
-   * @param {string} username - 3-50 karakter regex ^[A-Za-z0-9_.-]+$
-   * @param {string} email - Alamat email valid
-   * @param {string} password - Min 8 karakter
+   * Registrasi akun peneliti baru melalui backend API
+   * @param {string} username
+   * @param {string} email
+   * @param {string} password
    */
   async register(username, email, password) {
-    try {
-      return await apiClient.post('/api/auth/register', { username, email, password });
-    } catch (err) {
-      if (err.status === 409 || err.status === 422) {
-        throw err;
-      }
-      // Fallback jika backend offline
-      if (err.status === 0 || err.status === 500 || err.status === 502 || err.status === 504) {
-        return {
-          pesan: 'Akun berhasil dibuat (Mode Pratinjau). Silakan login.',
-          pengguna: {
-            user_id: Date.now(),
-            username,
-            email,
-            role: 'pengguna_analisis',
-          },
-          is_demo_fallback: true,
-        };
-      }
-      throw err;
-    }
+    return apiClient.post('/api/auth/register', { username, email, password });
   },
 
   /**
-   * Profil pengguna yang sedang login
+   * Ambil profil pengguna yang sedang login; hapus token bila gagal/kedaluwarsa
    */
   async getMe() {
-    const token = getStoredToken();
-    if (token && token.startsWith('gwasena_demo_token_')) {
-      return {
-        user_id: 1,
-        username: 'peneliti_ipb',
-        email: 'peneliti@apps.ipb.ac.id',
-        role: 'pengguna_analisis',
-      };
-    }
     try {
       return await apiClient.get('/api/auth/me');
     } catch (err) {
-      if (token) {
-        return {
-          user_id: 1,
-          username: 'peneliti_ipb',
-          email: 'peneliti@apps.ipb.ac.id',
-          role: 'pengguna_analisis',
-        };
-      }
+      removeStoredToken();
       throw err;
     }
   },

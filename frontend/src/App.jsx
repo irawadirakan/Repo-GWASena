@@ -8,6 +8,7 @@ import LoginPage from './pages/LoginPage.jsx';
 import RegisterPage from './pages/RegisterPage.jsx';
 import DashboardPage from './pages/DashboardPage.jsx';
 import HistoryPage from './pages/HistoryPage.jsx';
+import AdminPage from './pages/AdminPage.jsx';
 import AnalysisWizardPage from './pages/AnalysisWizardPage.jsx';
 import { useAuthStore } from './store/useAuthStore.js';
 import SeamlessVideoBackground from './components/common/SeamlessVideoBackground.jsx';
@@ -71,6 +72,7 @@ export default function App() {
         >
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/history" element={<HistoryPage />} />
+          <Route path="/admin" element={<AdminPage />} />
           <Route path="/analyses/:id" element={<AnalysisWizardPage />} />
           <Route path="/sesi/:id" element={<AnalysisWizardPage />} />
         </Route>

@@ -68,3 +68,9 @@ def get_current_user_or_demo(
         db.refresh(user)
     return user
 
+
+
+def require_admin(user: User = Depends(get_current_user)) -> User:
+    if user.role != "administrator":
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Akses ditolak: khusus administrator.")
+    return user

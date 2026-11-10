@@ -10,7 +10,6 @@ import {
   Loader2,
   AlertTriangle,
   Play,
-  Sparkles,
   HelpCircle,
 } from 'lucide-react';
 import { DEFAULT_ANALYSIS_CONFIG, QC_PARAM_RANGES } from '../../constants/defaultParams.js';
@@ -32,10 +31,16 @@ export default function Step2Config({
   const {
     configParams,
     setConfigParams,
-    setIsSimulated,
-    startSimulation,
     runAnalysis,
+    isComputing,
+    currentAnalysis,
   } = useAnalysisStore();
+
+  const isLockedDuringCompute =
+    isComputing ||
+    ['antre', 'berjalan', 'pending', 'running'].includes(
+      String(currentAnalysis?.status || '').toLowerCase()
+    );
 
   const [trait, setTrait] = useState(
     configParams.trait || (availableTraits.length > 0 ? availableTraits[0] : 'bobot_umbi_g')
@@ -74,7 +79,6 @@ export default function Step2Config({
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState(null);
-  const [backendNotice501, setBackendNotice501] = useState(null);
 
   // Toggle metode koreksi (bisa multi-select)
   const handleToggleKoreksi = (method) => {
@@ -86,10 +90,10 @@ export default function Step2Config({
     }
   };
 
-  const handleStartAnalysis = async (e, forceSimulation = false) => {
+  const handleStartAnalysis = async (e) => {
     if (e) e.preventDefault();
+    if (isLockedDuringCompute) return;
     setError(null);
-    setBackendNotice501(null);
     setIsSubmitting(true);
 
     const payload = {
@@ -110,35 +114,16 @@ export default function Step2Config({
     setConfigParams(payload);
 
     try {
-      if (forceSimulation) {
-        setIsSubmitting(false);
-        startSimulation();
-        onRunSuccess?.({ simulated: true });
-        return;
-      }
-
-      // Eksekusi pipeline melalui store
       const res = await runAnalysis(analysisId, payload);
       setIsSubmitting(false);
       onRunSuccess?.(res);
     } catch (err) {
       setIsSubmitting(false);
-      const isNetworkError = !err.status || err.status === 0 || err.code === 'ERR_NETWORK';
-      const is501 = err.status === 501;
-
-      if (isNetworkError || is501) {
-        // Mode tanpa backend / HTTP 501 / Network Error:
-        console.warn('Backend tidak tersedia (Network / 501), menjalankan mock simulation otomatis:', err);
-        startSimulation();
-        onRunSuccess?.({ simulated: true });
-      } else {
-        // Error 4xx / 500 dari backend: DILARANG PINDAH SIMULASI & DILARANG PINDAH LANGKAH!
-        console.error('Konfigurasi ditolak backend (HTTP ' + err.status + '):', err);
-        setError({
-          message: err.message || err.pesan || 'Terjadi kesalahan saat memproses parameter analisis.',
-          details: err.details || err.rincian || [],
-        });
-      }
+      console.error('Eksekusi parameter ditolak atau gagal menghubungi server:', err);
+      setError({
+        message: err?.message || err?.pesan || 'Terjadi kesalahan saat memproses parameter analisis.',
+        details: err?.details || err?.rincian || [],
+      });
     }
   };
 
@@ -164,38 +149,7 @@ export default function Step2Config({
 
       <ErrorMessageArea error={error} onDismiss={() => setError(null)} />
 
-      {/* Banner 501 Transparan & Opsi Simulasi UI */}
-      {backendNotice501 && (
-        <div className="rounded-3xl border border-amber-300 dark:border-amber-500/40 bg-amber-50 dark:bg-amber-500/10 p-5 sm:p-6 backdrop-blur-md animate-fade-in space-y-3">
-          <div className="flex items-start gap-3">
-            <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-            <div className="space-y-1">
-              <h4 className="text-sm font-bold text-slate-900 dark:text-white">
-                Pemberitahuan Transparansi Pipeline (HTTP 501)
-              </h4>
-              <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
-                {backendNotice501}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3 pt-3 border-t border-amber-200 dark:border-amber-500/20">
-            <button
-              type="button"
-              onClick={(e) => handleStartAnalysis(e, true)}
-              className="inline-flex items-center gap-2 rounded-xl bg-amber-400 hover:bg-amber-300 px-4 py-2 text-xs font-bold text-slate-950 shadow-md transition-all active:scale-[0.99]"
-            >
-              <Sparkles className="h-4 w-4" />
-              <span>Buka Pratinjau Alur Komputasi & Visualisasi UI</span>
-            </button>
-            <span className="text-xs sm:text-[13px] text-slate-700 dark:text-slate-300 font-medium">
-              (Menampilkan antarmuka Langkah 3 s.d. 6 dengan penanda simulasi yang jelas)
-            </span>
-          </div>
-        </div>
-      )}
-
-      <form onSubmit={(e) => handleStartAnalysis(e, false)} noValidate className="space-y-8">
+      <form onSubmit={handleStartAnalysis} noValidate className="space-y-8">
         {/* ── Bagian A: Pemilihan Sifat Fenotipe (Trait) ── */}
         <div className="figma-card p-6 space-y-4">
           <div className="flex items-center justify-between">
@@ -484,10 +438,19 @@ export default function Step2Config({
             <span className="text-xs text-slate-500 dark:text-slate-400 font-sans">Pilih Salah Satu Model</span>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Model 1: GLM (Centered Header, Tanpa Radio Dot, Evaluasi Reno Override) */}
+          <div role="radiogroup" aria-label="Pilih model uji asosiasi" className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Model 1: GLM (Single Mutually Exclusive Choice, BR-03) */}
             <div
-              onClick={() => setModel('GLM')}
+              role="radio"
+              aria-checked={model === 'GLM'}
+              tabIndex={0}
+              onClick={() => !isLockedDuringCompute && setModel('GLM')}
+              onKeyDown={(e) => {
+                if ((e.key === 'Enter' || e.key === ' ') && !isLockedDuringCompute) {
+                  e.preventDefault();
+                  setModel('GLM');
+                }
+              }}
               className={`glass-subcard p-6 cursor-pointer transition-all duration-200 active:scale-[0.985] rounded-3xl ${
                 model === 'GLM'
                   ? 'border-[#5B4DFE] dark:border-[#5B4DFE] ring-2 ring-[#5B4DFE]/40 bg-indigo-50/80 dark:bg-[#5B4DFE]/15 shadow-md'
@@ -513,9 +476,18 @@ export default function Step2Config({
               </div>
             </div>
 
-            {/* Model 2: MLM (Centered Header, Tanpa Radio Dot, Evaluasi Reno Override) */}
+            {/* Model 2: MLM (Single Mutually Exclusive Choice, BR-03) */}
             <div
-              onClick={() => setModel('MLM')}
+              role="radio"
+              aria-checked={model === 'MLM'}
+              tabIndex={0}
+              onClick={() => !isLockedDuringCompute && setModel('MLM')}
+              onKeyDown={(e) => {
+                if ((e.key === 'Enter' || e.key === ' ') && !isLockedDuringCompute) {
+                  e.preventDefault();
+                  setModel('MLM');
+                }
+              }}
               className={`glass-subcard p-6 cursor-pointer transition-all duration-200 active:scale-[0.985] rounded-3xl ${
                 model === 'MLM'
                   ? 'border-cyan-600 dark:border-[#06B6D4] ring-2 ring-cyan-500/40 bg-cyan-50/80 dark:bg-[#06B6D4]/15 shadow-md'
@@ -686,8 +658,9 @@ export default function Step2Config({
         <div className="flex items-center justify-between pt-4 border-t border-slate-200 dark:border-white/10">
           <button
             type="button"
+            disabled={isSubmitting || isLockedDuringCompute}
             onClick={onPrev}
-            className="figma-btn-secondary"
+            className="figma-btn-secondary disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <ArrowLeft className="h-4 w-4" />
             <span>Kembali ke Unggah Berkas</span>
@@ -695,8 +668,8 @@ export default function Step2Config({
 
           <button
             type="submit"
-            disabled={isSubmitting}
-            className="figma-btn-primary"
+            disabled={isSubmitting || isLockedDuringCompute}
+            className="figma-btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isSubmitting ? (
               <>

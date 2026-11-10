@@ -22,8 +22,12 @@ export default function ErrorMessageArea({
     message = error.message || error.pesan || 'Terjadi kesalahan pada sistem.';
     if (Array.isArray(error.details) && error.details.length > 0) {
       details = error.details;
+    } else if (typeof error.details === 'string' && error.details.trim()) {
+      details = [error.details];
     } else if (Array.isArray(error.rincian) && error.rincian.length > 0) {
       details = error.rincian;
+    } else if (typeof error.rincian === 'string' && error.rincian.trim()) {
+      details = [error.rincian];
     }
   }
 

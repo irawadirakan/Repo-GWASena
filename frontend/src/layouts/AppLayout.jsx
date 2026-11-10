@@ -13,6 +13,7 @@ import {
   UserPlus,
   Wifi,
   WifiOff,
+  ShieldCheck,
 } from 'lucide-react';
 import BrandLogo from '../components/common/BrandLogo.jsx';
 import FigmaThemeToggle from '../components/common/FigmaThemeToggle.jsx';
@@ -123,6 +124,22 @@ export default function AppLayout() {
               >
                 Riwayat Analisis
               </NavLink>
+
+              {user?.role === 'administrator' && (
+                <NavLink
+                  to="/admin"
+                  className={({ isActive }) =>
+                    `inline-flex items-center gap-1.5 text-sm font-semibold tracking-tight transition-all ${
+                      isActive
+                        ? 'text-[#5B4DFE] dark:text-[#06B6D4] font-bold'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                    }`
+                  }
+                >
+                  <ShieldCheck className="h-4 w-4" />
+                  <span>Panel Admin</span>
+                </NavLink>
+              )}
             </nav>
           </div>
 
@@ -208,14 +225,22 @@ export default function AppLayout() {
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-slate-600 dark:text-slate-400">FastAPI Pipeline Engine:</span>
-                      <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-bold">
-                        <CheckCircle2 className="h-3.5 w-3.5" /> {isHealthy ? 'Aktif (Siap)' : 'Standby / Siap'}
+                      <span className={`flex items-center gap-1 font-bold ${isHealthy || isDegraded ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>
+                        {isHealthy || isDegraded ? (
+                          <><CheckCircle2 className="h-3.5 w-3.5" /> Aktif</>
+                        ) : (
+                          <><AlertTriangle className="h-3.5 w-3.5" /> Offline</>
+                        )}
                       </span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-slate-600 dark:text-slate-400">Database Storage:</span>
-                      <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-bold">
-                        <CheckCircle2 className="h-3.5 w-3.5" /> Siap
+                      <span className={`flex items-center gap-1 font-bold ${health?.postgres === 'ok' || isHealthy ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>
+                        {health?.postgres === 'ok' || isHealthy ? (
+                          <><CheckCircle2 className="h-3.5 w-3.5" /> Terhubung</>
+                        ) : (
+                          <><AlertTriangle className="h-3.5 w-3.5" /> Terputus</>
+                        )}
                       </span>
                     </div>
                   </div>
@@ -351,6 +376,15 @@ export default function AppLayout() {
             >
               Riwayat Analisis
             </Link>
+            {user?.role === 'administrator' && (
+              <Link
+                to="/admin"
+                onClick={() => setMobileMenuOpen(false)}
+                className="block rounded-lg px-3 py-2 font-semibold text-[#5B4DFE] dark:text-[#06B6D4] hover:bg-slate-100 dark:hover:bg-white/5"
+              >
+                Panel Admin
+              </Link>
+            )}
             <button
               type="button"
               onClick={handleLogout}

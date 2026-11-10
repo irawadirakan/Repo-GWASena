@@ -34,7 +34,6 @@ export default function AnalysisWizardPage() {
     setCurrentAnalysis,
     uploadSummary,
     setUploadSummary,
-    isSimulated,
   } = useAnalysisStore();
 
   const [isLoading, setIsLoading] = useState(true);
@@ -55,10 +54,11 @@ export default function AnalysisWizardPage() {
       return;
     }
 
-    // Jangan tindih state lokal jika sedang dalam proses simulasi komputasi aktif
-    if (useAnalysisStore.getState().isSimulated && useAnalysisStore.getState().isComputing) {
-      setIsLoading(false);
-      return;
+    const store = useAnalysisStore.getState();
+    const prevId = store.currentAnalysis?.analysis_id || store.currentAnalysis?.id;
+    const summaryId = store.uploadSummary?.analysis_id;
+    if ((prevId && String(prevId) !== String(id)) || (summaryId && String(summaryId) !== String(id))) {
+      store.reset();
     }
 
     setIsLoading(true);
@@ -70,14 +70,12 @@ export default function AnalysisWizardPage() {
       if (data) {
         setCurrentAnalysis(data);
 
-        // Jika analisis sudah selesai, otomatis muat hasil lengkap dan plot asli dari backend
-        if (data.status === 'selesai') {
+        if (String(data.status || '').toLowerCase() === 'selesai') {
           try {
             const fullResults = await analysisService.getFullAnalysisResults(id);
             useAnalysisStore.getState().setResults(fullResults);
-            useAnalysisStore.getState().setIsSimulated(false);
           } catch (rErr) {
-            console.warn('Gagal memuat hasil asosiasi sesi selesai:', rErr);
+            setError(rErr);
           }
         }
       }
@@ -85,26 +83,26 @@ export default function AnalysisWizardPage() {
       if (err?.status === 403) {
         setIsAccessDenied(true);
       } else {
-        console.warn('Backend detail sesi tidak dapat diakses atau offline:', err);
-        // Fallback: pastikan sesi lokal tetap memiliki data dasar yang valid agar tidak crash
-        const existing = useAnalysisStore.getState().currentAnalysis;
-        if (!existing || (existing.id !== id && existing.analysis_id !== id)) {
-          const autoNamed =
-            typeof window !== 'undefined' && localStorage.getItem(`gwasena_auto_name_${id}`);
-          setCurrentAnalysis({
-            analysis_id: id,
-            id: id,
-            analysis_name: autoNamed ? 'Analisis Tanpa Judul' : `Analisis GWAS #${id}`,
-            status: 'draft',
-            organism: 'Allium sativum (Bawang Putih)',
-          });
-        }
-        if (err?.status !== 0 && err?.status !== 404 && !isSimulated && !useAnalysisStore.getState().isSimulated) {
-          setError(err);
-        }
+        setError(err);
       }
     } finally {
       setIsLoading(false);
+    }
+  }
+
+  async function refreshAnalysisQuiet(targetId = id) {
+    if (!targetId || targetId === 'undefined' || targetId === 'null') return;
+    try {
+      const data = await analysisService.getAnalysisDetail(targetId);
+      if (data) {
+        setCurrentAnalysis(data, { preserveStep: true });
+        if (String(data.status || '').toLowerCase() === 'selesai') {
+          const fullResults = await analysisService.getFullAnalysisResults(targetId);
+          useAnalysisStore.getState().setResults(fullResults);
+        }
+      }
+    } catch (err) {
+      setError(err);
     }
   }
 
@@ -127,10 +125,24 @@ export default function AnalysisWizardPage() {
     );
   }
 
-  // Objek sesi aman dengan fallback null-safety
+  if (!currentAnalysis && error) {
+    return (
+      <div className="space-y-4 py-8">
+        <Link
+          to="/dashboard"
+          className="inline-flex items-center gap-1.5 text-sm font-bold text-slate-700 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white transition-colors"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          <span>Kembali ke Dashboard</span>
+        </Link>
+        <ErrorMessageArea error={error} />
+      </div>
+    );
+  }
+
   const safeSession = currentAnalysis || {
-    analysis_id: id || 'local',
-    id: id || 'local',
+    analysis_id: id,
+    id: id,
     analysis_name: `Analisis GWAS #${id || ''}`,
     status: 'draft',
     organism: 'Allium sativum (Bawang Putih)',
@@ -146,12 +158,6 @@ export default function AnalysisWizardPage() {
 
   return (
     <div className="space-y-6 pb-16 animate-fade-in">
-      {/* ── Banner Mode Simulasi (Poin #2) ── */}
-      {isSimulated && (
-        <div className="rounded-2xl border-2 border-amber-500 bg-amber-400/20 text-amber-950 dark:text-amber-200 p-4 text-center font-bold text-sm sm:text-base shadow-lg animate-pulse flex items-center justify-center gap-2">
-          <span>⚠️ MODE SIMULASI — Bukan hasil analisis asli (Backend tidak terhubung)</span>
-        </div>
-      )}
 
       {/* ── Top Session Bar ── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-white/10 pb-4">
@@ -184,12 +190,7 @@ export default function AnalysisWizardPage() {
               {statusConfig.label}
             </span>
 
-            {/* Simulation Badge if active */}
-            {isSimulated && (
-              <span className="rounded-full bg-amber-100 dark:bg-amber-500/20 border border-amber-300 dark:border-amber-500/40 px-2.5 py-0.5 text-xs font-bold text-amber-900 dark:text-amber-300">
-                Simulasi UI Aktif
-              </span>
-            )}
+
           </div>
         </div>
 
@@ -220,9 +221,7 @@ export default function AnalysisWizardPage() {
             analysisId={id}
             onUploadSuccess={(res) => {
               setUploadSummary(res);
-              if (!res?.simulated && !isSimulated && !useAnalysisStore.getState().isSimulated) {
-                loadAnalysis(); // Muat ulang data sesi dari backend jika bukan mode simulasi/offline
-              }
+              refreshAnalysisQuiet(res?.analysis_id || id);
             }}
             onNext={() => setActiveStep(2)}
           />
@@ -233,11 +232,9 @@ export default function AnalysisWizardPage() {
             analysisId={id}
             availableTraits={availableTraits}
             onPrev={() => setActiveStep(1)}
-            onRunSuccess={(res) => {
+            onRunSuccess={() => {
               setActiveStep(3);
-              if (!res?.simulated && !isSimulated && !useAnalysisStore.getState().isSimulated) {
-                loadAnalysis();
-              }
+              refreshAnalysisQuiet(id);
             }}
           />
         )}
@@ -247,9 +244,7 @@ export default function AnalysisWizardPage() {
             analysisId={id}
             onComplete={() => {
               setActiveStep(4);
-              if (!isSimulated && !useAnalysisStore.getState().isSimulated) {
-                loadAnalysis();
-              }
+              refreshAnalysisQuiet(id);
             }}
           />
         )}

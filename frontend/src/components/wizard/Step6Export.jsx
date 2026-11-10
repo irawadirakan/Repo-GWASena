@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Download,
   FileSpreadsheet,
@@ -7,29 +7,28 @@ import {
   CheckCircle2,
   ArrowLeft,
   Printer,
-  X,
+  Globe,
   Loader2,
-  AlertTriangle,
 } from 'lucide-react';
 import { useAnalysisStore } from '../../store/useAnalysisStore.js';
-import { generateBenchmarkResults } from '../../services/mockResults.js';
 import { analysisService } from '../../services/analysisService.js';
+import ErrorMessageArea from '../common/ErrorMessageArea.jsx';
 import ScientificReportModal from './ScientificReportModal.jsx';
 
 /**
  * Step6Export (Langkah 6): Ekspor Data & Laporan Analisis (Figma Aligned)
  * Acuan: 09 — Ekspor & Laporan.png & 09d — Ekspor_ Laporan Tanpa Kandidat Gen.png
  *
- * Mendukung unduhan resmi CSV hasil asosiasi, gambar plot PNG resolusi tinggi
- * (Plot Manhattan dan QQ Plot dari backend matplotlib), serta laporan ilmiah cetak/PDF
- * terstandarisasi A4 (FR-09, AC-09.2, Modul M-08).
+ * Mendukung unduhan resmi CSV hasil asosiasi (lengkap & signifikan saja),
+ * laporan HTML mandiri, plot PNG resolusi tinggi, serta laporan ilmiah cetak/PDF A4.
  */
 export default function Step6Export({ analysisId, analysis, onNavigateStep }) {
-  const { results, setResults, configParams, uploadSummary, isSimulated } = useAnalysisStore();
+  const { results, setResults, configParams, uploadSummary } = useAnalysisStore();
 
   const [isLoadingData, setIsLoadingData] = useState(false);
   const [annotationData, setAnnotationData] = useState(null);
-  const [downloadingCsv, setDownloadingCsv] = useState(false);
+  const [downloadingCsvMode, setDownloadingCsvMode] = useState(null); // 'all' | 'sig' | null
+  const [downloadingHtml, setDownloadingHtml] = useState(false);
   const [downloadingPlot, setDownloadingPlot] = useState(null); // 'manhattan' | 'qq' | null
   const [downloadSuccess, setDownloadSuccess] = useState(null);
   const [exportError, setExportError] = useState(null);
@@ -39,12 +38,12 @@ export default function Step6Export({ analysisId, analysis, onNavigateStep }) {
   const [autoPrintReport, setAutoPrintReport] = useState(false);
   const [autoDownloadPdf, setAutoDownloadPdf] = useState(false);
 
-  // Otomatis muat hasil asosiasi dan anotasi jika pengguna melompat langsung ke Langkah 6 atau me-refresh halaman
+  // Otomatis muat hasil asosiasi dan anotasi jika pengguna melompat langsung ke Langkah 6
   useEffect(() => {
     let isMounted = true;
 
     async function loadStep6Data() {
-      if (!analysisId || isSimulated) return;
+      if (!analysisId) return;
 
       const needsResults = !results || !results.association_results;
       const needsAnnotation = !annotationData;
@@ -60,7 +59,9 @@ export default function Step6Export({ analysisId, analysis, onNavigateStep }) {
                 .then((res) => {
                   if (isMounted) setResults(res);
                 })
-                .catch((e) => console.warn('Gagal memuat hasil asosiasi sesi:', e))
+                .catch((e) => {
+                  if (isMounted) setExportError(e);
+                })
             );
           }
           if (needsAnnotation) {
@@ -70,7 +71,7 @@ export default function Step6Export({ analysisId, analysis, onNavigateStep }) {
                 .then((ann) => {
                   if (isMounted) setAnnotationData(ann);
                 })
-                .catch((e) => console.warn('Gagal memuat anotasi sesi:', e))
+                .catch((e) => console.warn('Anotasi opsional tidak tersedia:', e))
             );
           }
           await Promise.all(promises);
@@ -85,123 +86,57 @@ export default function Step6Export({ analysisId, analysis, onNavigateStep }) {
     return () => {
       isMounted = false;
     };
-  }, [analysisId, isSimulated, results, annotationData, setResults]);
+  }, [analysisId, results, annotationData, setResults]);
 
-  const activeResults = useMemo(() => {
-    if (results && (results.association_results || results.raw_backend_results)) {
-      return results;
-    }
-    return generateBenchmarkResults(configParams, uploadSummary);
-  }, [results, configParams, uploadSummary]);
+  const activeResults = results || {};
 
-  const snps = Array.isArray(activeResults?.association_results) ? activeResults.association_results : [];
-  const summary = activeResults?.summary || {};
-
-  // 1. Unduh CSV Hasil Asosiasi (Endpoint resmi: GET /api/analyses/{id}/results/csv)
-  async function handleDownloadCsv() {
+  // 1. Unduh CSV Hasil Asosiasi (Semua atau Signifikan Saja via PR #29)
+  async function handleDownloadCsv(hanyaSignifikan = false) {
     setExportError(null);
-    setDownloadingCsv(true);
+    const modeKey = hanyaSignifikan ? 'sig' : 'all';
+    setDownloadingCsvMode(modeKey);
 
-    if (analysisId && !isSimulated && !activeResults?.is_simulated) {
-      try {
-        await analysisService.downloadCsv(analysisId);
-        setDownloadSuccess('csv');
-        setTimeout(() => setDownloadSuccess(null), 4000);
-        return;
-      } catch (err) {
-        console.error('Gagal mengunduh CSV dari server:', err);
-        setExportError(err.message || 'Gagal mengunduh CSV hasil analisis dari server.');
-      } finally {
-        setDownloadingCsv(false);
-      }
-      return;
-    }
-
-    // Fallback khusus mode simulasi offline
     try {
-      const headers = [
-        'snp_id',
-        'chromosome',
-        'position',
-        'p_value',
-        'neg_log10_p',
-        'q_value',
-        'effect_size',
-        'std_error',
-        'allele_ref',
-        'allele_alt',
-        'maf',
-        'is_significant',
-      ];
-
-      const rows = snps.map((s) => [
-        s?.snp_id || '',
-        s?.chromosome || '',
-        s?.position || '',
-        s?.p_value || '',
-        s?.neg_log10_p ?? (s?.p_value ? -Math.log10(s.p_value) : ''),
-        s?.q_value ?? '',
-        s?.effect_size ?? 0,
-        s?.std_error ?? 0,
-        s?.allele_ref || 'A',
-        s?.allele_alt || 'T',
-        s?.maf ?? 0.05,
-        s?.is_significant ? 'TRUE' : 'FALSE',
-      ]);
-
-      const csvContent =
-        'data:text/csv;charset=utf-8,' +
-        [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
-
-      const encodedUri = encodeURI(csvContent);
-      const link = document.createElement('a');
-      link.setAttribute('href', encodedUri);
-      link.setAttribute(
-        'download',
-        `gwasena_simulasi_sesi_${analysisId || '1'}_${summary?.trait || 'trait'}.csv`
-      );
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-
-      setDownloadSuccess('csv');
+      await analysisService.downloadCsv(analysisId, hanyaSignifikan);
+      setDownloadSuccess(hanyaSignifikan ? 'csv_sig' : 'csv');
       setTimeout(() => setDownloadSuccess(null), 4000);
-    } catch (simErr) {
-      setExportError('Gagal membuat CSV simulasi di peramban.');
+    } catch (err) {
+      console.error('Gagal mengunduh CSV dari server:', err);
+      setExportError(err?.message ? err : { message: 'Gagal mengunduh CSV hasil analisis dari server.' });
     } finally {
-      setDownloadingCsv(false);
+      setDownloadingCsvMode(null);
     }
   }
 
-  // 2. Unduh Gambar Plot PNG Resolusi Tinggi (Endpoint resmi: GET /api/analyses/{id}/plots/{jenis}/png)
+  // 2. Unduh Laporan Web HTML Mandiri (/api/analyses/{id}/report?unduh=true)
+  async function handleDownloadHtmlReport() {
+    setExportError(null);
+    setDownloadingHtml(true);
+    try {
+      await analysisService.downloadHtmlReport(analysisId, true);
+      setDownloadSuccess('html');
+      setTimeout(() => setDownloadSuccess(null), 4000);
+    } catch (err) {
+      console.error('Gagal mengunduh laporan HTML:', err);
+      setExportError(err?.message ? err : { message: 'Gagal mengunduh laporan web HTML dari server.' });
+    } finally {
+      setDownloadingHtml(false);
+    }
+  }
+
+  // 3. Unduh Gambar Plot PNG Resolusi Tinggi (Endpoint resmi: GET /api/analyses/{id}/plots/{jenis}/png)
   async function handleDownloadPlot(plotType) {
     setExportError(null);
-
-    if (analysisId && !isSimulated && !activeResults?.is_simulated) {
-      setDownloadingPlot(plotType);
-      try {
-        await analysisService.downloadPlotPng(analysisId, plotType);
-        setDownloadSuccess(plotType);
-        setTimeout(() => setDownloadSuccess(null), 4000);
-      } catch (err) {
-        console.error(`Gagal mengunduh gambar PNG ${plotType}:`, err);
-        setExportError(err.message || `Gagal mengunduh gambar PNG ${plotType} dari server.`);
-      } finally {
-        setDownloadingPlot(null);
-      }
-      return;
-    }
-
-    // Fallback mode simulasi lokal via toolbar Plotly canvas
-    const modeBarButton = document.querySelector(`[data-title="Download plot as a png"]`);
-    if (modeBarButton) {
-      modeBarButton.click();
+    setDownloadingPlot(plotType);
+    try {
+      await analysisService.downloadPlotPng(analysisId, plotType);
       setDownloadSuccess(plotType);
       setTimeout(() => setDownloadSuccess(null), 4000);
-    } else {
-      alert(
-        `Dalam mode simulasi, grafik ${plotType.toUpperCase()} dapat diunduh langsung dari tombol kamera pada Langkah 4.`
-      );
+    } catch (err) {
+      console.error(`Gagal mengunduh gambar PNG ${plotType}:`, err);
+      setExportError(err?.message ? err : { message: `Gagal mengunduh gambar PNG ${plotType} dari server.` });
+    } finally {
+      setDownloadingPlot(null);
     }
   }
 
@@ -270,25 +205,7 @@ export default function Step6Export({ analysisId, analysis, onNavigateStep }) {
         </div>
       </div>
 
-      {/* ── Alert Notifikasi Galat Unduhan (409 / 503 / Network Error) ── */}
-      {exportError && (
-        <div className="rounded-2xl border border-red-300 dark:border-red-500/40 bg-red-50 dark:bg-red-500/10 p-4 text-xs sm:text-sm text-red-900 dark:text-red-300 flex items-start justify-between gap-3 animate-fade-in">
-          <div className="flex items-start gap-2.5">
-            <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
-            <div>
-              <p className="font-bold">Gagal Mengunduh Berkas</p>
-              <p className="mt-0.5 text-slate-700 dark:text-slate-300">{exportError}</p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => setExportError(null)}
-            className="text-red-500 hover:text-red-700 dark:hover:text-red-200 p-1"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-      )}
+      <ErrorMessageArea error={exportError} onDismiss={() => setExportError(null)} />
 
       {/* ── Grid 3 Kartu Ekspor ── */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
@@ -311,29 +228,55 @@ export default function Step6Export({ analysisId, analysis, onNavigateStep }) {
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={handleDownloadCsv}
-            disabled={downloadingCsv}
-            className="w-full mt-4 figma-btn-primary"
-          >
-            {downloadSuccess === 'csv' ? (
-              <>
-                <CheckCircle2 className="h-4 w-4" />
-                <span>Berhasil Diunduh!</span>
-              </>
-            ) : downloadingCsv ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin text-white" />
-                <span>Mengunduh CSV Server...</span>
-              </>
-            ) : (
-              <>
-                <Download className="h-4 w-4" />
-                <span>Unduh CSV Lengkap</span>
-              </>
-            )}
-          </button>
+          <div className="space-y-2 mt-4">
+            <button
+              type="button"
+              onClick={() => handleDownloadCsv(false)}
+              disabled={downloadingCsvMode !== null}
+              className="w-full figma-btn-primary disabled:opacity-50"
+            >
+              {downloadSuccess === 'csv' ? (
+                <>
+                  <CheckCircle2 className="h-4 w-4" />
+                  <span>CSV Lengkap Terunduh!</span>
+                </>
+              ) : downloadingCsvMode === 'all' ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin text-white" />
+                  <span>Mengunduh Semua SNP...</span>
+                </>
+              ) : (
+                <>
+                  <Download className="h-4 w-4" />
+                  <span>Unduh Semua Hasil (CSV)</span>
+                </>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleDownloadCsv(true)}
+              disabled={downloadingCsvMode !== null}
+              className="w-full figma-btn-secondary disabled:opacity-50"
+            >
+              {downloadSuccess === 'csv_sig' ? (
+                <>
+                  <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                  <span>CSV Signifikan Terunduh!</span>
+                </>
+              ) : downloadingCsvMode === 'sig' ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin text-[#06B6D4]" />
+                  <span>Mengunduh SNP Signifikan...</span>
+                </>
+              ) : (
+                <>
+                  <FileSpreadsheet className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  <span>Unduh SNP Signifikan Saja (CSV)</span>
+                </>
+              )}
+            </button>
+          </div>
         </div>
 
         {/* Kartu 2: Unduh PNG Visualisasi Plot */}
@@ -436,7 +379,33 @@ export default function Step6Export({ analysisId, analysis, onNavigateStep }) {
               <span>Unduh Laporan PDF (Resmi)</span>
             </button>
 
-            {/* Tombol Sekunder: Pratinjau Layar Penuh di Layar (Full Screen Modal) */}
+            {/* Tombol Sekunder: Unduh Laporan Web HTML Mandiri */}
+            <button
+              type="button"
+              onClick={handleDownloadHtmlReport}
+              disabled={downloadingHtml}
+              className="w-full figma-btn-secondary flex items-center justify-center gap-2 disabled:opacity-50"
+              title="Unduh laporan analisis interaktif format HTML mandiri dari server"
+            >
+              {downloadSuccess === 'html' ? (
+                <>
+                  <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                  <span>Laporan HTML Terunduh!</span>
+                </>
+              ) : downloadingHtml ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin text-[#06B6D4]" />
+                  <span>Menyiapkan HTML...</span>
+                </>
+              ) : (
+                <>
+                  <Globe className="h-4 w-4 text-[#0284C7] dark:text-[#06B6D4]" />
+                  <span>Unduh Laporan Web (HTML)</span>
+                </>
+              )}
+            </button>
+
+            {/* Tombol Pratinjau Layar Penuh di Layar (Full Screen Modal) */}
             <button
               type="button"
               onClick={() => handleOpenReport('preview')}
@@ -475,7 +444,6 @@ export default function Step6Export({ analysisId, analysis, onNavigateStep }) {
         annotationData={annotationData}
         configParams={configParams}
         uploadSummary={uploadSummary}
-        isSimulated={isSimulated}
         autoPrintOnOpen={autoPrintReport}
         autoDownloadOnOpen={autoDownloadPdf}
       />

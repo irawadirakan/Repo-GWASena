@@ -13,12 +13,10 @@ import {
   Dna,
   ArrowRight,
   ArrowLeft,
-  Sparkles,
 } from 'lucide-react';
 import { useAnalysisStore } from '../../store/useAnalysisStore.js';
 import { analysisService } from '../../services/analysisService.js';
 import { TIPS_EDUKATIF } from '../../constants/eduHints.js';
-import { generateBenchmarkResults } from '../../services/mockResults.js';
 import ErrorMessageArea from '../common/ErrorMessageArea.jsx';
 
 /**
@@ -31,16 +29,10 @@ import ErrorMessageArea from '../common/ErrorMessageArea.jsx';
 export default function Step3Computation({ analysisId, onComplete }) {
   const {
     currentAnalysis,
-    setCurrentAnalysis,
     configParams,
     uploadSummary,
     setResults,
-    setIsSimulated,
-    isSimulated,
-    computationStage,
-    isComputing,
     isCompleted: storeCompleted,
-    startSimulation,
     setActiveStep,
   } = useAnalysisStore();
 
@@ -52,6 +44,9 @@ export default function Step3Computation({ analysisId, onComplete }) {
   const [activeStageCode, setActiveStageCode] = useState(null);
   const [backendStages, setBackendStages] = useState([]);
   const [backendStatus, setBackendStatus] = useState(null);
+  const [pesanStatus, setPesanStatus] = useState(null);
+  const [durasiDetik, setDurasiDetik] = useState(null);
+  const [langkahBerikutnya, setLangkahBerikutnya] = useState(null);
   const [ringkasanQc, setRingkasanQc] = useState(null);
 
   // State galat & pembatalan
@@ -91,16 +86,9 @@ export default function Step3Computation({ analysisId, onComplete }) {
     setCountdown(6);
   };
 
-  // Jalankan simulasi otomatis jika dalam mode simulasi dan belum selesai
+  // Polling backend status setiap 3 detik (100% alur API nyata tanpa fallback simulasi)
   useEffect(() => {
-    if (isSimulated && !isComputing && !storeCompleted && !isFailed) {
-      startSimulation();
-    }
-  }, [isSimulated, isComputing, storeCompleted, isFailed, startSimulation]);
-
-  // Polling backend status setiap 3 detik hanya jika BUKAN mode simulasi
-  useEffect(() => {
-    if (isSimulated || isFailed) return;
+    if (!analysisId || isFailed) return;
 
     let timer;
     let isMounted = true;
@@ -110,7 +98,11 @@ export default function Step3Computation({ analysisId, onComplete }) {
         const res = await analysisService.getStatus(analysisId);
         if (!isMounted) return;
 
+        const statusLower = String(res?.status || '').toLowerCase();
         setBackendStatus(res?.status);
+        if (res?.pesan_status) setPesanStatus(res.pesan_status);
+        if (typeof res?.durasi_detik === 'number') setDurasiDetik(res.durasi_detik);
+        if (res?.langkah_berikutnya) setLangkahBerikutnya(res.langkah_berikutnya);
 
         if (typeof res?.progres_persen === 'number') {
           setProgresPersen(res.progres_persen);
@@ -125,12 +117,19 @@ export default function Step3Computation({ analysisId, onComplete }) {
           setRingkasanQc(res.ringkasan_qc);
         }
 
-        // Poin #4: Tangani res.status === "gagal" & Hentikan Polling
-        if (res?.status === 'gagal' || res?.status === 'failed') {
+        // Tangani status gagal -> hentikan polling & buka kunci navigasi untuk perbaikan parameter
+        if (statusLower === 'gagal' || statusLower === 'failed') {
           if (timer) clearTimeout(timer);
           setIsFailed(true);
+          useAnalysisStore.setState((s) => ({
+            isComputing: false,
+            isCompleted: false,
+            isFailed: true,
+            currentAnalysis: s.currentAnalysis ? { ...s.currentAnalysis, status: 'gagal' } : s.currentAnalysis,
+          }));
           const errMsg =
             res.galat?.pesan ||
+            res.pesan_status ||
             res.message ||
             res.error ||
             'Analisis pipeline GWAS gagal dieksekusi oleh backend.';
@@ -145,48 +144,56 @@ export default function Step3Computation({ analysisId, onComplete }) {
             message: errMsg,
             details: errDetails,
           });
-          return; // Hentikan polling seketika
+          return;
         }
 
-        // Cek status selesai
-        if (res?.status === 'selesai') {
+        // Cek status selesai -> muat hasil nyata dari backend
+        if (statusLower === 'selesai' || statusLower === 'completed' || statusLower === 'success') {
           setProgresPersen(100);
-          setLocalCompleted(true);
           try {
             const resultsData = await analysisService.getFullAnalysisResults(analysisId);
+            if (!isMounted) return;
             setResults(resultsData);
-            setIsSimulated(false);
+            setLocalCompleted(true);
+            useAnalysisStore.setState((s) => ({
+              isComputing: false,
+              isCompleted: true,
+              isFailed: false,
+              currentAnalysis: s.currentAnalysis ? { ...s.currentAnalysis, status: 'selesai' } : s.currentAnalysis,
+            }));
             if (resultsData?.raw_backend_results?.qc || resultsData?.qc || resultsData?.ringkasan_qc) {
               setRingkasanQc(resultsData.raw_backend_results?.qc || resultsData.qc || resultsData.ringkasan_qc);
             }
           } catch (rErr) {
-            console.warn('Gagal memuat data hasil lengkap dari backend, beralih ke benchmark lokal:', rErr);
-            const fallback = generateBenchmarkResults(configParams, uploadSummary);
-            setResults(fallback);
+            if (!isMounted) return;
+            setIsFailed(true);
+            useAnalysisStore.setState((s) => ({
+              isComputing: false,
+              isCompleted: false,
+              isFailed: true,
+              currentAnalysis: s.currentAnalysis ? { ...s.currentAnalysis, status: 'gagal' } : s.currentAnalysis,
+            }));
+            setError({
+              message: rErr?.message || rErr?.pesan || 'Komputasi selesai, namun gagal memuat hasil dari server.',
+              details: rErr?.details || rErr?.rincian || [],
+            });
           }
           return;
         }
       } catch (err) {
         if (!isMounted) return;
-        const isNetworkError = !err.status || err.status === 0 || err.code === 'ERR_NETWORK';
-        const is501 = err.status === 501;
-
-        if (isNetworkError || is501) {
-          // Hanya beralih ke simulasi jika benar-benar Network Error atau HTTP 501
-          console.warn('Backend tidak merespons (Network / 501), beralih ke mock simulation:', err);
-          startSimulation();
-          return;
-        } else {
-          // Error 4xx / 500 dari backend: HENTIKAN POLLING & TAMPILKAN GALAT!
-          console.error('Galat saat polling status analisis (HTTP ' + err.status + '):', err);
-          if (timer) clearTimeout(timer);
-          setIsFailed(true);
-          setError({
-            message: err.message || err.pesan || 'Gagal memantau status komputasi dari server.',
-            details: err.details || err.rincian || [],
-          });
-          return;
-        }
+        console.error('Galat saat polling status analisis:', err);
+        if (timer) clearTimeout(timer);
+        setIsFailed(true);
+        useAnalysisStore.setState({
+          isComputing: false,
+          isFailed: true,
+        });
+        setError({
+          message: err?.message || err?.pesan || 'Gagal memantau status komputasi dari server.',
+          details: err?.details || err?.rincian || [],
+        });
+        return;
       }
 
       if (!isCompleted && !isFailed) {
@@ -200,44 +207,10 @@ export default function Step3Computation({ analysisId, onComplete }) {
       isMounted = false;
       if (timer) clearTimeout(timer);
     };
-  }, [analysisId, isCompleted, isFailed, isSimulated, startSimulation, configParams, uploadSummary, setResults]);
+  }, [analysisId, isCompleted, isFailed, setResults]);
 
   // Helper memetakan status 4 kartu tahapan visual di UI
   const getDisplayStages = () => {
-    if (isSimulated) {
-      const stageNum = computationStage || 1;
-      return [
-        {
-          id: 1,
-          title: 'Quality Control (Penyaringan Sampel & SNP)',
-          desc: 'Memvalidasi tingkat missingness, MAF, kepatuhan HWE, dan estimasi kekerabatan genomik.',
-          status: isCompleted || stageNum > 1 ? 'selesai' : stageNum === 1 ? 'berjalan' : 'menunggu',
-          message: stageNum > 1 ? 'Penyaringan data genotipe & fenotipe selesai.' : 'Memfilter MAF, missingness, & relatedness...',
-        },
-        {
-          id: 2,
-          title: 'Analisis Struktur Populasi (PCA Otomatis)',
-          desc: 'Menghitung dekomposisi kovariat PC1–PC3 untuk mengoreksi stratifikasi struktur populasi.',
-          status: isCompleted || stageNum > 2 ? 'selesai' : stageNum === 2 ? 'berjalan' : 'menunggu',
-          message: stageNum > 2 ? 'Dekomposisi 3 PC selesai dihitung.' : stageNum === 2 ? 'Menghitung matriks kovariansi PC1–PC3...' : null,
-        },
-        {
-          id: 3,
-          title: 'Uji Asosiasi Statistik & Koreksi',
-          desc: `Mengeksekusi model ${configParams.model || 'MLM'} terhadap sifat ${configParams.trait || 'target'} dengan koreksi Bonferroni & FDR.`,
-          status: isCompleted || stageNum > 3 ? 'selesai' : stageNum === 3 ? 'berjalan' : 'menunggu',
-          message: stageNum > 3 ? 'Uji asosiasi genomik selesai.' : stageNum === 3 ? 'Menghitung nilai p-value dan estimasi efek beta...' : null,
-        },
-        {
-          id: 4,
-          title: 'Anotasi Kandidat Gen & Visualisasi',
-          desc: 'Memetakan SNP signifikan ke genom referensi kandidat gen dan menyusun plot Manhattan & QQ.',
-          status: isCompleted ? 'selesai' : stageNum === 4 ? 'berjalan' : 'menunggu',
-          message: isCompleted ? 'Hasil visualisasi dan tabel asosiasi siap.' : stageNum === 4 ? 'Menyiapkan anotasi gen & visualisasi...' : null,
-        },
-      ];
-    }
-
     // Pemetaan fleksibel dari Array res.tahap backend
     const stageMap = {};
     if (Array.isArray(backendStages)) {
@@ -332,33 +305,46 @@ export default function Step3Computation({ analysisId, onComplete }) {
   const displayStages = getDisplayStages();
 
   // Hitung persentase progres bar
-  const displayPercent = isCompleted
-    ? 100
-    : isSimulated
-    ? Math.min(100, (computationStage || 1) * 25)
-    : progresPersen;
+  const displayPercent = isCompleted ? 100 : progresPersen;
 
-  // Hitung data ringkasan QC dinamis
+  // Hitung data ringkasan QC dinamis dari respons backend/unggah
   const isQcDone = isCompleted || displayStages[0].status === 'selesai';
-  const samplesPassed = ringkasanQc?.sampel_lolos ?? ringkasanQc?.n_samples ?? (isQcDone ? 38 : 40);
-  const samplesTotal = ringkasanQc?.total_sampel ?? uploadSummary?.genotipe?.jumlah_sampel ?? 40;
+  const rawSamplesTotal =
+    ringkasanQc?.sampel_awal ??
+    ringkasanQc?.sampel_total ??
+    ringkasanQc?.total_sampel ??
+    uploadSummary?.genotipe?.jumlah_sampel ??
+    null;
+  const rawSamplesPassed = ringkasanQc?.sampel_lolos ?? ringkasanQc?.n_samples ?? rawSamplesTotal;
+  const samplesPassed = rawSamplesPassed ?? '—';
+  const samplesTotal = rawSamplesTotal ?? '—';
   const samplesFiltered =
-    ringkasanQc?.sampel_disaring ?? (samplesTotal - samplesPassed > 0 ? samplesTotal - samplesPassed : 0);
+    typeof ringkasanQc?.sampel_disaring === 'number'
+      ? ringkasanQc.sampel_disaring
+      : rawSamplesTotal != null && rawSamplesPassed != null && rawSamplesTotal - rawSamplesPassed > 0
+      ? rawSamplesTotal - rawSamplesPassed
+      : 0;
 
-  const snpsPassed = ringkasanQc?.snp_lolos ?? ringkasanQc?.n_snps ?? (isQcDone ? 482 : 500);
-  const snpsTotal = ringkasanQc?.total_snp ?? uploadSummary?.genotipe?.jumlah_snp ?? 500;
-  const snpsFiltered = ringkasanQc?.snp_disaring ?? (snpsTotal - snpsPassed > 0 ? snpsTotal - snpsPassed : 0);
+  const rawSnpsTotal =
+    ringkasanQc?.snp_awal ??
+    ringkasanQc?.snp_total ??
+    ringkasanQc?.total_snp ??
+    uploadSummary?.genotipe?.jumlah_snp ??
+    null;
+  const rawSnpsPassed = ringkasanQc?.snp_lolos ?? ringkasanQc?.n_snps ?? rawSnpsTotal;
+  const snpsPassed = rawSnpsPassed ?? '—';
+  const snpsTotal = rawSnpsTotal ?? '—';
+  const snpsFiltered =
+    typeof ringkasanQc?.snp_disaring === 'number'
+      ? ringkasanQc.snp_disaring
+      : rawSnpsTotal != null && rawSnpsPassed != null && rawSnpsTotal - rawSnpsPassed > 0
+      ? rawSnpsTotal - rawSnpsPassed
+      : 0;
 
   const currentTip = TIPS_EDUKATIF[tipIndex];
 
   return (
     <div className="space-y-8 animate-fade-in">
-      {/* ── Banner Mode Simulasi (Poin #2) ── */}
-      {isSimulated && (
-        <div className="rounded-2xl border-2 border-amber-500 bg-amber-400/20 text-amber-950 dark:text-amber-200 p-4 text-center font-bold text-sm sm:text-base shadow-lg animate-pulse flex items-center justify-center gap-2">
-          <span>⚠️ MODE SIMULASI — Bukan hasil analisis asli (Backend tidak terhubung)</span>
-        </div>
-      )}
 
       {/* ── Banner Status Terkunci ── */}
       {!isFailed && (
@@ -482,10 +468,28 @@ export default function Step3Computation({ analysisId, onComplete }) {
               </span>
             )}
           </div>
-          <span className="font-mono font-bold text-sm text-[#5B4DFE] dark:text-[#06B6D4] tabular-nums">
-            {displayPercent}%
-          </span>
+          <div className="flex items-center gap-3 font-mono text-xs sm:text-sm">
+            {durasiDetik !== null && (
+              <span className="text-slate-600 dark:text-slate-300 font-semibold">
+                Durasi: {Number(durasiDetik).toFixed(1)}s
+              </span>
+            )}
+            <span className="font-bold text-[#5B4DFE] dark:text-[#06B6D4] tabular-nums">
+              {displayPercent}%
+            </span>
+          </div>
         </div>
+
+        {pesanStatus && (
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-700 dark:text-slate-300 font-medium">
+            <span>{pesanStatus}</span>
+            {langkahBerikutnya && (
+              <span className="font-mono text-[11px] text-slate-500 dark:text-slate-400">
+                Berikutnya: {langkahBerikutnya}
+              </span>
+            )}
+          </div>
+        )}
 
         <div className="w-full h-3 rounded-full bg-slate-200 dark:bg-white/10 overflow-hidden p-0.5">
           <div
@@ -666,7 +670,7 @@ export default function Step3Computation({ analysisId, onComplete }) {
             <div className="rounded-xl glass-subcard p-3 text-xs sm:text-sm text-slate-800 dark:text-slate-200 flex items-center justify-between font-semibold">
               <span className="font-sans">Sifat fenotipe target:</span>
               <span className="font-mono font-bold text-[#0284C7] dark:text-[#06B6D4]">
-                {configParams.trait || uploadSummary?.fenotipe?.sifat_tersedia?.[0] || 'trait_target'}
+                {configParams.trait || uploadSummary?.fenotipe?.daftar_sifat?.[0] || uploadSummary?.fenotipe?.sifat_tersedia?.[0] || '—'}
               </span>
             </div>
           </div>

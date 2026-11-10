@@ -7,9 +7,11 @@ import { WIZARD_STEPS } from '../../constants/defaultParams.js';
  * Mematuhi aturan penguncian saat komputasi dan navigasi bebas pasca-selesai.
  */
 export default function WizardStepper({ activeStep, onStepClick, status }) {
-  const isLockedDuringCompute = status === 'antre' || status === 'berjalan';
-  const isFinished = status === 'selesai';
-  const isTervalidasi = status === 'tervalidasi';
+  const st = String(status || '').toLowerCase();
+  const isLockedDuringCompute =
+    st === 'antre' || st === 'berjalan' || st === 'pending' || st === 'running';
+  const isFinished = st === 'selesai' || st === 'completed' || st === 'success';
+  const isTervalidasi = st === 'tervalidasi' || st === 'valid' || st === 'validated';
 
   // Tentukan apakah sebuah langkah dapat diklik
   const isStepClickable = (stepNum) => {

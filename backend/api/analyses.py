@@ -10,13 +10,15 @@ Urutan pemakaian:
   7. GET  /api/analyses/{id}/results/csv        unduh hasil CSV
 """
 import csv
+import html
 import io
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import Response
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 import shutil
@@ -91,6 +93,26 @@ def _summary(a: Analysis) -> dict:
         "organism": a.organism,
         "analysis_time": a.analysis_time,
     }
+
+
+def _build_warnings(geno, pheno) -> list[str]:
+    warnings: list[str] = []
+    skipped = getattr(geno, "skipped", None) or {}
+    label_map = {
+        "multialelik": "varian multialelik",
+        "non_bialelik": "varian non-bialelik",
+        "monomorfik": "varian monomorfik",
+        "posisi_invalid": "varian dengan posisi tidak valid",
+        "kosong": "varian tanpa genotipe valid",
+    }
+    for key, count in skipped.items():
+        if count:
+            desc = label_map.get(key, key.replace("_", " "))
+            warnings.append(f"{count} {desc} dilewati saat pembacaan genotipe.")
+    ignored = getattr(pheno, "ignored_columns", None) or []
+    if ignored:
+        warnings.append(f"Kolom fenotipe non-numerik atau kurang data diabaikan: {', '.join(ignored)}")
+    return warnings
 
 
 # ------------------------------------------------------------------ daftar & referensi
@@ -279,12 +301,13 @@ def _load_benchmark_internal(
         ])
 
     a.status = AnalysisStatus.TERVALIDASI
+    peringatan = _build_warnings(geno, pheno)
     db.add(
         AnalysisLog(
             analysis_id=a.analysis_id,
             stage="validasi",
             status="selesai",
-            message=f"Benchmark {fmt}: {geno.n_samples} sampel, {geno.n_snps} SNP; 100% Lolos QC & Cocok",
+            message=f"Benchmark {fmt}: {geno.n_samples} sampel, {geno.n_snps} SNP; Sample ID cocok",
         )
     )
     db.commit()
@@ -305,7 +328,8 @@ def _load_benchmark_internal(
             "qc_status": "100% Lolos QC",
             "sample_match": True,
         },
-        "pesan": f"Dataset benchmark {fmt} berhasil dimuat dan divalidasi. 100% Sample ID cocok.",
+        "pesan": f"Dataset benchmark {fmt} berhasil dimuat dan divalidasi. Sample ID cocok.",
+        "peringatan": peringatan,
         "genotipe": info["genotipe"],
         "fenotipe": info["fenotipe"],
         "kecocokan_sample_id": match,
@@ -460,8 +484,10 @@ def upload(
     db.add(AnalysisLog(analysis_id=a.analysis_id, stage="validasi", status="selesai",
                        message=f"{geno.n_samples} sampel, {geno.n_snps} SNP; Sample ID cocok"))
     db.commit()
+    peringatan = _build_warnings(geno, pheno)
     return {
         "pesan": "Berkas valid. Lanjutkan ke pengaturan parameter.",
+        "peringatan": peringatan,
         "analysis_id": a.analysis_id,
         "status": a.status,
         **info,
@@ -550,10 +576,46 @@ def get_status(a: Analysis = Depends(owned_analysis), db: Session = Depends(get_
     if a.status == AnalysisStatus.GAGAL and failed and failed.message:
         lines = failed.message.splitlines()
         galat = {"tahap": failed.stage, "pesan": lines[0], "rincian": lines[1:]}
+    durasi_detik = 0.0
+    if logs:
+        t_start = logs[0].timestamp
+        t_end = logs[-1].timestamp
+        if t_start and t_end:
+            if a.status in (AnalysisStatus.SELESAI, AnalysisStatus.GAGAL):
+                delta = (t_end.replace(tzinfo=None) - t_start.replace(tzinfo=None)).total_seconds()
+            else:
+                now_utc = datetime.now(timezone.utc).replace(tzinfo=None)
+                delta = (now_utc - t_start.replace(tzinfo=None)).total_seconds()
+            durasi_detik = round(max(0.0, delta), 2)
+
+    stage_names = dict(STAGES)
+    if a.status == AnalysisStatus.SELESAI:
+        pesan_status = "Komputasi pipeline selesai. Hasil siap divisualisasikan."
+        langkah_berikutnya = f"GET /api/analyses/{a.analysis_id}/results"
+    elif a.status == AnalysisStatus.GAGAL:
+        pesan_status = galat["pesan"] if galat else "Komputasi gagal dijalankan."
+        langkah_berikutnya = f"PUT /api/analyses/{a.analysis_id}/parameters"
+    elif a.status == AnalysisStatus.BERJALAN:
+        cur_label = stage_names.get(current, "komputasi")
+        pesan_status = f"Sedang menjalankan tahap {cur_label}..."
+        langkah_berikutnya = f"GET /api/analyses/{a.analysis_id}/status"
+    elif a.status == AnalysisStatus.ANTRE:
+        pesan_status = "Analisis masuk antrean dan menunggu pekerja komputasi..."
+        langkah_berikutnya = f"GET /api/analyses/{a.analysis_id}/status"
+    elif a.status == AnalysisStatus.TERVALIDASI:
+        pesan_status = "Dataset tervalidasi. Silakan atur parameter QC & model."
+        langkah_berikutnya = f"POST /api/analyses/{a.analysis_id}/run"
+    else:
+        pesan_status = "Sesi dalam tahap draft. Silakan unggah dataset terlebih dahulu."
+        langkah_berikutnya = f"POST /api/analyses/{a.analysis_id}/upload"
+
     tip_pool = TIPS.get(current or "qc")
     return {
         "analysis_id": a.analysis_id,
         "status": a.status,
+        "pesan_status": pesan_status,
+        "durasi_detik": durasi_detik,
+        "langkah_berikutnya": langkah_berikutnya,
         "terkunci": a.status in LOCKED,
         "tahap_sekarang": current,
         "progres_persen": round(100 * done / len(STAGES)),
@@ -591,6 +653,8 @@ def get_results(a: Analysis = Depends(owned_analysis), db: Session = Depends(get
         **ringkasan,
         "tautan": {
             "unduh_csv": f"{base}/results/csv",
+            "unduh_csv_signifikan": f"{base}/results/csv?hanya_signifikan=true",
+            "laporan_html": f"{base}/report?unduh=true",
             "data_manhattan": f"{base}/plots/manhattan",
             "data_qq": f"{base}/plots/qq",
             "data_pca": f"{base}/plots/pca",
@@ -677,9 +741,13 @@ def get_annotation(
             "model": ringkasan.get("model"), **hasil}
 
 
-# ------------------------------------------------------------------ 7. unduh CSV
+# ------------------------------------------------------------------ 7. unduh CSV & laporan HTML & hapus
 @router.get("/{analysis_id}/results/csv", summary="7. Unduh hasil asosiasi (CSV)")
-def download_csv(a: Analysis = Depends(owned_analysis), db: Session = Depends(get_db)):
+def download_csv(
+    hanya_signifikan: bool = Query(False, description="Jika true, hanya unduh SNP signifikan"),
+    a: Analysis = Depends(owned_analysis),
+    db: Session = Depends(get_db),
+):
     _require_done(a)
     rows = db.execute(
         select(SNP.chromosome, SNP.position, SNP.variant_code, SNP.ref_allele, SNP.alt_allele,
@@ -691,14 +759,151 @@ def download_csv(a: Analysis = Depends(owned_analysis), db: Session = Depends(ge
         .order_by(SNP.snp_id)
     ).all()
     m = sum(1 for r in rows if r.p_value is not None)
+
+    sig_ids: set[str] | None = None
+    alpha = 0.05
+    if hanya_signifikan:
+        ringkasan = _get_cache(db, a.analysis_id, "ringkasan") or {}
+        if "snp_signifikan" in ringkasan:
+            sig_ids = {s.get("snp_id") for s in (ringkasan.get("snp_signifikan") or []) if s.get("snp_id")}
+        param = db.scalar(select(AnalysisParameter).where(AnalysisParameter.analysis_id == a.analysis_id))
+        if param and param.parameter_config:
+            alpha = float(param.parameter_config.get("alpha", 0.05))
+
     buf = io.StringIO()
     w = csv.writer(buf)
     w.writerow(["Chr", "Pos", "SNP_ID", "Ref_Allele", "Alt_Allele", "Beta_OR", "SE",
                 "P_Value", "P_Bonferroni", "Q_Value_FDR"])
     for r in rows:
-        p_bonf = min(r.p_value * m, 1.0) if r.p_value is not None else None
+        p_bonf = min(r.p_value * m, 1.0) if r.p_value is not None and m > 0 else None
+        if hanya_signifikan:
+            if sig_ids is not None:
+                if r.variant_code not in sig_ids:
+                    continue
+            else:
+                is_sig = (p_bonf is not None and p_bonf <= alpha) or (r.q_value is not None and r.q_value <= alpha)
+                if not is_sig:
+                    continue
         w.writerow([r.chromosome, r.position, r.variant_code, r.ref_allele, r.alt_allele,
                     r.effect_size, r.std_error, r.p_value, p_bonf, r.q_value])
-    filename = f"gwasena_analisis_{a.analysis_id}_hasil.csv"
+    suffix = "signifikan" if hanya_signifikan else "hasil"
+    filename = f"gwasena_analisis_{a.analysis_id}_{suffix}.csv"
     return Response(content=buf.getvalue(), media_type="text/csv",
                     headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+
+@router.get("/{analysis_id}/report", summary="8. Ekspor laporan analisis Web HTML mandiri (FR-09)")
+def get_html_report(
+    unduh: bool = Query(True, description="Jika true, kirim header Content-Disposition attachment"),
+    a: Analysis = Depends(owned_analysis),
+    db: Session = Depends(get_db),
+):
+    _require_done(a)
+    ringkasan = _get_cache(db, a.analysis_id, "ringkasan") or {}
+    param = db.scalar(select(AnalysisParameter).where(AnalysisParameter.analysis_id == a.analysis_id))
+    cfg = param.parameter_config if param and param.parameter_config else {}
+    qc = ringkasan.get("qc") or {}
+    asosiasi = ringkasan.get("asosiasi") or {}
+    sig_snps = list(ringkasan.get("snp_signifikan") or [])
+    display_snps = sig_snps if sig_snps else list(ringkasan.get("snp_teratas") or [])[:10]
+
+    ann = annotate_from_gff3(sig_snps, settings.ANNOTATION_GFF3, settings.ANNOTATION_WINDOW_BP, "SNP signifikan")
+    ann_status = ann.get("status", "tidak_tersedia")
+    ann_msg = html.escape(str(ann.get("pesan", "")))
+
+    title = html.escape(str(a.analysis_name or f"Analisis GWAS #{a.analysis_id}"))
+    organism = html.escape(str(a.organism or "Allium sativum"))
+    model = html.escape(str(ringkasan.get("model") or cfg.get("model") or "GLM"))
+    trait = html.escape(str(ringkasan.get("trait") or cfg.get("trait") or "-"))
+
+    snp_rows_html = ""
+    for idx, s in enumerate(display_snps, start=1):
+        snp_id = html.escape(str(s.get("snp_id", "-")))
+        chrom = html.escape(str(s.get("chromosome", "-")))
+        pos = s.get("position", 0)
+        pval = s.get("p_value")
+        beta = s.get("beta") if s.get("beta") is not None else s.get("effect_size")
+        qval = s.get("q_value")
+        sig_badge = "Signifikan" if s.get("signifikan") else "Teratas"
+        p_str = f"{pval:.3e}" if isinstance(pval, (int, float)) else "-"
+        b_str = f"{beta:+.4f}" if isinstance(beta, (int, float)) else "-"
+        q_str = f"{qval:.3e}" if isinstance(qval, (int, float)) else "-"
+        snp_rows_html += (
+            f"<tr><td>{idx}</td><td>{snp_id}</td><td>{chrom}</td><td>{pos:,}</td>"
+            f"<td>{b_str}</td><td>{p_str}</td><td>{q_str}</td><td>{sig_badge}</td></tr>"
+        )
+    if not snp_rows_html:
+        snp_rows_html = '<tr><td colspan="8" style="text-align:center;">Tidak ada data SNP yang dapat ditampilkan.</td></tr>'
+
+    html_doc = f"""<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Laporan Analisis GWASena - {title}</title>
+<style>
+  body {{ font-family: system-ui, -apple-system, sans-serif; color: #0f172a; margin: 2rem auto; max-width: 960px; padding: 0 1rem; line-height: 1.5; }}
+  header {{ border-bottom: 2px solid #0284c7; padding-bottom: 1rem; margin-bottom: 1.5rem; }}
+  h1 {{ margin: 0 0 0.25rem; font-size: 1.5rem; }}
+  .meta {{ color: #475569; font-size: 0.9rem; }}
+  .grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem; margin: 1rem 0 1.5rem; }}
+  .card {{ background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 0.75rem 1rem; }}
+  .card .label {{ font-size: 0.75rem; text-transform: uppercase; color: #64748b; font-weight: 700; }}
+  .card .val {{ font-size: 1.15rem; font-weight: 700; margin-top: 0.2rem; }}
+  table {{ width: 100%; border-collapse: collapse; margin-top: 0.75rem; font-size: 0.875rem; }}
+  th, td {{ border: 1px solid #cbd5e1; padding: 0.5rem 0.65rem; text-align: left; }}
+  th {{ background: #f1f5f9; font-weight: 700; }}
+  .notice {{ background: #fffbeb; border: 1px solid #fcd34d; border-radius: 8px; padding: 0.75rem 1rem; margin-top: 1rem; font-size: 0.875rem; }}
+  footer {{ margin-top: 2rem; border-top: 1px solid #e2e8f0; padding-top: 0.75rem; font-size: 0.8rem; color: #64748b; }}
+</style>
+</head>
+<body>
+  <header>
+    <h1>Laporan Analisis Asosiasi Genomik (GWASena)</h1>
+    <div class="meta">Sesi #{a.analysis_id} &bull; {title} &bull; Organisme: <em>{organism}</em></div>
+  </header>
+  <section class="grid">
+    <div class="card"><div class="label">Model Statistik</div><div class="val">{model} (PCA Auto)</div></div>
+    <div class="card"><div class="label">Sifat Fenotipe</div><div class="val">{trait}</div></div>
+    <div class="card"><div class="label">Sampel Lolos QC</div><div class="val">{qc.get("sampel_lolos", "-")} / {qc.get("sampel_awal", qc.get("sampel_total", "-"))}</div></div>
+    <div class="card"><div class="label">SNP Diuji</div><div class="val">{asosiasi.get("jumlah_snp_diuji", qc.get("snp_lolos", "-"))}</div></div>
+    <div class="card"><div class="label">SNP Signifikan</div><div class="val">{len(sig_snps)}</div></div>
+    <div class="card"><div class="label">Lambda GC (&lambda;)</div><div class="val">{asosiasi.get("lambda_gc", "-")}</div></div>
+  </section>
+  <section>
+    <h2>{"Daftar SNP Signifikan" if sig_snps else "10 SNP Teratas (Nilai-p Terkecil)"}</h2>
+    <table>
+      <thead>
+        <tr><th>No</th><th>ID SNP</th><th>Kromosom</th><th>Posisi (bp)</th><th>Beta</th><th>P-Value</th><th>Q-Value (FDR)</th><th>Status</th></tr>
+      </thead>
+      <tbody>{snp_rows_html}</tbody>
+    </table>
+  </section>
+  <section style="margin-top:1.5rem;">
+    <h2>Status Anotasi Kandidat Gen (FR-07)</h2>
+    <div class="notice"><strong>Status ({html.escape(str(ann_status))}):</strong> {ann_msg}</div>
+  </section>
+  <footer>Dihasilkan secara dinamis dari basis data sesi GWASena API.</footer>
+</body>
+</html>"""
+
+    headers = {}
+    if unduh:
+        headers["Content-Disposition"] = f'attachment; filename="gwasena_laporan_{a.analysis_id}.html"'
+    return Response(content=html_doc, media_type="text/html; charset=utf-8", headers=headers)
+
+
+@router.delete("/{analysis_id}", summary="Hapus sesi analisis dan berkas terkait (FR-12)")
+def delete_analysis(a: Analysis = Depends(owned_analysis), db: Session = Depends(get_db)):
+    if a.status in LOCKED:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            _detail("Analisis sedang berjalan; tunggu sampai selesai sebelum menghapus."),
+        )
+    aid = a.analysis_id
+    ds.remove_dir(aid)
+    ds.clear_analysis_data(db, aid)
+    db.execute(delete(AnalysisParameter).where(AnalysisParameter.analysis_id == aid))
+    db.delete(a)
+    db.commit()
+    return {"pesan": f"Sesi analisis #{aid} berhasil dihapus.", "analysis_id": aid}

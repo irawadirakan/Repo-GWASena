@@ -132,39 +132,25 @@ export default function DashboardPage() {
     setIsSubmitting(true);
     setError(null);
 
-    const fallbackId = Date.now().toString();
-
     try {
-      let createdSession = null;
-      try {
-        createdSession = await analysisService.createAnalysis(finalSessionName);
-      } catch (apiErr) {
-        console.warn('API backend createAnalysis gagal atau offline, menggunakan inisiasi sesi lokal:', apiErr);
-        createdSession = {
-          analysis_id: fallbackId,
-          id: fallbackId,
-          analysis_name: finalSessionName,
-          status: 'draft',
-          organism: 'Allium sativum (Bawang Putih)',
-          created_at: new Date().toISOString(),
-          is_local_fallback: true,
-        };
+      const createdSession = await analysisService.createAnalysis(finalSessionName);
+      const targetId = createdSession?.analysis_id || createdSession?.id;
+      if (!targetId) {
+        throw new Error('Server tidak mengembalikan analysis_id yang valid.');
       }
 
-      const targetId = createdSession?.analysis_id || createdSession?.id || fallbackId;
-
-      // Inisialisasi sesi di useAnalysisStore
-      const { setCurrentAnalysis, setActiveStep } = useAnalysisStore.getState();
+      // Reset wizard state & inisialisasi sesi nyata dari PostgreSQL/backend
+      const { reset, setCurrentAnalysis, setActiveStep } = useAnalysisStore.getState();
+      reset();
       setCurrentAnalysis({
         analysis_id: targetId,
         id: targetId,
-        analysis_name: finalSessionName,
-        status: 'draft',
+        analysis_name: createdSession?.analysis_name || finalSessionName,
+        status: createdSession?.status || 'draft',
         organism: createdSession?.organism || 'Allium sativum (Bawang Putih)',
       });
       setActiveStep(1);
 
-      // Simpan flag jika nama sesi perlu dinamai otomatis saat berkas diunggah
       if (!trimmed && typeof window !== 'undefined') {
         localStorage.setItem(`gwasena_auto_name_${targetId}`, 'true');
       }
@@ -172,8 +158,11 @@ export default function DashboardPage() {
       setIsModalOpen(false);
       navigate(`/analyses/${targetId}`);
     } catch (err) {
-      console.error('Fatal error saat inisiasi sesi:', err);
-      navigate(`/analyses/${fallbackId}`);
+      console.error('Gagal membuat sesi analisis di server:', err);
+      setError({
+        message: err?.message || err?.pesan || 'Gagal membuat sesi analisis di server.',
+        details: err?.details || err?.rincian || [],
+      });
     } finally {
       setIsSubmitting(false);
     }

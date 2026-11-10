@@ -23,6 +23,7 @@ class PhenotypeData:
     samples: list[str]
     traits: dict[str, np.ndarray]  # nama sifat -> nilai (NaN = hilang)
     variety: dict[str, str] = field(default_factory=dict)
+    ignored_columns: list[str] = field(default_factory=list)
 
     @property
     def trait_names(self) -> list[str]:
@@ -78,6 +79,7 @@ def read_phenotype_csv(path: str | Path) -> PhenotypeData:
 
     data_rows = rows[1:]
     traits: dict[str, np.ndarray] = {}
+    ignored_columns: list[str] = []
     for j, name in enumerate(header):
         if j in (id_idx, var_idx):
             continue
@@ -96,6 +98,10 @@ def read_phenotype_csv(path: str | Path) -> PhenotypeData:
             arr = np.asarray(values, dtype=float)
             if np.isfinite(arr).sum() >= 2:
                 traits[name] = arr
+            else:
+                ignored_columns.append(name)
+        else:
+            ignored_columns.append(name)
 
     if not traits:
         raise ValidationError(
@@ -106,4 +112,4 @@ def read_phenotype_csv(path: str | Path) -> PhenotypeData:
     variety = {}
     if var_idx is not None:
         variety = {r[id_idx].strip(): r[var_idx].strip() for r in data_rows if r[var_idx].strip()}
-    return PhenotypeData(samples=samples, traits=traits, variety=variety)
+    return PhenotypeData(samples=samples, traits=traits, variety=variety, ignored_columns=ignored_columns)

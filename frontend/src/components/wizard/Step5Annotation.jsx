@@ -9,7 +9,6 @@ import {
   BookOpen,
   Loader2,
   CheckCircle2,
-  Sparkles,
   Info,
 } from 'lucide-react';
 import { useAnalysisStore } from '../../store/useAnalysisStore.js';
@@ -23,69 +22,39 @@ import { analysisService } from '../../services/analysisService.js';
  * serta mekanisme non-blocking fallback jika berkas GFF3 tidak tersedia.
  */
 export default function Step5Annotation({ analysisId, onNavigateStep }) {
-  const { results, isSimulated } = useAnalysisStore();
+  useAnalysisStore();
 
   const [annotationData, setAnnotationData] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [isSimulateFallback, setIsSimulateFallback] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
 
     async function fetchAnnotation() {
-      if (analysisId && !isSimulated) {
-        setIsLoading(true);
-        try {
-          // Panggil endpoint resmi backend: GET /api/analyses/{id}/annotation?sertakan_teratas=true
-          const data = await analysisService.getAnnotation(analysisId, true);
-          if (isMounted) {
-            setAnnotationData(data);
-          }
-        } catch (err) {
-          console.warn('Gagal memuat anotasi dari backend, menggunakan status tidak_tersedia (non-blocking):', err);
-          if (isMounted) {
-            setAnnotationData({
-              status: 'tidak_tersedia',
-              sumber: 'Berkas anotasi genom lokal (GFF3)',
-              jendela_bp: 50000,
-              pesan: 'Anotasi gen sementara tidak tersedia. Berkas anotasi GFF3 tidak dapat dibaca dari server.',
-              kandidat: [],
-            });
-          }
-        } finally {
-          if (isMounted) setIsLoading(false);
+      if (!analysisId) return;
+      setIsLoading(true);
+      try {
+        const data = await analysisService.getAnnotation(analysisId, true);
+        if (isMounted) {
+          setAnnotationData(data);
         }
-      } else {
-        // Mode simulasi / demo offline GWASena (Allium sativum GFF3)
-        setAnnotationData({
-          status: 'tersedia',
-          sumber: 'Berkas anotasi genom lokal (GFF3): Allium_sativum_annotation.gff3',
-          jendela_bp: 50000,
-          pesan: '1 dari 1 SNP signifikan memiliki kandidat gen dalam jendela 50.000 bp.',
-          kandidat: [
-            {
-              snp_id: 'snp_chr3_0042',
-              chromosome: 3,
-              position: 1245000,
-              p_value: 0.00001,
-              signifikan: true,
-              gen: [
-                {
-                  gene_id: 'GC3G9001',
-                  nama: 'GC3G9001',
-                  deskripsi: 'Putative alliinase-like protein involved in allicin biosynthesis and bulb organogenesis',
-                  awal: 1240000,
-                  akhir: 1250000,
-                  untai: '+',
-                  jarak_bp: 0,
-                  konsekuensi: 'intragenic_variant',
-                  letak: 'di dalam gen',
-                },
-              ],
-            },
-          ],
-        });
+      } catch (err) {
+        console.warn('Gagal memuat anotasi dari backend, menampilkan fallback non-blocking (AC-07.2):', err);
+        if (isMounted) {
+          setAnnotationData({
+            status: 'tidak_tersedia',
+            sumber: 'Berkas anotasi genom lokal (GFF3)',
+            jendela_bp: 50000,
+            pesan:
+              err?.message ||
+              err?.pesan ||
+              'Anotasi gen sementara tidak tersedia. Berkas anotasi GFF3 tidak dapat dibaca dari server.',
+            kandidat: [],
+          });
+        }
+      } finally {
+        if (isMounted) setIsLoading(false);
       }
     }
 
@@ -94,7 +63,7 @@ export default function Step5Annotation({ analysisId, onNavigateStep }) {
     return () => {
       isMounted = false;
     };
-  }, [analysisId, isSimulated]);
+  }, [analysisId]);
 
   // Ekstrak dan ratakan daftar gen dari payload kandidat backend
   const flattenedGenes = useMemo(() => {
@@ -168,7 +137,7 @@ export default function Step5Annotation({ analysisId, onNavigateStep }) {
     return counts;
   }, [filteredGenes]);
 
-  const isUnavailable = annotationData?.status === 'tidak_tersedia' || isSimulateFallback;
+  const isUnavailable = annotationData?.status === 'tidak_tersedia';
   const windowKb = Math.round((annotationData?.jendela_bp || 50000) / 1000);
 
   return (
@@ -243,15 +212,6 @@ export default function Step5Annotation({ analysisId, onNavigateStep }) {
           </div>
         </div>
 
-        {/* Demo Switch Fallback untuk Pengujian Ketahanan Sistem */}
-        <button
-          type="button"
-          onClick={() => setIsSimulateFallback(!isSimulateFallback)}
-          className="rounded-full border border-slate-300 dark:border-white/10 bg-white/90 dark:bg-[#162142] px-4 py-1.5 text-xs font-sans font-bold text-slate-800 dark:text-slate-200 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-[#1E2C58] hover:-translate-y-[1px] active:scale-[0.97] transition-all duration-100 self-start sm:self-auto shadow-sm"
-          title="Uji ketahanan sistem jika berkas anotasi GFF3 rusak/hilang"
-        >
-          {isSimulateFallback ? 'Pulihkan Status Normal' : 'Simulasi Anotasi Tidak Tersedia'}
-        </button>
       </div>
 
       {isLoading ? (

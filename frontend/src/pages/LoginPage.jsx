@@ -178,21 +178,23 @@ export default function LoginPage() {
 
           <button
             type="button"
+            disabled={isLoading}
             onClick={async () => {
+              setError(null);
               try {
+                await login('peneliti_ipb', 'password123');
                 if (typeof window !== 'undefined') {
                   localStorage.setItem('gwasena_has_logged_in', 'true');
                 }
-                await login('peneliti_ipb', 'password123');
                 navigate('/dashboard');
               } catch (e) {
-                console.error(e);
+                setError(e);
               }
             }}
             className="w-full figma-btn-secondary py-2.5 text-xs sm:text-sm font-bold cursor-pointer"
           >
             <Sparkles className="h-4 w-4 text-[#0284C7] dark:text-[#06B6D4]" />
-            <span>Jelajahi Mode Demo</span>
+            <span>Masuk Akun Peneliti Terdaftar</span>
           </button>
         </form>
 

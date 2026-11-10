@@ -17,32 +17,35 @@ import { useAnalysisStore } from '../../store/useAnalysisStore.js';
 import { analysisService } from '../../services/analysisService.js';
 import ManhattanPlot from '../charts/ManhattanPlot.jsx';
 import QQPlot from '../charts/QQPlot.jsx';
-import { generateBenchmarkResults } from '../../services/mockResults.js';
+import ErrorMessageArea from '../common/ErrorMessageArea.jsx';
 
 /**
  * Langkah 4: Hasil Uji Asosiasi & Visualisasi Plot Interaktif (Figma Aligned)
  * Acuan: 07 — Hasil & Visualisasi.png & 07b — Hasil_ Titik SNP Terpilih.png
  */
 export default function Step4Results({ analysisId, onNavigateStep }) {
-  const { results, setResults, configParams, uploadSummary, isSimulated } = useAnalysisStore();
+  const { results, setResults, configParams, uploadSummary } = useAnalysisStore();
   const [isLoadingBackend, setIsLoadingBackend] = useState(false);
   const [fetchError, setFetchError] = useState(null);
 
   useEffect(() => {
     let isMounted = true;
     async function fetchResults() {
-      // Jika data hasil belum ada dan memiliki analysisId serta bukan mode simulasi murni, ambil dari backend
-      if (!results && analysisId && !isSimulated) {
+      if (!results && analysisId) {
         setIsLoadingBackend(true);
+        setFetchError(null);
         try {
           const data = await analysisService.getFullAnalysisResults(analysisId);
           if (isMounted) {
             setResults(data);
           }
         } catch (err) {
-          console.warn('Gagal memuat hasil dari backend:', err);
+          console.error('Gagal memuat hasil dari backend:', err);
           if (isMounted) {
-            setFetchError(err.message || 'Gagal memuat hasil dari backend.');
+            setFetchError({
+              message: err?.message || err?.pesan || 'Gagal memuat hasil analisis dari server.',
+              details: err?.details || err?.rincian || [],
+            });
           }
         } finally {
           if (isMounted) setIsLoadingBackend(false);
@@ -53,20 +56,9 @@ export default function Step4Results({ analysisId, onNavigateStep }) {
     return () => {
       isMounted = false;
     };
-  }, [analysisId, results, isSimulated, setResults]);
+  }, [analysisId, results, setResults]);
 
-  // Ambil data hasil (utamakan hasil backend asli; jangan pernah menimpa hasil backend dengan benchmark simulasi)
-  const activeResults = useMemo(() => {
-    if (results && (results.association_results || results.raw_backend_results)) {
-      return results;
-    }
-    if (isSimulated) {
-      const benchmark = generateBenchmarkResults(configParams, uploadSummary);
-      setResults(benchmark);
-      return benchmark;
-    }
-    return results || null;
-  }, [results, configParams, uploadSummary, setResults, isSimulated]);
+  const activeResults = results || null;
 
   const rawBackend = activeResults?.raw_backend_results || {};
   const qc = activeResults?.summary?.qc || rawBackend?.qc || {};
@@ -76,15 +68,33 @@ export default function Step4Results({ analysisId, onNavigateStep }) {
   const topSnps = activeResults?.top_snps || [];
   const summary = activeResults?.summary || {};
   const qqData = activeResults?.qq_data || [];
-  const threshold = summary.neg_log10_threshold || 3.98;
+  const hasThreshold =
+    summary.neg_log10_threshold !== null &&
+    summary.neg_log10_threshold !== undefined &&
+    !isNaN(Number(summary.neg_log10_threshold));
+  const threshold = hasThreshold ? Number(summary.neg_log10_threshold) : 0;
 
-  // Penyelarasan hitungan sampel & SNP (Evaluasi Tester Poin 19)
-  const rawSampelLolos = qc.sampel_lolos ?? summary.samples_passed_qc ?? 39;
-  const rawSampelTotal = qc.sampel_total ?? summary.total_samples_analyzed ?? uploadSummary?.genotipe?.jumlah_sampel ?? 40;
-  const displaySampelTotal = Math.max(Number(rawSampelTotal) || 40, Number(rawSampelLolos) || 39);
-  const displaySampelLolos = Math.min(Number(rawSampelLolos) || 39, displaySampelTotal);
+  // Penyelarasan hitungan sampel & SNP dari backend nyata
+  const rawSampelLolos = qc.sampel_lolos ?? summary.samples_passed_qc ?? null;
+  const rawSampelTotal =
+    qc.sampel_awal ??
+    qc.sampel_total ??
+    summary.total_samples_analyzed ??
+    uploadSummary?.genotipe?.jumlah_sampel ??
+    rawSampelLolos;
+  const displaySampelTotal =
+    rawSampelTotal !== null
+      ? Math.max(Number(rawSampelTotal), Number(rawSampelLolos ?? 0))
+      : '—';
+  const displaySampelLolos =
+    rawSampelLolos !== null
+      ? Math.min(Number(rawSampelLolos), Number(displaySampelTotal) || Number(rawSampelLolos))
+      : '—';
 
-  const displaySnpsLolos = (qc.snp_lolos ?? summary.snps_passed_qc ?? (snps.length > 0 ? snps.length : 491));
+  const rawSnpsLolos = qc.snp_lolos ?? summary.snps_passed_qc ?? (snps.length > 0 ? snps.length : null);
+  const displaySnpsLolos = rawSnpsLolos;
+  const rawLambdaGc = asosiasi.lambda_gc ?? summary.lambda_gc ?? null;
+  const hasLambdaGc = rawLambdaGc !== null && rawLambdaGc !== undefined && !isNaN(Number(rawLambdaGc));
 
   const detailCardRef = useRef(null);
 
@@ -164,7 +174,7 @@ export default function Step4Results({ analysisId, onNavigateStep }) {
     }
   }
 
-  if (isLoadingBackend || (!activeResults && !fetchError)) {
+  if (isLoadingBackend) {
     return (
       <div className="flex min-h-[40vh] flex-col items-center justify-center p-8 space-y-3">
         <Loader2 className="h-8 w-8 animate-spin text-[#06B6D4]" />
@@ -175,14 +185,23 @@ export default function Step4Results({ analysisId, onNavigateStep }) {
     );
   }
 
+  if (fetchError && !activeResults) {
+    return (
+      <div className="space-y-4 py-6">
+        <ErrorMessageArea error={fetchError} />
+        <button
+          type="button"
+          onClick={() => onNavigateStep?.(3)}
+          className="figma-btn-secondary"
+        >
+          Kembali ke Komputasi Pipeline (Langkah 3)
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* ── Banner Mode Simulasi (Poin #2) ── */}
-      {isSimulated && (
-        <div className="rounded-2xl border-2 border-amber-500 bg-amber-400/20 text-amber-950 dark:text-amber-200 p-4 text-center font-bold text-sm sm:text-base shadow-lg animate-pulse flex items-center justify-center gap-2">
-          <span>⚠️ MODE SIMULASI — Bukan hasil analisis asli (Backend tidak terhubung)</span>
-        </div>
-      )}
 
       {/* ── Sub-Navigasi Cepat Pasca-Komputasi (Figma Style) ── */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 dark:border-white/10 pb-4">
@@ -226,10 +245,10 @@ export default function Step4Results({ analysisId, onNavigateStep }) {
         <div className="glass-subcard p-3.5 space-y-1">
           <span className="text-xs font-sans font-bold text-slate-800 dark:text-slate-200 block uppercase tracking-wider">Model Asosiasi</span>
           <span className="font-serif text-lg font-bold text-slate-900 dark:text-white block">
-            {asosiasi.model || summary.model || configParams.model || 'MLM'}
+            {asosiasi.model || summary.model || configParams.model || '—'}
           </span>
           <span className="text-[11px] text-slate-600 dark:text-slate-400 block truncate font-sans font-medium" title="Model regresi asosiasi genomik">
-            Sifat: {asosiasi.trait || summary.trait || configParams.trait || 'bobot_umbi'}
+            Sifat: {asosiasi.trait || summary.trait || configParams.trait || '—'}
           </span>
         </div>
 
@@ -246,20 +265,20 @@ export default function Step4Results({ analysisId, onNavigateStep }) {
         <div className="glass-subcard p-3.5 space-y-1">
           <span className="text-xs font-sans font-bold text-slate-800 dark:text-slate-200 block uppercase tracking-wider">SNP Lolos QC</span>
           <span className="font-serif text-lg font-bold text-slate-900 dark:text-white tabular-nums block">
-            {Number(displaySnpsLolos).toLocaleString('id-ID')}
+            {displaySnpsLolos !== null ? Number(displaySnpsLolos).toLocaleString('id-ID') : '—'}
           </span>
           <span className="text-[11px] text-slate-600 dark:text-slate-400 block font-sans font-medium" title="Varian penanda lolos MAF & missingness">
-            Teruji pada 8 Kromosom
+            Teruji pada {summary.chromosome_count || '—'} Kromosom
           </span>
         </div>
 
         <div className="glass-subcard p-3.5 space-y-1">
           <span className="text-xs font-sans font-bold text-slate-800 dark:text-slate-200 block uppercase tracking-wider">Ambang Signifikansi</span>
           <span className="font-serif text-lg font-bold text-[#0284C7] dark:text-[#06B6D4] tabular-nums block">
-            -log₁₀P = {threshold.toFixed(2)}
+            {hasThreshold ? `-log₁₀P = ${threshold.toFixed(2)}` : '—'}
           </span>
           <span className="text-[11px] text-slate-600 dark:text-slate-400 block font-mono font-bold" title="Batas statistik p-value setelah koreksi multiple testing">
-            p &lt; {summary.bonferroni_threshold ? (Number(summary.bonferroni_threshold) < 0.001 ? Number(summary.bonferroni_threshold).toExponential(2) : Number(summary.bonferroni_threshold).toFixed(5)) : '1.02e-4'}
+            p &lt; {summary.bonferroni_threshold ? (Number(summary.bonferroni_threshold) < 0.001 ? Number(summary.bonferroni_threshold).toExponential(2) : Number(summary.bonferroni_threshold).toFixed(5)) : '—'}
           </span>
         </div>
 
@@ -276,10 +295,10 @@ export default function Step4Results({ analysisId, onNavigateStep }) {
         <div className="glass-subcard p-3.5 space-y-1">
           <span className="text-xs font-sans font-bold text-slate-800 dark:text-slate-200 block uppercase tracking-wider">Inflasi Genomik (λ)</span>
           <span className="font-serif text-lg font-bold text-slate-900 dark:text-white tabular-nums block">
-            {Number(asosiasi.lambda_gc ?? summary.lambda_gc ?? 1.031).toFixed(3)}
+            {hasLambdaGc ? Number(rawLambdaGc).toFixed(3) : '—'}
           </span>
           <span className="text-[11px] text-emerald-700 dark:text-emerald-400 block font-sans font-bold" title="Terkontrol (λ ≤ 1.05) — Ketiadaan bias stratifikasi">
-            {Number(asosiasi.lambda_gc ?? summary.lambda_gc ?? 1.031) <= 1.05 ? 'Terkontrol (≤ 1.05)' : 'Inflasi Moderat'}
+            {hasLambdaGc ? (Number(rawLambdaGc) <= 1.05 ? 'Terkontrol (≤ 1.05)' : 'Inflasi Moderat') : '—'}
           </span>
         </div>
       </div>
@@ -336,11 +355,10 @@ export default function Step4Results({ analysisId, onNavigateStep }) {
           </div>
         ) : (
           <div>
-            <QQPlot qqData={qqData} lambdaGc={summary.lambda_gc || 1.024} />
+            <QQPlot qqData={qqData} lambdaGc={hasLambdaGc ? Number(rawLambdaGc) : null} />
             <p className="mt-2 text-xs sm:text-[13px] text-slate-700 dark:text-slate-300 font-medium">
               QQ Plot membandingkan distribusi p-value observasi dengan ekspektasi teoritis (null
-              hypothesis). Nilai lambda GC = {summary.lambda_gc || 1.024} menunjukkan tidak adanya
-              inflasi populasi palsu.
+              hypothesis).{hasLambdaGc ? ` Nilai lambda GC = ${Number(rawLambdaGc).toFixed(4)}.` : ''}
             </p>
           </div>
         )}

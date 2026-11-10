@@ -11,6 +11,7 @@ import {
   Calendar,
   Loader2,
   FileText,
+  Trash2,
 } from 'lucide-react';
 import { analysisService } from '../services/analysisService.js';
 import { ANALYSIS_STATUSES } from '../constants/defaultParams.js';
@@ -26,6 +27,7 @@ export default function HistoryPage() {
 
   const [analyses, setAnalyses] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [deletingId, setDeletingId] = useState(null);
   const [error, setError] = useState(null);
   const [isAccessDenied, setIsAccessDenied] = useState(false);
 
@@ -55,6 +57,26 @@ export default function HistoryPage() {
   useEffect(() => {
     loadHistory();
   }, []);
+
+  async function handleDeleteAnalysis(item) {
+    const label = item.analysis_name || `#${item.analysis_id}`;
+    if (
+      typeof window !== 'undefined' &&
+      !window.confirm(`Hapus permanen sesi analisis #${item.analysis_id} ("${label}") beserta berkasnya?`)
+    ) {
+      return;
+    }
+    setDeletingId(item.analysis_id);
+    setError(null);
+    try {
+      await analysisService.deleteAnalysis(item.analysis_id);
+      setAnalyses((prev) => prev.filter((a) => a.analysis_id !== item.analysis_id));
+    } catch (err) {
+      setError(err);
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   // Filter data berdasarkan search query & status
   const filteredAnalyses = useMemo(() => {
@@ -266,14 +288,35 @@ export default function HistoryPage() {
 
                       {/* Tombol Aksi */}
                       <td className="py-3.5 px-4 text-right">
-                        <button
-                          type="button"
-                          onClick={() => navigate(`/analyses/${item.analysis_id}`)}
-                          className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 dark:border-white/10 bg-white/90 dark:bg-[#162142] px-3.5 py-1.5 text-xs font-bold text-slate-800 dark:text-slate-200 hover:border-[#0284C7] hover:text-[#0284C7] dark:hover:text-white hover:bg-slate-100 dark:hover:bg-[#1E2C58] hover:-translate-y-[1px] active:scale-[0.97] transition-all duration-100 shadow-sm"
-                        >
-                          <span>Buka Analisis</span>
-                          <ArrowRight className="h-3.5 w-3.5" />
-                        </button>
+                        <div className="inline-flex items-center justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => navigate(`/analyses/${item.analysis_id}`)}
+                            className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 dark:border-white/10 bg-white/90 dark:bg-[#162142] px-3.5 py-1.5 text-xs font-bold text-slate-800 dark:text-slate-200 hover:border-[#0284C7] hover:text-[#0284C7] dark:hover:text-white hover:bg-slate-100 dark:hover:bg-[#1E2C58] hover:-translate-y-[1px] active:scale-[0.97] transition-all duration-100 shadow-sm cursor-pointer"
+                          >
+                            <span>Buka Analisis</span>
+                            <ArrowRight className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            disabled={
+                              deletingId === item.analysis_id ||
+                              ['antre', 'berjalan', 'pending', 'running'].includes(
+                                String(item.status || '').toLowerCase()
+                              )
+                            }
+                            onClick={() => handleDeleteAnalysis(item)}
+                            title="Hapus Sesi Analisis"
+                            aria-label={`Hapus sesi #${item.analysis_id}`}
+                            className="inline-flex items-center justify-center rounded-full border border-rose-200 dark:border-rose-500/30 bg-rose-50 dark:bg-rose-500/10 p-2 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-500/20 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
+                          >
+                            {deletingId === item.analysis_id ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-3.5 w-3.5" />
+                            )}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );

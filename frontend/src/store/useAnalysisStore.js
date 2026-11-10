@@ -1,42 +1,44 @@
 /**
  * Analysis Wizard Store GWASena 2.0
- * Acuan: docs/gwasena-v2/USER_FLOW.md & API_INTEGRATION.md
+ * Berjalan 100% menggunakan alur API nyata tanpa fallback ke mode simulasi/mock.
  */
 
 import { create } from 'zustand';
 import { DEFAULT_ANALYSIS_CONFIG } from '../constants/defaultParams.js';
-import { generateBenchmarkResults } from '../services/mockResults.js';
 import { analysisService } from '../services/analysisService.js';
 
-export const MOCK_GARLIC_DATASET_SUMMARY = {
-  status: 'valid',
-  pesan: 'Validasi dataset berhasil! 100% Sample ID cocok (40 sampel lolos).',
-  genotipe: {
-    nama_berkas: 'genotipe_bawang_putih_mini.vcf',
-    format: 'VCF v4.2',
-    jumlah_sampel: 40,
-    jumlah_snp: 500,
-    varian_dilewati: { multialelik: 0 },
-  },
-  fenotipe: {
-    nama_berkas: 'fenotipe_bawang_putih_mini.csv',
-    jumlah_sampel: 40,
-    varietas_tercatat: 40,
-    sifat_tersedia: ['bobot_umbi_g', 'diameter_umbi_mm', 'jumlah_siung'],
-  },
-  kecocokan_sample_id: {
-    persentase_kecocokan: 100,
-    jumlah_sampel_cocok: 40,
-    status: 'cocok',
-  },
-  integritas: {
-    kesamaan_sampel: '100%',
-    sampel_cocok: 40,
-    kelengkapan: '100%',
-    vcf_valid: true,
-    csv_valid: true,
-  },
-  simulated: true,
+const isLockedStatus = (status) => {
+  const s = String(status || '').toLowerCase();
+  return s === 'antre' || s === 'berjalan' || s === 'pending' || s === 'running';
+};
+
+const isSummaryValid = (uploadSummary) => {
+  if (!uploadSummary) return false;
+  if (uploadSummary.validation && uploadSummary.validation.is_valid === false) return false;
+  if (uploadSummary.validation && uploadSummary.validation.sample_match === false) return false;
+  const matchStatus = uploadSummary.kecocokan_sample_id?.status;
+  if (matchStatus && String(matchStatus).toLowerCase() !== 'cocok') return false;
+  const st = String(uploadSummary.status || '').toLowerCase();
+  return Boolean(
+    uploadSummary.validation?.is_valid ||
+      st === 'tervalidasi' ||
+      st === 'success' ||
+      matchStatus === 'cocok'
+  );
+};
+
+const isValidatedUpload = (uploadSummary, analysis) => {
+  if (uploadSummary) {
+    if (uploadSummary.validation && uploadSummary.validation.is_valid === false) return false;
+    if (uploadSummary.validation && uploadSummary.validation.sample_match === false) return false;
+    const matchStatus = uploadSummary.kecocokan_sample_id?.status;
+    if (matchStatus && String(matchStatus).toLowerCase() !== 'cocok') return false;
+  }
+  const s = String(analysis?.status || '').toLowerCase();
+  if (s === 'tervalidasi' || s === 'antre' || s === 'berjalan' || s === 'selesai' || s === 'completed' || s === 'running' || s === 'pending') {
+    return true;
+  }
+  return isSummaryValid(uploadSummary);
 };
 
 export const useAnalysisStore = create((set, get) => ({
@@ -46,87 +48,130 @@ export const useAnalysisStore = create((set, get) => ({
   configParams: { ...DEFAULT_ANALYSIS_CONFIG },
   jobStatus: null,
   results: null,
-  isSimulated: false, // Mode Pratinjau UI jika backend 501 / tanpa backend
+  isSimulated: false,
   isLoading: false,
   error: null,
 
-  // State simulasi komputasi Step 3
   computationStage: 1,
   isComputing: false,
   isCompleted: false,
   isFailed: false,
-  simulationTimeoutIds: [],
 
-  setActiveStep: (step) => set({ activeStep: Math.min(Math.max(step, 1), 6) }),
+  /**
+   * State Guard navigasi langkah wizard (BR-01, BR-02, BR-05, AC-10.1)
+   */
+  setActiveStep: (step) => {
+    const target = Math.min(Math.max(step, 1), 6);
+    const { isComputing, currentAnalysis, uploadSummary, activeStep } = get();
 
-  setCurrentAnalysis: (analysis) => {
-    set({ currentAnalysis: analysis });
-    // Sinkronkan activeStep berdasarkan status sesi jika ada,
-    // asalkan tidak sedang dalam simulasi komputasi aktif
-    if (!get().isSimulated && !get().isComputing && analysis?.status) {
-      const status = analysis.status;
-      if (status === 'draft') set({ activeStep: 1 });
-      else if (status === 'tervalidasi') set({ activeStep: 2 });
-      else if (status === 'antre' || status === 'berjalan') {
-        if (get().activeStep < 3) set({ activeStep: 3 });
-      } else if (status === 'selesai') {
-        if (get().activeStep < 4) set({ activeStep: 4 });
+    // BR-05 / AC-10.1: Kunci perubahan langkah saat komputasi aktif (PENDING / RUNNING)
+    if ((isComputing || isLockedStatus(currentAnalysis?.status)) && target !== 3) {
+      return activeStep;
+    }
+
+    // BR-01 / BR-02: Dilarang melompat ke Langkah >= 2 bila dataset belum tervalidasi / Sample ID tidak cocok
+    if (target >= 2 && !isValidatedUpload(uploadSummary, currentAnalysis)) {
+      return activeStep;
+    }
+
+    // Dilarang melompat ke Langkah >= 4 bila analisis belum selesai
+    const s = String(currentAnalysis?.status || '').toLowerCase();
+    if (target >= 4 && s !== 'selesai' && s !== 'completed' && s !== 'success' && !get().isCompleted) {
+      return activeStep;
+    }
+
+    set({ activeStep: target });
+    return target;
+  },
+
+  setCurrentAnalysis: (analysis, options = {}) => {
+    const { preserveStep = false } = options;
+    set({ currentAnalysis: analysis, isSimulated: false });
+    if (analysis?.status) {
+      const status = String(analysis.status).toLowerCase();
+      if (status === 'draft') {
+        set({
+          ...(preserveStep ? {} : { activeStep: 1 }),
+          isComputing: false,
+          isCompleted: false,
+          isFailed: false,
+        });
+      } else if (status === 'tervalidasi') {
+        if (!preserveStep && get().activeStep < 2) set({ activeStep: 2 });
+        set({ isComputing: false, isCompleted: false });
+      } else if (status === 'antre' || status === 'berjalan' || status === 'pending' || status === 'running') {
+        set({ activeStep: 3, isComputing: true, isCompleted: false, isFailed: false });
+      } else if (status === 'selesai' || status === 'completed' || status === 'success') {
+        set({ isComputing: false, isCompleted: true, isFailed: false });
+        if (!preserveStep && get().activeStep < 4) set({ activeStep: 4 });
+      } else if (status === 'gagal' || status === 'failed') {
+        set({
+          ...(preserveStep ? {} : { activeStep: 3 }),
+          isComputing: false,
+          isCompleted: false,
+          isFailed: true,
+        });
       }
     }
   },
 
   setUploadSummary: (summary) =>
-    set((state) => ({
-      uploadSummary: summary,
-      isSimulated: summary?.simulated ? true : false,
-      currentAnalysis: {
-        ...(state.currentAnalysis || {
-          id: 'sim-benchmark-01',
-          analysis_name: 'Simulasi GWAS Benchmark Cohort',
-          organism: 'Genomic Reference Cohort',
-        }),
-        status: summary ? 'tervalidasi' : state.currentAnalysis?.status || 'draft',
-        sifat_tersedia:
-          summary?.fenotipe?.daftar_sifat ||
-          summary?.fenotipe?.sifat_tersedia ||
-          state.currentAnalysis?.sifat_tersedia ||
-          ['trait_yield', 'disease_resistance', 'plant_height'],
-      },
-    })),
-
-  // Memuat data contoh benchmark secara instan 1-klik
-  loadMockGarlicDataset: () => {
-    const summary = { ...MOCK_GARLIC_DATASET_SUMMARY };
-    set((state) => ({
-      uploadSummary: summary,
-      isSimulated: true,
-      currentAnalysis: {
-        ...(state.currentAnalysis || {
-          id: 'sim-benchmark-01',
-          analysis_name: 'Simulasi GWAS Benchmark Cohort',
-          organism: 'Genomic Reference Cohort',
-        }),
-        status: 'tervalidasi',
-        sifat_tersedia: summary.fenotipe.sifat_tersedia,
-      },
-    }));
-    return summary;
-  },
+    set((state) => {
+      const valid = isSummaryValid(summary);
+      return {
+        uploadSummary: summary,
+        isSimulated: false,
+        currentAnalysis: state.currentAnalysis
+          ? {
+              ...state.currentAnalysis,
+              status: valid ? 'tervalidasi' : state.currentAnalysis.status,
+              sifat_tersedia:
+                summary?.sifat_tersedia ||
+                summary?.fenotipe?.daftar_sifat ||
+                summary?.fenotipe?.sifat_tersedia ||
+                state.currentAnalysis.sifat_tersedia ||
+                [],
+            }
+          : summary?.analysis_id
+          ? {
+              analysis_id: summary.analysis_id,
+              id: summary.analysis_id,
+              analysis_name: 'Analisis GWAS',
+              status: valid ? 'tervalidasi' : 'draft',
+              sifat_tersedia: summary?.sifat_tersedia || summary?.fenotipe?.sifat_tersedia || [],
+            }
+          : null,
+      };
+    }),
 
   setConfigParams: (params) =>
-    set((state) => ({
-      configParams: typeof params === 'function' ? params(state.configParams) : { ...state.configParams, ...params },
-    })),
+    set((state) => {
+      // Kunci perubahan parameter selama status komputasi RUNNING / ANTRE (BR-05)
+      if (state.isComputing || isLockedStatus(state.currentAnalysis?.status)) {
+        return state;
+      }
+      const next =
+        typeof params === 'function' ? params(state.configParams) : { ...state.configParams, ...params };
+      // BR-03: Pastikan model tunggal (GLM atau MLM) dan PCA otomatis selalu aktif
+      const validModel = next.model === 'MLM' ? 'MLM' : 'GLM';
+      return {
+        configParams: {
+          ...next,
+          model: validModel,
+          n_pc: 3,
+        },
+      };
+    }),
 
   setJobStatus: (status) => set({ jobStatus: status }),
 
   setResults: (results) =>
     set({
       results,
-      isSimulated: results?.is_simulated ? true : false,
+      isSimulated: false,
     }),
 
-  setIsSimulated: (val) => set({ isSimulated: val }),
+  setIsSimulated: () => set({ isSimulated: false }),
 
   setLoading: (isLoading) => set({ isLoading }),
 
@@ -136,123 +181,50 @@ export const useAnalysisStore = create((set, get) => ({
 
   setComputationStage: (computationStage) => set({ computationStage }),
 
-  // Memulai simulasi progres 4 tahap otomatis hingga selesai ke Step 4
-  startSimulation: (options = {}) => {
-    const { speedMultiplier = 1, onComplete } = options;
+  /**
+   * Eksekusi parameter & pipeline nyata ke backend.
+   * Jika terjadi galat apa pun (4xx, 5xx, network error), error dilempar tanpa simulasi palsu.
+   */
+  runAnalysis: async (analysisId, payload) => {
+    if (!analysisId) {
+      throw new Error('ID sesi analisis tidak ditemukan. Inisiasi sesi dari Dashboard terlebih dahulu.');
+    }
 
-    // Bersihkan timer sebelumnya jika ada
-    const currentTimers = get().simulationTimeoutIds || [];
-    currentTimers.forEach(clearTimeout);
-
-    // Inisialisasi awal simulasi di Step 3
-    set({
-      isSimulated: true,
-      isComputing: true,
-      isCompleted: false,
-      isFailed: false,
-      computationStage: 1,
-      activeStep: 3,
-      error: null,
-      currentAnalysis: {
-        ...(get().currentAnalysis || {
-          id: 'sim-benchmark-01',
-          analysis_name: 'Simulasi GWAS Benchmark Cohort',
-          organism: 'Genomic Reference Cohort',
-        }),
-        status: 'berjalan',
-      },
-    });
-
-    const t1 = setTimeout(() => {
-      set({ computationStage: 2 });
-    }, 1300 * speedMultiplier);
-
-    const t2 = setTimeout(() => {
-      set({ computationStage: 3 });
-    }, 2600 * speedMultiplier);
-
-    const t3 = setTimeout(() => {
-      set({ computationStage: 4 });
-    }, 3900 * speedMultiplier);
-
-    const t4 = setTimeout(() => {
-      const mockResults = generateBenchmarkResults(get().configParams, get().uploadSummary);
+    if (payload) {
+      const validModel = payload.model === 'MLM' ? 'MLM' : 'GLM';
       set({
-        results: mockResults,
-        isComputing: false,
-        isCompleted: true,
-        isFailed: false,
-        computationStage: 4,
-        currentAnalysis: {
-          ...(get().currentAnalysis || {}),
-          status: 'selesai',
+        configParams: {
+          ...payload,
+          model: validModel,
+          n_pc: 3,
         },
       });
-      if (typeof onComplete === 'function') onComplete();
-    }, 5200 * speedMultiplier);
-
-    // Otomatis selesai dan lanjut ke Step 4 (Hasil Analisis & Visualisasi Plot)
-    const t5 = setTimeout(() => {
-      set({ activeStep: 4 });
-    }, 6500 * speedMultiplier);
-
-    set({ simulationTimeoutIds: [t1, t2, t3, t4, t5] });
-  },
-
-  // Jalankan analisis dengan fallback HANYA jika terjadi Network Error murni atau HTTP 501
-  runAnalysis: async (analysisId, payload, options = {}) => {
-    if (payload) {
-      get().setConfigParams(payload);
     }
     const currentPayload = payload || get().configParams;
 
-    if (analysisId) {
-      try {
-        await analysisService.saveParameters(analysisId, currentPayload);
-        const res = await analysisService.runAnalysis(analysisId);
-        set({
-          activeStep: 3,
-          isSimulated: false,
-          isComputing: true,
-          isCompleted: false,
-          isFailed: false,
-          jobStatus: res?.status || 'berjalan',
-          currentAnalysis: {
-            ...(get().currentAnalysis || {}),
-            status: 'berjalan',
-          },
-        });
-        return res;
-      } catch (err) {
-        const isNetworkError = !err.status || err.status === 0 || err.code === 'ERR_NETWORK';
-        const is501 = err.status === 501;
+    await analysisService.saveParameters(analysisId, {
+      ...currentPayload,
+      n_pc: 3,
+    });
+    const res = await analysisService.runAnalysis(analysisId);
 
-        if (isNetworkError || is501) {
-          console.warn('Backend tidak tersedia (Network Error / 501), menjalankan mock simulation:', err);
-          get().startSimulation(options);
-          return { simulated: true };
-        }
-
-        // Error 4xx / 500 dari backend: DILARANG PINDAH SIMULASI & DILARANG PINDAH LANGKAH!
-        console.error('Eksekusi parameter/analisis ditolak backend:', err);
-        throw err;
-      }
-    }
-
-    // Jika tanpa analysisId (sesi demo murni tanpa database): jalankan mock simulation
-    get().startSimulation(options);
-    return { simulated: true };
+    set({
+      activeStep: 3,
+      isSimulated: false,
+      isComputing: true,
+      isCompleted: false,
+      isFailed: false,
+      error: null,
+      jobStatus: res?.status || 'antre',
+      currentAnalysis: {
+        ...(get().currentAnalysis || {}),
+        status: res?.status || 'antre',
+      },
+    });
+    return res;
   },
 
-  stopSimulation: () => {
-    const currentTimers = get().simulationTimeoutIds || [];
-    currentTimers.forEach(clearTimeout);
-    set({ isComputing: false, simulationTimeoutIds: [] });
-  },
-
-  reset: () => {
-    const currentTimers = get().simulationTimeoutIds || [];
-    currentTimers.forEach(clearTimeout);
+  reset: () =>
     set({
       activeStep: 1,
       currentAnalysis: null,
@@ -267,7 +239,5 @@ export const useAnalysisStore = create((set, get) => ({
       isComputing: false,
       isCompleted: false,
       isFailed: false,
-      simulationTimeoutIds: [],
-    });
-  },
+    }),
 }));

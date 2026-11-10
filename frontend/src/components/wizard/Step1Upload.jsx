@@ -16,10 +16,10 @@ import {
   EyeOff,
   Table,
   Download,
+  AlertTriangle,
 } from 'lucide-react';
 import { analysisService } from '../../services/analysisService.js';
-import { useAnalysisStore, MOCK_GARLIC_DATASET_SUMMARY } from '../../store/useAnalysisStore.js';
-import { getExampleDatasetFiles, getExamplePlinkFiles } from '../../services/exampleDataset.js';
+import { useAnalysisStore } from '../../store/useAnalysisStore.js';
 import ErrorMessageArea from '../common/ErrorMessageArea.jsx';
 
 /**
@@ -31,9 +31,7 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
   const {
     setActiveStep,
     setUploadSummary,
-    setIsSimulated,
     uploadSummary,
-    loadMockGarlicDataset,
   } = useAnalysisStore();
 
   const [loadingBenchmarkMode, setLoadingBenchmarkMode] = useState(null);
@@ -93,7 +91,7 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
       return;
     }
 
-    if (name.endsWith('.vcf') || name.endsWith('.vcf.gz') || name.endsWith('.gz')) {
+    if (name.endsWith('.vcf') || name.endsWith('.vcf.gz')) {
       setFormatMode('vcf');
       setGenotypeFile(file);
       setError(null);
@@ -224,11 +222,14 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
 
       setUploadResult(res);
       setUploadSummary(res);
-      setIsSimulated(false);
       setError(null);
 
       // Auto-naming sinkronisasi jika nama sesi diawali kosong
-      if (typeof window !== 'undefined' && localStorage.getItem(`gwasena_auto_name_${analysisId}`) === 'true') {
+      if (
+        typeof window !== 'undefined' &&
+        (localStorage.getItem(`gwasena_auto_name_${analysisId}`) === 'true' ||
+          (newAnalysisId && localStorage.getItem(`gwasena_auto_name_${newAnalysisId}`) === 'true'))
+      ) {
         const cur = useAnalysisStore.getState().currentAnalysis;
         if (cur) {
           useAnalysisStore.getState().setCurrentAnalysis({
@@ -240,62 +241,12 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
 
       onUploadSuccess?.(res);
     } catch (err) {
-      console.warn('Gagal memuat benchmark dari backend, memeriksa fallback offline:', err);
-      const isNetworkError = !err.status || err.status === 0 || err.code === 'ERR_NETWORK' || err.status === 501;
-
-      if (isNetworkError) {
-        try {
-          if (mode === 'plink') {
-            const { bedFile, bimFile: bFile, famFile: fFile, csvFile } = await getExamplePlinkFiles();
-            setFormatMode('plink');
-            setGenotypeFile(bedFile);
-            setBimFile(bFile);
-            setFamFile(fFile);
-            setPhenotypeFile(csvFile);
-
-            const mockSummary = {
-              ...MOCK_GARLIC_DATASET_SUMMARY,
-              genotipe: {
-                nama_berkas: 'genotipe_bawang_putih_mini.bed',
-                format: 'PLINK biner',
-                jumlah_sampel: 40,
-                jumlah_snp: 500,
-                varian_dilewati: { multialelik: 0 },
-              },
-            };
-            setUploadResult(mockSummary);
-            setUploadSummary(mockSummary);
-            setIsSimulated(true);
-            onUploadSuccess?.(mockSummary);
-          } else {
-            const { vcfFile, csvFile } = await getExampleDatasetFiles();
-            setFormatMode('vcf');
-            setGenotypeFile(vcfFile);
-            setBimFile(null);
-            setFamFile(null);
-            setPhenotypeFile(csvFile);
-
-            const mockSummary = loadMockGarlicDataset
-              ? loadMockGarlicDataset()
-              : { ...MOCK_GARLIC_DATASET_SUMMARY };
-
-            setUploadResult(mockSummary);
-            setUploadSummary(mockSummary);
-            setIsSimulated(true);
-            onUploadSuccess?.(mockSummary);
-          }
-        } catch (fErr) {
-          setError({
-            message: 'Gagal memuat dataset contoh.',
-            details: [fErr.message || String(fErr)],
-          });
-        }
-      } else {
-        setError({
-          message: err.message || err.pesan || 'Gagal memuat dataset benchmark.',
-          details: err.details || err.rincian || [],
-        });
-      }
+      console.error('Gagal memuat dataset benchmark dari server:', err);
+      setError({
+        message: err?.message || err?.pesan || 'Gagal memuat dataset benchmark dari server.',
+        details: err?.details || err?.rincian || [],
+      });
+      setUploadResult(null);
     } finally {
       setLoadingBenchmarkMode(null);
       setIsUploading(false);
@@ -325,6 +276,37 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
       }
     }
 
+    // Validasi ekstensi sisi klien sebelum mengirimkan upload ke backend (TC-02)
+    const genoNameLower = (genotypeFile?.name || '').toLowerCase();
+    const phenoNameLower = (phenotypeFile?.name || '').toLowerCase();
+    const extErrors = [];
+    if (formatMode === 'plink') {
+      if (!genoNameLower.endsWith('.bed')) {
+        extErrors.push(`Berkas '${genotypeFile?.name}' harus berekstensi .bed.`);
+      }
+      if (!bimFile?.name?.toLowerCase().endsWith('.bim')) {
+        extErrors.push(`Berkas '${bimFile?.name}' harus berekstensi .bim.`);
+      }
+      if (!famFile?.name?.toLowerCase().endsWith('.fam')) {
+        extErrors.push(`Berkas '${famFile?.name}' harus berekstensi .fam.`);
+      }
+    } else {
+      if (!genoNameLower.endsWith('.vcf') && !genoNameLower.endsWith('.vcf.gz')) {
+        extErrors.push(`Berkas '${genotypeFile?.name}' harus berformat .vcf atau .vcf.gz.`);
+      }
+    }
+    if (!phenoNameLower.endsWith('.csv')) {
+      extErrors.push(`Berkas '${phenotypeFile?.name}' harus berformat .csv teks tabular.`);
+    }
+    if (extErrors.length > 0) {
+      setError({
+        message: 'Format berkas tidak valid. Periksa kembali ekstensi berkas Anda.',
+        details: extErrors,
+      });
+      setUploadResult(null);
+      return;
+    }
+
     setIsUploading(true);
     setError(null);
 
@@ -340,7 +322,6 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
       const res = await analysisService.uploadDataset(analysisId, formData);
       setUploadResult(res);
       setUploadSummary(res);
-      setIsSimulated(false);
 
       // Auto-naming sinkronisasi jika nama sesi diawali kosong
       if (typeof window !== 'undefined' && localStorage.getItem(`gwasena_auto_name_${analysisId}`) === 'true') {
@@ -357,75 +338,50 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
 
       onUploadSuccess?.(res);
     } catch (err) {
-      const isNetworkError = !err.status || err.status === 0 || err.code === 'ERR_NETWORK';
-      const is501 = err.status === 501;
-
-      if (isNetworkError || is501) {
-        // Auto-Mock / Fallback Offline jika backend offline atau terjadi network error
-        console.warn('Backend upload tidak merespons (Network / 501), mengaktifkan simulasi validasi lokal:', err);
-
-        const fallbackResult = {
-          status: 'valid',
-          pesan: 'Validasi simulasi lokal berhasil (Backend Offline). 100% Sample ID cocok.',
-          genotipe: {
-            nama_berkas: genotypeFile.name || 'garlic_sample.vcf',
-            format: 'VCF v4.2',
-            jumlah_sampel: 25,
-            jumlah_snp: 500,
-            varian_dilewati: { multialelik: 12 },
-          },
-          fenotipe: {
-            nama_berkas: phenotypeFile.name || 'phenotype_sample.csv',
-            jumlah_sampel: 25,
-            varietas_tercatat: 25,
-            sifat_tersedia: ['bobot_umbi_g', 'diameter_umbi_mm', 'jumlah_siung'],
-          },
-          kecocokan_sample_id: {
-            persentase_kecocokan: 100,
-            jumlah_sampel_cocok: 25,
-            status: 'cocok',
-          },
-          integritas: {
-            kesamaan_sampel: '100%',
-            sampel_cocok: 25,
-            kelengkapan: '100%',
-            vcf_valid: true,
-            csv_valid: true,
-          },
-          simulated: true,
-        };
-
-        setUploadResult(fallbackResult);
-        setIsSimulated(true);
-        setUploadSummary(fallbackResult);
-        onUploadSuccess?.(fallbackResult);
-      } else {
-        // Error 4xx / 500 dari Backend: DILARANG PINDAH SIMULASI & DILARANG PINDAH LANGKAH!
-        console.error('Validasi berkas ditolak backend (HTTP ' + err.status + '):', err);
-        setError({
-          message: err.message || err.pesan || 'Validasi berkas gagal.',
-          details: err.details || err.rincian || [],
-        });
-        setUploadResult(null);
-      }
+      console.error('Validasi berkas gagal atau ditolak server:', err);
+      setError({
+        message: err?.message || err?.pesan || 'Validasi berkas gagal diproses oleh server.',
+        details: err?.details || err?.rincian || [],
+      });
+      setUploadResult(null);
     } finally {
       setIsUploading(false);
     }
   };
 
-  // Navigasi cepat langsung ke Step 2 tanpa delay/loading lama
+  const isReadyToProceed = Boolean(
+    uploadResult &&
+      !error &&
+      uploadResult?.validation?.is_valid !== false &&
+      uploadResult?.validation?.sample_match !== false &&
+      (!uploadResult?.kecocokan_sample_id?.status ||
+        String(uploadResult.kecocokan_sample_id.status).toLowerCase() === 'cocok')
+  );
+
+  // State Guard 1: hanya izinkan lanjut ke Langkah 2 bila berkas tervalidasi & Sample ID cocok
   const handleProceedToStep2 = () => {
+    if (!isReadyToProceed) {
+      setError({
+        message: 'Belum dapat melanjutkan ke konfigurasi QC.',
+        details: ['Selesaikan unggah & validasi berkas hingga Sample ID dinyatakan cocok terlebih dahulu.'],
+      });
+      return;
+    }
     setActiveStep(2);
     onNext?.();
   };
 
   const handleDownloadBenchmarkZip = async (format = 'all') => {
     setIsDownloadingZip(true);
+    setError(null);
     try {
       await analysisService.downloadBenchmarkZip(format);
     } catch (err) {
-      console.warn('Gagal unduh zip dari backend, fallback unduh berkas individu:', err);
-      handleDownloadSampleFile(format === 'csv' ? 'csv' : 'vcf');
+      console.error('Gagal mengunduh arsip benchmark ZIP dari server:', err);
+      setError({
+        message: err?.message || 'Gagal mengunduh berkas benchmark dari server.',
+        details: err?.details || [],
+      });
     } finally {
       setIsDownloadingZip(false);
     }
@@ -673,7 +629,7 @@ sample_05,48.2,42.0,13
                   <input
                     ref={genoInputRef}
                     type="file"
-                    accept=".vcf,.gz,.bed"
+                    accept=".vcf,.vcf.gz,.bed"
                     className="hidden"
                     onChange={(e) => {
                       if (e.target.files?.[0]) handleGenotypeSelect(e.target.files[0]);
@@ -958,6 +914,24 @@ sample_05,48.2,42.0,13
             </span>
           </div>
 
+          {/* Peringatan Non-Fatal dari Validasi Backend (PR #29: kolom non-numerik diabaikan / varian dilewati) */}
+          {Array.isArray(uploadResult.peringatan) && uploadResult.peringatan.length > 0 && (
+            <div
+              role="status"
+              className="rounded-2xl border border-amber-300 dark:border-amber-500/40 bg-amber-50/90 dark:bg-amber-500/15 p-3.5 text-xs text-amber-950 dark:text-amber-200 space-y-1.5"
+            >
+              <div className="flex items-center gap-2 font-bold">
+                <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                <span>Peringatan Validasi (Non-Fatal):</span>
+              </div>
+              <ul className="list-disc pl-5 space-y-0.5 font-medium">
+                {uploadResult.peringatan.map((warn, idx) => (
+                  <li key={idx}>{warn}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           {/* Grid Metrik Dataset (Hero Stats dengan Neuton Serif) */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="glass-subcard p-3.5 text-center">
@@ -968,7 +942,7 @@ sample_05,48.2,42.0,13
                 {uploadResult.kecocokan_sample_id?.jumlah_cocok ??
                   uploadResult.genotipe?.jumlah_sampel ??
                   uploadResult.kecocokan_sample_id?.jumlah_sampel_cocok ??
-                  40}
+                  '—'}
               </div>
             </div>
 
@@ -977,7 +951,7 @@ sample_05,48.2,42.0,13
                 Jumlah SNP
               </span>
               <div className="font-serif text-2xl font-bold text-slate-900 dark:text-white tabular-nums mt-1">
-                {uploadResult.genotipe?.jumlah_snp ?? 500}
+                {uploadResult.genotipe?.jumlah_snp ?? '—'}
               </div>
             </div>
 
@@ -995,7 +969,7 @@ sample_05,48.2,42.0,13
                 Sampel Fenotipe
               </span>
               <div className="font-serif text-2xl font-bold text-[#0284C7] dark:text-[#38BDF8] tabular-nums mt-1">
-                {uploadResult.fenotipe?.jumlah_sampel ?? uploadResult.fenotipe?.varietas_tercatat ?? 40}
+                {uploadResult.fenotipe?.jumlah_sampel ?? uploadResult.fenotipe?.varietas_tercatat ?? '—'}
               </div>
             </div>
           </div>
@@ -1023,8 +997,9 @@ sample_05,48.2,42.0,13
           <div className="flex justify-end pt-3">
             <button
               type="button"
+              disabled={!isReadyToProceed}
               onClick={handleProceedToStep2}
-              className="inline-flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 px-7 py-3 text-sm font-semibold text-white shadow-sm hover:-translate-y-[1px] hover:shadow-md active:scale-[0.98] transition-all duration-100 cursor-pointer"
+              className="inline-flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 px-7 py-3 text-sm font-semibold text-white shadow-sm hover:-translate-y-[1px] hover:shadow-md active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-100 cursor-pointer"
             >
               <span>Lanjut ke Konfigurasi QC (Langkah 2)</span>
               <ArrowRight className="h-4 w-4" />
