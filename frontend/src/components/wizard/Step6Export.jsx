@@ -11,6 +11,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { useAnalysisStore } from '../../store/useAnalysisStore.js';
+import { resolveTargetTraitName } from '../../constants/defaultParams.js';
 import { analysisService } from '../../services/analysisService.js';
 import ErrorMessageArea from '../common/ErrorMessageArea.jsx';
 import ScientificReportModal from './ScientificReportModal.jsx';
@@ -23,7 +24,7 @@ import ScientificReportModal from './ScientificReportModal.jsx';
  * laporan HTML mandiri, plot PNG resolusi tinggi, serta laporan ilmiah cetak/PDF A4.
  */
 export default function Step6Export({ analysisId, analysis, onNavigateStep }) {
-  const { results, setResults, configParams, uploadSummary } = useAnalysisStore();
+  const { results, setResults, configParams, uploadSummary, currentAnalysis } = useAnalysisStore();
 
   const [isLoadingData, setIsLoadingData] = useState(false);
   const [annotationData, setAnnotationData] = useState(null);
@@ -89,6 +90,14 @@ export default function Step6Export({ analysisId, analysis, onNavigateStep }) {
   }, [analysisId, results, annotationData, setResults]);
 
   const activeResults = results || {};
+  const effectiveAnalysis = analysis || currentAnalysis;
+  const resolvedTraitName = resolveTargetTraitName({
+    analysis: effectiveAnalysis,
+    configParams,
+    uploadSummary,
+    results: activeResults,
+    qcSummary: activeResults?.summary?.qc || activeResults?.raw_backend_results?.qc,
+  });
 
   // 1. Unduh CSV Hasil Asosiasi (Semua atau Signifikan Saja via PR #29)
   async function handleDownloadCsv(hanyaSignifikan = false) {
@@ -176,20 +185,20 @@ export default function Step6Export({ analysisId, analysis, onNavigateStep }) {
             onClick={() => onNavigateStep(4)}
             className="rounded-xl px-3.5 py-1.5 text-xs font-sans font-semibold text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors"
           >
-            &larr; Langkah 4: Hasil & Visualisasi
+            Hasil & Visualisasi
           </button>
           <button
             type="button"
             onClick={() => onNavigateStep(5)}
             className="rounded-xl px-3.5 py-1.5 text-xs font-sans font-semibold text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors"
           >
-            Langkah 5: Anotasi Gen
+            Anotasi Gen
           </button>
           <button
             type="button"
             className="rounded-xl bg-[#5B4DFE] px-3.5 py-1.5 text-xs font-sans font-bold text-white shadow-sm"
           >
-            Langkah 6: Ekspor & Laporan
+            Ekspor & Laporan
           </button>
         </div>
 
@@ -206,6 +215,16 @@ export default function Step6Export({ analysisId, analysis, onNavigateStep }) {
       </div>
 
       <ErrorMessageArea error={exportError} onDismiss={() => setExportError(null)} />
+
+      <div className="rounded-xl glass-subcard px-4 py-2.5 flex items-center justify-between text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-300">
+        <span>Sifat fenotipe target:</span>
+        <span
+          data-testid="step6-target-trait-value"
+          className="font-semibold text-slate-900 dark:text-white bg-slate-100 dark:bg-slate-800/60 px-2.5 py-0.5 rounded-md border border-slate-200 dark:border-slate-700 font-mono"
+        >
+          {resolvedTraitName}
+        </span>
+      </div>
 
       {/* ── Grid 3 Kartu Ekspor ── */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
@@ -363,7 +382,7 @@ export default function Step6Export({ analysisId, analysis, onNavigateStep }) {
               </span>
             </div>
             <p className="text-xs sm:text-sm font-serif leading-relaxed text-slate-800 dark:text-slate-200">
-              Hasilkan laporan komprehensif yang mencakup evaluasi kualitas data (QC), estimasi inflasi genomik (&lambda; GC), visualisasi hasil analisis beresolusi tinggi, daftar SNP signifikan, serta anotasi gen berdasarkan referensi GFF3.
+              Hasilkan laporan komprehensif yang mencakup evaluasi kualitas data (QC), estimasi inflasi genomik (&lambda; GC), visualisasi hasil analisis beresolusi tinggi, daftar SNP signifikan, serta anotasi gen berdasarkan referensi genom (Ensembl REST API / GFF3).
             </p>
           </div>
 
@@ -439,7 +458,7 @@ export default function Step6Export({ analysisId, analysis, onNavigateStep }) {
           setAutoDownloadPdf(false);
         }}
         analysisId={analysisId}
-        analysis={analysis}
+        analysis={effectiveAnalysis}
         results={activeResults}
         annotationData={annotationData}
         configParams={configParams}

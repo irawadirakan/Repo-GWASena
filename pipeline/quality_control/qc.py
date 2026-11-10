@@ -27,7 +27,7 @@ class QCResult:
     summary: list[dict] = field(default_factory=list)  # baris tabel ringkasan QC
     removed_samples: dict = field(default_factory=dict)  # kriteria -> daftar ID
 
-    def as_dict(self, n_samples: int, n_snps: int) -> dict:
+    def as_dict(self, n_samples: int, n_snps: int, trait_name: str | None = None) -> dict:
         return {
             "sampel_awal": n_samples,
             "sampel_total": n_samples,
@@ -37,6 +37,7 @@ class QCResult:
             "snp_lolos": int(self.snp_mask.sum()),
             "kriteria": self.summary,
             "sampel_tersaring": self.removed_samples,
+            **({"trait_name": trait_name} if trait_name else {}),
         }
 
 

@@ -114,8 +114,9 @@ export function removeStoredToken() {
  * @param {RequestInit} [options={}]
  */
 export async function request(endpoint, options = {}) {
+  const { timeoutMs = 15000, signal: externalSignal, ...fetchOptions } = options;
   const token = getStoredToken();
-  const headers = new Headers(options.headers || {});
+  const headers = new Headers(fetchOptions.headers || {});
 
   // Inject Bearer token if available
   if (token && !headers.has('Authorization')) {
@@ -123,24 +124,84 @@ export async function request(endpoint, options = {}) {
   }
 
   // If body is NOT FormData and not explicitly set, default to JSON
-  if (options.body && !(options.body instanceof FormData) && !headers.has('Content-Type')) {
+  if (fetchOptions.body && !(fetchOptions.body instanceof FormData) && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json');
   }
 
+  let controller = null;
+  let timeoutId = null;
+  let didTimeout = false;
+  let effectiveSignal = externalSignal;
+
+  if (timeoutMs > 0 && typeof AbortController !== 'undefined') {
+    controller = new AbortController();
+    effectiveSignal = controller.signal;
+    if (externalSignal) {
+      if (externalSignal.aborted) {
+        controller.abort();
+      } else {
+        externalSignal.addEventListener('abort', () => controller.abort(), { once: true });
+      }
+    }
+    timeoutId = setTimeout(() => {
+      didTimeout = true;
+      controller.abort();
+    }, timeoutMs);
+  }
+
   const config = {
-    ...options,
+    ...fetchOptions,
     headers,
+    ...(effectiveSignal ? { signal: effectiveSignal } : {}),
   };
 
+  let abortRejectCleanup = null;
   let res;
   try {
-    res = await fetch(endpoint, config);
+    const fetchPromise = fetch(endpoint, config);
+    if (effectiveSignal) {
+      res = await new Promise((resolve, reject) => {
+        if (effectiveSignal.aborted) {
+          const abortErr = new Error('Aborted');
+          abortErr.name = 'AbortError';
+          reject(abortErr);
+          return;
+        }
+        const onAbort = () => {
+          const abortErr = new Error('Aborted');
+          abortErr.name = 'AbortError';
+          reject(abortErr);
+        };
+        effectiveSignal.addEventListener('abort', onAbort, { once: true });
+        abortRejectCleanup = () => effectiveSignal.removeEventListener('abort', onAbort);
+        fetchPromise.then(resolve, reject);
+      });
+    } else {
+      res = await fetchPromise;
+    }
   } catch (err) {
+    if (err?.name === 'AbortError') {
+      const abortErr = new ApiError(
+        didTimeout
+          ? 'Permintaan melebihi batas waktu tunggu server (timeout).'
+          : 'Permintaan dibatalkan.',
+        didTimeout ? 408 : 0,
+        [didTimeout ? `Batas waktu ${timeoutMs} ms terlampaui.` : 'Request aborted']
+      );
+      abortErr.isAborted = !didTimeout;
+      abortErr.isTimeout = didTimeout;
+      throw abortErr;
+    }
     throw new ApiError(
       'Gagal terhubung ke server backend. Pastikan server aktif.',
       0,
       [err.message]
     );
+  } finally {
+    if (abortRejectCleanup) abortRejectCleanup();
+    if (timeoutId !== null) {
+      clearTimeout(timeoutId);
+    }
   }
 
   // Parse JSON response or handle empty body

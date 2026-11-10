@@ -16,8 +16,9 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import BrandLogo from '../components/common/BrandLogo.jsx';
-import FigmaThemeToggle from '../components/common/FigmaThemeToggle.jsx';
+import DnaThemeToggle from '../components/common/DnaThemeToggle.jsx';
 import { useAuthStore } from '../store/useAuthStore.js';
+import { useThemeStore } from '../store/useThemeStore.js';
 import { analysisService } from '../services/analysisService.js';
 
 /**
@@ -27,6 +28,7 @@ import { analysisService } from '../services/analysisService.js';
 export default function AppLayout() {
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
+  const { theme, toggleTheme } = useThemeStore();
 
   const [health, setHealth] = useState(null);
   const [isHealthOpen, setIsHealthOpen] = useState(false);
@@ -89,8 +91,8 @@ export default function AppLayout() {
   return (
     <div className="relative z-10 min-h-screen bg-transparent text-slate-900 dark:text-white flex flex-col font-sans antialiased">
       {/* ── App Topbar / Header Sesuai Figma (Floating Liquid Glass) ── */}
-      <header className="sticky top-0 z-40 glass-navbar px-4 sm:px-6 lg:px-8">
-        <div className="mx-auto flex max-w-7xl items-center justify-between h-16">
+      <header className="sticky top-0 z-40 glass-navbar overflow-visible px-4 sm:px-6 lg:px-8">
+        <div className="mx-auto flex max-w-7xl items-center justify-between h-16 overflow-visible">
           {/* Sisi Kiri: Logo Resmi GWASena */}
           <div className="flex items-center gap-8">
             <Link to="/dashboard" className="focus:outline-none transition-transform hover:scale-[1.02]">
@@ -248,8 +250,8 @@ export default function AppLayout() {
               )}
             </div>
 
-            {/* Theme Toggle Pill Sesuai Figma */}
-            <FigmaThemeToggle />
+            {/* Interactive DNA Helix Theme Toggle */}
+            <DnaThemeToggle externalTheme={theme} onToggleTheme={toggleTheme} />
 
             {/* User Button Pill & Google-Style Account Dropdown (Evaluasi Tester Poin 4) */}
             <div className="relative" ref={accountMenuRef}>
@@ -348,7 +350,7 @@ export default function AppLayout() {
 
           {/* Tombol Menu Mobile Hamburger */}
           <div className="flex md:hidden items-center gap-2">
-            <FigmaThemeToggle />
+            <DnaThemeToggle externalTheme={theme} onToggleTheme={toggleTheme} />
             <button
               type="button"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}

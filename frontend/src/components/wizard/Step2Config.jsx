@@ -12,7 +12,16 @@ import {
   Play,
   HelpCircle,
 } from 'lucide-react';
-import { DEFAULT_ANALYSIS_CONFIG, QC_PARAM_RANGES } from '../../constants/defaultParams.js';
+import {
+  DEFAULT_ANALYSIS_CONFIG,
+  QC_PARAM_RANGES,
+  ORGANISM_GROUPS,
+  ANIMAL_ORGANISM_OPTIONS,
+  PLANT_ORGANISM_OPTIONS,
+  normalizeOrganismCode,
+  getOrganismMeta,
+  resolveTargetTraitName,
+} from '../../constants/defaultParams.js';
 import EduHintTooltip from '../common/EduHintTooltip.jsx';
 import ErrorMessageArea from '../common/ErrorMessageArea.jsx';
 import { analysisService } from '../../services/analysisService.js';
@@ -42,16 +51,27 @@ export default function Step2Config({
       String(currentAnalysis?.status || '').toLowerCase()
     );
 
+  const initialResolvedTrait = resolveTargetTraitName({
+    analysis: currentAnalysis,
+    configParams,
+    qcSummary: availableTraits.length > 0 ? { trait: availableTraits[0] } : null,
+  });
   const [trait, setTrait] = useState(
-    configParams.trait || (availableTraits.length > 0 ? availableTraits[0] : 'bobot_umbi_g')
+    initialResolvedTrait && initialResolvedTrait !== '—'
+      ? initialResolvedTrait
+      : availableTraits.length > 0
+      ? availableTraits[0]
+      : 'bobot_umbi_g'
   );
 
   // Sinkronkan trait jika availableTraits dimuat dari backend
   useEffect(() => {
     if (availableTraits.length > 0 && (!trait || !availableTraits.includes(trait))) {
-      setTrait(availableTraits[0]);
+      const nextTrait = availableTraits[0];
+      setTrait(nextTrait);
+      setConfigParams({ trait: nextTrait });
     }
-  }, [availableTraits, trait]);
+  }, [availableTraits, trait, setConfigParams]);
   const [mind, setMind] = useState(configParams.qc?.mind ?? 0.10);
   const [geno, setGeno] = useState(configParams.qc?.geno ?? 0.10);
   const [maf, setMaf] = useState(configParams.qc?.maf ?? 0.05);
@@ -90,13 +110,100 @@ export default function Step2Config({
     }
   };
 
+  const selectedSession = useAnalysisStore((s) => s.currentAnalysis);
+  const selectedConfig = useAnalysisStore((s) => s.configParams);
+  const uploadSummary = useAnalysisStore((s) => s.uploadSummary);
+  const updateConfigParams = useAnalysisStore((s) => s.setConfigParams);
+  const updateSessionData = useAnalysisStore((s) => s.setCurrentAnalysis);
+
+  const detectedInfo =
+    uploadSummary?.detected_organism ||
+    selectedSession?.detected_organism ||
+    selectedConfig?.detectedOrganism ||
+    null;
+  const detectedCode = normalizeOrganismCode(
+    detectedInfo?.organism || selectedSession?.organism || DEFAULT_ANALYSIS_CONFIG.organism
+  );
+
+  const initialOrg = normalizeOrganismCode(
+    selectedConfig?.organism ||
+      selectedSession?.organism ||
+      detectedCode ||
+      DEFAULT_ANALYSIS_CONFIG.organism
+  );
+  const [organism, setOrganism] = useState(initialOrg);
+  const [speciesMode, setSpeciesMode] = useState(() =>
+    getOrganismMeta(initialOrg).isCustom ? 'kustom' : 'auto'
+  );
+  const [customSpeciesInput, setCustomSpeciesInput] = useState(() => {
+    const meta = getOrganismMeta(initialOrg);
+    return meta.isCustom ? initialOrg : '';
+  });
+
+  useEffect(() => {
+    const rawOrg = selectedConfig?.organism || selectedSession?.organism;
+    if (rawOrg) {
+      const norm = normalizeOrganismCode(rawOrg);
+      setOrganism(norm);
+      if (getOrganismMeta(norm).isCustom && speciesMode !== 'kustom') {
+        setSpeciesMode('kustom');
+        setCustomSpeciesInput(rawOrg);
+      }
+    }
+  }, [selectedConfig?.organism, selectedSession?.organism]);
+
+  const organismMeta = getOrganismMeta(organism);
+  const isAutoDetectedMatch = Boolean(
+    (detectedInfo?.auto_detected || uploadSummary?.detected_organism?.auto_detected) &&
+      normalizeOrganismCode(organism) === detectedCode
+  );
+
+  const handleOrganismChange = (nextVal) => {
+    const normalized = normalizeOrganismCode(nextVal);
+    setOrganism(normalized);
+    updateConfigParams({ organism: normalized });
+    if (selectedSession) {
+      updateSessionData({ ...selectedSession, organism: normalized }, { preserveStep: true });
+    }
+  };
+
+  const handleSpeciesModeChange = (mode) => {
+    setSpeciesMode(mode);
+    if (mode === 'auto') {
+      handleOrganismChange(detectedCode);
+      return;
+    }
+    if (mode === 'hewan') {
+      const isAnimal = ANIMAL_ORGANISM_OPTIONS.some((o) => o.value === organism);
+      if (!isAnimal) handleOrganismChange(ANIMAL_ORGANISM_OPTIONS[0].value);
+      return;
+    }
+    if (mode === 'tanaman') {
+      const isPlant = PLANT_ORGANISM_OPTIONS.some((o) => o.value === organism);
+      if (!isPlant) {
+        handleOrganismChange(
+          detectedInfo?.kingdom === 'tanaman' ? detectedCode : PLANT_ORGANISM_OPTIONS[0].value
+        );
+      }
+      return;
+    }
+    if (mode === 'kustom' && customSpeciesInput.trim()) {
+      handleOrganismChange(customSpeciesInput);
+    }
+  };
+
   const handleStartAnalysis = async (e) => {
     if (e) e.preventDefault();
     if (isLockedDuringCompute) return;
     setError(null);
+    if (speciesMode === 'kustom' && !customSpeciesInput.trim()) {
+      setError('Mohon ketik nama ilmiah spesies target terlebih dahulu (contoh: Felis catus atau Solanum lycopersicum).');
+      return;
+    }
     setIsSubmitting(true);
 
     const payload = {
+      organism,
       trait,
       qc: {
         mind: parseFloat(mind),
@@ -150,6 +257,137 @@ export default function Step2Config({
       <ErrorMessageArea error={error} onDismiss={() => setError(null)} />
 
       <form onSubmit={handleStartAnalysis} noValidate className="space-y-8">
+        {/* ── Bagian 0: Pemilihan Organisme Target Riset (Dual-Kingdom & Kustom) ── */}
+        <div className="figma-card p-6 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
+            <div>
+              <h3 className="text-lg font-extrabold text-slate-900 dark:text-white flex items-center gap-2 font-sans">
+                <Dna className="h-4 w-4 text-[#0284C7] dark:text-[#06B6D4]" />
+                <span>Organisme Target Riset</span>
+              </h3>
+              <p className="text-xs sm:text-[13px] font-sans text-slate-700 dark:text-slate-300 mt-1 font-medium">
+                Pilih spesies hewan atau tanaman untuk pemetaan gen kandidat otomatis via Ensembl REST API atau referensi GFF3 Lokal.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {isAutoDetectedMatch && (
+                <span
+                  data-testid="auto-detected-organism-badge"
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-bold text-emerald-700 dark:text-emerald-300"
+                >
+                  <span>✓ Terdeteksi otomatis dari berkas dataset Anda</span>
+                </span>
+              )}
+              <span
+                data-testid="config-annotation-source-pill"
+                className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-bold ${
+                  organismMeta.source === 'ensembl'
+                    ? 'border-cyan-500/30 bg-cyan-500/10 text-cyan-700 dark:text-cyan-300'
+                    : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                }`}
+              >
+                {organismMeta.source === 'ensembl'
+                  ? `Ensembl REST API (${organism})`
+                  : 'GFF3 Referensi Lokal'}
+              </span>
+            </div>
+          </div>
+
+          {/* Filter Mode Pemilihan Spesies */}
+          <div role="tablist" aria-label="Kategori Organisme Target" className="flex flex-wrap gap-2">
+            {[
+              { id: 'auto', label: 'Otomatis (Sesuai Dataset)' },
+              { id: 'hewan', label: 'Hewan' },
+              { id: 'tanaman', label: 'Tanaman' },
+              { id: 'kustom', label: 'Spesies Lainnya (Ketik Nama Ilmiah)' },
+            ].map((tab) => {
+              const active = speciesMode === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  disabled={isLockedDuringCompute}
+                  onClick={() => handleSpeciesModeChange(tab.id)}
+                  className={`rounded-xl px-3.5 py-2 text-xs font-sans font-bold border transition-all cursor-pointer disabled:opacity-60 ${
+                    active
+                      ? 'bg-[#0284C7] dark:bg-[#06B6D4] text-white dark:text-slate-950 border-transparent shadow-sm'
+                      : 'bg-white/70 dark:bg-slate-900/60 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-white/15 hover:border-[#06B6D4]'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {speciesMode === 'kustom' ? (
+            <div className="max-w-lg space-y-1.5">
+              <label
+                htmlFor="custom-organism-input"
+                className="block text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300"
+              >
+                Ketik Nama Ilmiah atau Kode Spesies Ensembl
+              </label>
+              <input
+                id="custom-organism-input"
+                type="text"
+                aria-label="Ketik Nama Ilmiah Spesies"
+                placeholder="Contoh: Felis catus atau Solanum tuberosum"
+                value={customSpeciesInput}
+                disabled={isLockedDuringCompute}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setCustomSpeciesInput(val);
+                  if (val.trim()) {
+                    handleOrganismChange(val);
+                  }
+                }}
+                className="w-full rounded-2xl border border-slate-300 dark:border-white/20 bg-white dark:bg-slate-900/90 px-4 py-3 text-sm font-sans font-bold text-slate-900 dark:text-white focus:outline-none focus:border-[#06B6D4] focus:ring-2 focus:ring-[#06B6D4]/20 shadow-sm disabled:opacity-60"
+              />
+              <p className="text-[11px] font-medium text-slate-600 dark:text-slate-300">
+                Kode Ensembl aktif:{' '}
+                <code className="font-mono font-bold text-[#0284C7] dark:text-[#06B6D4]">{organism}</code>{' '}
+                (mendukung seluruh spesies hewan &amp; tanaman di Ensembl REST API).
+              </p>
+            </div>
+          ) : (
+            <div className="max-w-md space-y-1.5">
+              <label
+                htmlFor="organism-target-select"
+                className="block text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300"
+              >
+                Spesies Organisme Target
+              </label>
+              <select
+                id="organism-target-select"
+                aria-label="Organisme Target Riset"
+                value={organism}
+                onChange={(e) => handleOrganismChange(e.target.value)}
+                disabled={isLockedDuringCompute}
+                className="w-full rounded-2xl border border-slate-300 dark:border-white/20 bg-white dark:bg-slate-900/90 px-4 py-3 text-sm font-sans font-bold text-slate-900 dark:text-white focus:outline-none focus:border-[#06B6D4] focus:ring-2 focus:ring-[#06B6D4]/20 shadow-sm disabled:opacity-60"
+              >
+                {speciesMode === 'auto'
+                  ? ORGANISM_GROUPS.map((group) => (
+                      <optgroup key={group.groupLabel} label={group.groupLabel}>
+                        {group.options.map((opt) => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ))
+                  : (speciesMode === 'hewan' ? ANIMAL_ORGANISM_OPTIONS : PLANT_ORGANISM_OPTIONS).map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+              </select>
+            </div>
+          )}
+        </div>
+
         {/* ── Bagian A: Pemilihan Sifat Fenotipe (Trait) ── */}
         <div className="figma-card p-6 space-y-4">
           <div className="flex items-center justify-between">
@@ -165,13 +403,13 @@ export default function Step2Config({
           </div>
 
           <p className="text-xs text-slate-600 dark:text-slate-300 font-sans">
-            Pilih satu karakter agronomi kuantitatif dari berkas CSV yang telah divalidasi:
+            Pilih satu sifat fenotipe target dari berkas CSV yang telah divalidasi:
           </p>
 
           <div className="max-w-md">
             <select
               value={trait}
-              onChange={(e) => setTrait(e.target.value)}
+              onChange={(e) => { setTrait(e.target.value); setConfigParams({ trait: e.target.value }); }}
               className="w-full rounded-xl border border-slate-300 dark:border-white/10 bg-[#F1F4FD] dark:bg-[#0F172E] py-2.5 px-3.5 text-sm font-mono font-medium text-slate-900 dark:text-white focus:border-[#5B4DFE] focus:outline-none focus:ring-1 focus:ring-[#5B4DFE] cursor-pointer"
             >
               {availableTraits.length > 0 ? (

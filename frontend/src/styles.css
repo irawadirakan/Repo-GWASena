@@ -156,6 +156,7 @@
 
   /* Floating Clean Glass Navbar */
   .glass-navbar {
+    overflow: visible;
     background: linear-gradient(135deg, rgba(235, 248, 255, 0.85) 0%, rgba(219, 238, 254, 0.75) 100%);
     backdrop-filter: blur(20px) saturate(180%);
     -webkit-backdrop-filter: blur(20px) saturate(180%);
@@ -443,6 +444,7 @@ html.dark .text-slate-300 {
   canvas:not(.print-canvas),
   .video-background-layer,
   .figma-theme-toggle,
+  .dna-toggle,
   .toast,
   .tooltip,
   .fixed.inset-0.bg-black\/75 {
@@ -552,3 +554,77 @@ html.dark .text-slate-300 {
 .modebar-btn[data-title*="Cloud"] {
   display: none !important;
 }
+
+/* =====================================================
+   CSS TOGGLE DNA - GWASENA (OPTIMIZED & SMOOTH)
+   ===================================================== */
+.dna-toggle {
+  position: relative;
+  width: 64px;
+  height: 44px;
+  flex: none;
+  display: inline-flex;
+  align-items: flex-start;
+  justify-content: center;
+  user-select: none;
+  /* Akselerasi perangkat keras */
+  transform: translateZ(0);
+  will-change: transform;
+}
+
+.dna-toggle svg {
+  position: absolute;
+  top: -6px;
+  left: 0;
+  width: 64px;
+  height: 110px;
+  overflow: visible;
+  z-index: 60;
+  pointer-events: none;
+}
+
+.dna-toggle {
+  --dna-a: #5b4ff5;      /* Untai 1: indigo */
+  --dna-b: #14b8c4;      /* Untai 2: teal/cyan */
+  --dna-rung: #a9b8d6;
+  --dna-cord: #7b8bad;
+  --dna-ball: #1e2a4a;
+  --dna-icon: #fde68a;
+  --dna-glow-opacity: 0;
+}
+
+[data-theme="dark"] .dna-toggle,
+.dark .dna-toggle {
+  --dna-a: #8b7bff;
+  --dna-b: #22d3ee;
+  --dna-rung: #3d4d73;
+  --dna-cord: #5b6b8f;
+  --dna-ball: #e2e8f0;
+  --dna-icon: #0b1220;
+  --dna-glow-opacity: 1;
+}
+
+/* JANGAN pasang transition pada node SVG dinamis agar 60fps stabil */
+.dna-strand { fill: none; stroke-width: 2.4; stroke-linecap: round; }
+.dna-strand.a { stroke: var(--dna-a); }
+.dna-strand.b { stroke: var(--dna-b); }
+.dna-rung { stroke: var(--dna-rung); stroke-width: 1.4; stroke-linecap: round; }
+.dna-node.a { fill: var(--dna-a); }
+.dna-node.b { fill: var(--dna-b); }
+.dna-cord { fill: var(--dna-cord); }
+.dna-string { stroke: var(--dna-cord); stroke-width: 1.8; stroke-linecap: round; }
+
+/* Handle tarik */
+.dna-handle { pointer-events: auto; cursor: grab; outline: none; }
+.dna-handle:active { cursor: grabbing; }
+.dna-ball { fill: var(--dna-ball); transition: fill .3s ease; }
+.dna-ico { fill: var(--dna-icon); stroke: var(--dna-icon); transition: fill .3s ease, stroke .3s ease; }
+.dna-ring { fill: transparent; stroke: transparent; }
+.dna-handle:hover .dna-ring { stroke: var(--dna-rung); stroke-width: 1; stroke-dasharray: 2.5 2.5; }
+.dna-handle:focus-visible .dna-ring { stroke: var(--dna-a); stroke-width: 1.8; }
+
+/* Ikon matahari / bulan */
+[data-theme="dark"] .dna-moon,
+.dark .dna-moon { display: none; }
+
+:root:not([data-theme="dark"]):not(.dark) .dna-sun { display: none; }

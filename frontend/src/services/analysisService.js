@@ -74,8 +74,8 @@ export const analysisService = {
   /**
    * Daftar sesi analisis milik pengguna
    */
-  async listAnalyses() {
-    return apiClient.get('/api/analyses');
+  async listAnalyses(options = {}) {
+    return apiClient.get('/api/analyses', { timeoutMs: 5000, ...options });
   },
 
   /**
@@ -388,8 +388,8 @@ export const analysisService = {
    * @param {number|string} analysisId
    * @param {boolean} sertakanTeratas
    */
-  async getAnnotation(analysisId, sertakanTeratas = true) {
-    return apiClient.get(`/api/analyses/${analysisId}/annotation?sertakan_teratas=${sertakanTeratas}`);
+  async getAnnotation(analysisId, sertakanTeratas = true, options = {}) {
+    return apiClient.get(`/api/analyses/${analysisId}/annotation?sertakan_teratas=${sertakanTeratas}`, { timeoutMs: 4000, ...options });
   },
 
   /**

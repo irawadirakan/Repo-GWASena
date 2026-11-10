@@ -27,11 +27,13 @@ class GoogleAuthRequest(BaseModel):
 class AnalysisCreate(BaseModel):
     analysis_name: str = Field(min_length=1, max_length=150,
                                examples=["GWAS bobot umbi bawang putih"])
+    organism: str | None = Field(None, max_length=80, examples=["Allium sativum"])
 
 
 class AnalysisUpdate(BaseModel):
-    analysis_name: str = Field(min_length=1, max_length=150,
+    analysis_name: str | None = Field(None, min_length=1, max_length=150,
                                examples=["Analisis genotipe_bawang_putih"])
+    organism: str | None = Field(None, max_length=80, examples=["mus_musculus"])
 
 
 class ParameterIn(BaseModel):
@@ -63,6 +65,7 @@ class ParameterIn(BaseModel):
         default_factory=lambda: ["bonferroni", "fdr"],
         description="Metode koreksi multiple testing")
     alpha: float = Field(0.05, gt=0, lt=1, description="Tingkat signifikansi")
+    organism: str | None = Field(None, max_length=80, description="Kode atau nama organisme target (mis. mus_musculus, allium_sativum)")
 
     @model_validator(mode="before")
     @classmethod

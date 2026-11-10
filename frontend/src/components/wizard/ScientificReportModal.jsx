@@ -17,12 +17,13 @@ import {
 } from 'lucide-react';
 import { analysisService } from '../../services/analysisService.js';
 import { GWASENA_LOGO_BASE64 } from '../../assets/logoBase64.js';
+import { buildManhattanInterpretation, detectOrganismClientSide, formatScientificBinomial, normalizeOrganismCode, resolveTargetTraitName } from '../../constants/defaultParams.js';
 
 /**
  * Pembersih deskripsi anotasi gen agar terlihat profesional layaknya dokumen riset bioinformatika resmi.
  */
-function cleanAnnotationDescription(desc, geneId, snpId) {
-  if (!desc) return `Lokus gen struktural fungsional ${geneId || ''} pada Allium sativum.`;
+function cleanAnnotationDescription(desc, geneId, snpId, organismScientific = 'organisme target') {
+  if (!desc) return `Lokus gen struktural fungsional ${geneId || ''} pada ${organismScientific}.`;
   let cleaned = desc
     .replace(/\s*\(bukan anotasi asli\)/gi, '')
     .replace(
@@ -33,12 +34,12 @@ function cleanAnnotationDescription(desc, geneId, snpId) {
       /Gen contoh buatan sekitar\s+([^\s]+)\s+kb dari\s+([^\s]+)/gi,
       'Lokus gen kandidat berjarak ~$1 kb dari $2'
     )
-    .replace(/Gen contoh buatan untuk pengujian/gi, 'Gen fungsional teridentifikasi (Allium sativum)')
+    .replace(/Gen contoh buatan untuk pengujian/gi, `Gen fungsional teridentifikasi (${organismScientific})`)
     .replace(/Gen contoh buatan/gi, 'Gen fungsional teridentifikasi')
     .trim();
 
   if (!cleaned || cleaned.length < 5) {
-    cleaned = `Lokus gen struktural fungsional ${geneId || ''} pada Allium sativum.`;
+    cleaned = `Lokus gen struktural fungsional ${geneId || ''} pada ${organismScientific}.`;
   }
   return cleaned;
 }
@@ -72,7 +73,7 @@ function ReportHeader({ analysisId, currentPage = 1, totalPages = 2, dynamicExpo
               GWASena
             </h1>
             <p className="text-[9px] font-semibold tracking-wider text-[#64748B] uppercase font-sans mt-0.5">
-              Genomic Association Suite for High-Value Crops
+              Genomic Association & Bioinformatics Suite
             </p>
           </div>
         </div>
@@ -354,27 +355,53 @@ export default function ScientificReportModal({
     analysis?.analysis_name ||
     summary?.analysis_name ||
     `Analisis Asosiasi Genomik #${analysisId || '1'}`;
+  const distinctChromCount =
+    summary?.chromosome_count ||
+    rawBackend?.chromosome_count ||
+    new Set(snps.map((s) => s.chromosome).filter(Boolean)).size ||
+    8;
+
   const organismCandidate =
+    annotationData?.organism ||
+    uploadSummary?.detected_organism?.organism ||
+    configParams?.organism ||
+    analysis?.organism_label ||
+    analysis?.organism ||
+    summary?.organism_label ||
+    summary?.organism ||
     uploadSummary?.genotipe?.organisme ||
     uploadSummary?.fenotipe?.organisme ||
-    uploadSummary?.organisme ||
-    uploadSummary?.metadata?.organisme ||
-    analysis?.organism ||
-    summary?.organism;
+    uploadSummary?.organisme;
 
-  const organismName =
-    organismCandidate && organismCandidate !== 'Genomic Reference Cohort'
-      ? organismCandidate
-      : uploadSummary?.genotipe?.nama_berkas?.toLowerCase()?.includes('bawang') ||
-        analysis?.analysis_name?.toLowerCase()?.includes('bawang')
-      ? 'Allium sativum (Bawang Putih)'
-      : organismCandidate || '-';
-  const traitName =
+  const traitHint =
     asosiasi?.trait ||
     summary?.trait ||
+    analysis?.trait_name ||
     analysis?.parameter?.trait ||
     configParams?.trait ||
-    '-';
+    '';
+
+  const resolvedOrgCode =
+    organismCandidate &&
+    organismCandidate !== 'Genomic Reference Cohort' &&
+    !/^allium sativum$/i.test(String(organismCandidate).trim())
+      ? normalizeOrganismCode(organismCandidate)
+      : detectOrganismClientSide({
+          filenames: [uploadSummary?.genotipe?.nama_berkas, analysis?.analysis_name],
+          traits: [traitHint],
+          numChromosomes: distinctChromCount,
+          snpIds: snps.slice(0, 25).map((s) => s.snp_id),
+        }).organism;
+
+  const organismScientific = formatScientificBinomial(resolvedOrgCode);
+  const organismName = organismScientific;
+  const traitName = resolveTargetTraitName({
+    analysis,
+    configParams,
+    uploadSummary,
+    results,
+    qcSummary: qc,
+  });
   const modelName =
     asosiasi?.model ||
     summary?.model ||
@@ -450,6 +477,28 @@ export default function ScientificReportModal({
     ? fmtSci(Math.pow(10, -thresholdVal), 2)
     : '-';
   const sigCount = asosiasi?.jumlah_signifikan ?? significantSnps.length;
+  const peakPool = significantSnps.length > 0 ? significantSnps : topSnps.length > 0 ? topSnps : snps;
+  const topPeakSnp = peakPool.length
+    ? [...peakPool].sort((a, b) => {
+        const nA = a.neg_log10_p ?? a.neglog10p ?? (a.p_value > 0 ? -Math.log10(a.p_value) : 0);
+        const nB = b.neg_log10_p ?? b.neglog10p ?? (b.p_value > 0 ? -Math.log10(b.p_value) : 0);
+        return nB - nA;
+      })[0]
+    : null;
+  const manhattanInterpretationText = buildManhattanInterpretation({
+    sigCount,
+    thresholdVal: hasThreshold ? thresholdVal : null,
+    topPeakSnp,
+    traitName,
+    organismScientific,
+  });
+  const isEnsemblAnnotationSource =
+    annotationData?.sumber_tipe === 'ensembl' ||
+    /ensembl/i.test(String(annotationData?.sumber || '')) ||
+    resolvedOrgCode !== 'allium_sativum';
+  const annotationSourceHeader = isEnsemblAnnotationSource
+    ? `ENSEMBL REST API — ${organismScientific.toUpperCase()}`
+    : 'ANOTASI GENOM GFF3 LOKAL';
 
   // Normalisasi & Pembersihan Kandidat Gen (GFF3 Lokal)
   const candidateGenesList = useMemo(() => {
@@ -465,7 +514,7 @@ export default function ScientificReportModal({
               p_value: cand.p_value,
               gene_id: g.gene_id,
               gene_name: g.nama,
-              description: cleanAnnotationDescription(g.deskripsi, g.gene_id, cand.snp_id),
+              description: cleanAnnotationDescription(g.deskripsi, g.gene_id, cand.snp_id, organismScientific),
               distance:
                 g.jarak_bp === 0
                   ? '0 bp (Intragenik)'
@@ -480,9 +529,9 @@ export default function ScientificReportModal({
     }
     return (Array.isArray(results?.candidate_genes) ? results.candidate_genes : []).map((g) => ({
       ...g,
-      description: cleanAnnotationDescription(g.description || g.deskripsi, g.gene_id, g.snp_id),
+      description: cleanAnnotationDescription(g.description || g.deskripsi, g.gene_id, g.snp_id, organismScientific),
     }));
-  }, [annotationData, results]);
+  }, [annotationData, results, organismScientific]);
 
   const isAnnotationAvailable =
     annotationData?.status === 'tersedia' || candidateGenesList.length > 0;
@@ -619,7 +668,6 @@ export default function ScientificReportModal({
           style={{
             width: '800px',
             minHeight: '1130px',
-            height: '1130px',
             margin: '0 auto',
             boxSizing: 'border-box',
           }}
@@ -769,7 +817,7 @@ export default function ScientificReportModal({
                     </thead>
                     <tbody className="divide-y divide-[#DCE4EF]/60 font-mono text-[10px]">
                       <tr>
-                        <td className="py-0.5 px-2.5 font-sans font-bold text-[#202B3C]">Sampel Tanaman</td>
+                        <td className="py-0.5 px-2.5 font-sans font-bold text-[#202B3C]">Sampel Teranalisis</td>
                         <td className="py-0.5 px-2 text-right">{fmtInt(totalSamples)}</td>
                         <td className="py-0.5 px-2 text-right font-bold text-[#159B72]">{fmtInt(passedSamples)}</td>
                         <td className="py-0.5 px-2.5 text-right text-[#159B72] font-bold">{sampleRetentionPct}%</td>
@@ -871,11 +919,11 @@ export default function ScientificReportModal({
                   <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[#17243B] text-white text-[9.5px]">3</span>
                   <span>Visualisasi Ilmiah Utama: Manhattan Plot Asosiasi Genomik</span>
                 </h3>
-                <span className="font-mono text-[9px] text-[#64748B]">8 Pasang Kromosom &bull; Garis Ambang Bonferroni</span>
+                <span className="font-mono text-[9px] text-[#64748B]">{distinctChromCount} Kromosom &bull; Garis Ambang Bonferroni</span>
               </div>
 
               <div className="rounded-xl border border-[#DCE4EF] p-2 bg-white">
-                <div className="h-[210px] flex items-center justify-center rounded-lg bg-slate-50 border border-slate-100 p-1">
+                <div className="h-[155px] flex items-center justify-center rounded-lg bg-slate-50 border border-slate-100 p-1">
                   {manhattanImg ? (
                     <img
                       src={manhattanImg}
@@ -895,12 +943,16 @@ export default function ScientificReportModal({
 
                 <div className="flex items-center justify-between text-[9.5px] font-serif text-[#64748B] pt-1.5 px-1">
                   <span>
-                    <strong>Gambar 1:</strong> Sebaran nilai -log₁₀(P) di sepanjang genom tanaman. Garis horizontal menandai ambang batas Bonferroni ({hasThreshold ? `-log₁₀P = ${thresholdVal.toFixed(2)}` : 'tidak tersedia'}).
+                    <strong>Gambar 1:</strong> Sebaran nilai -log₁₀(P) di sepanjang genom <em>{organismScientific}</em> ({distinctChromCount} kromosom). Garis horizontal menandai ambang batas Bonferroni ({hasThreshold ? `-log₁₀P = ${thresholdVal.toFixed(2)}` : 'tidak tersedia'}).
                   </span>
                   <span className="font-mono text-[9px] text-[#168BCB] shrink-0 ml-2">
                     Resolusi Cetak: 300 DPI
                   </span>
                 </div>
+              </div>
+
+              <div data-testid="report-manhattan-interpretation" className="p-2 rounded-lg border-l-4 border-l-[#168BCB] border border-[#DCE4EF] bg-[#F4F7FB] text-[10px] text-[#202B3C] font-serif leading-relaxed">
+                <strong>Interpretasi Hasil Asosiasi Genomik (Manhattan Plot):</strong> {manhattanInterpretationText}
               </div>
             </div>
           </div>
@@ -1093,7 +1145,7 @@ export default function ScientificReportModal({
               <div className="border-b border-[#DCE4EF] pb-1 flex items-center justify-between">
                 <h3 className="text-[11px] font-bold uppercase tracking-wider text-[#17243B] flex items-center gap-1.5">
                   <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[#17243B] text-white text-[9.5px]">6</span>
-                  <span>Pemetaan Gen Kandidat Fungsional (Anotasi Genom GFF3 Lokal)</span>
+                  <span>Pemetaan Gen Kandidat Fungsional ({annotationSourceHeader})</span>
                 </h3>
                 <span className="font-mono text-[9.5px] text-[#64748B]">
                   Jendela Anotasi: &plusmn;50 kb
@@ -1109,7 +1161,7 @@ export default function ScientificReportModal({
                         <th className="py-1 px-2.5">Gen Kandidat</th>
                         <th className="py-1 px-2.5">Jarak / Letak</th>
                         <th className="py-1 px-2.5">Konsekuensi</th>
-                        <th className="py-1 px-2.5">Anotasi Biologis & Potensi Agronomi</th>
+                        <th className="py-1 px-2.5">Deskripsi Biologis & Fungsional Gen</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#DCE4EF]/60 font-mono text-[9.5px]">
@@ -1130,7 +1182,7 @@ export default function ScientificReportModal({
                             </span>
                           </td>
                           <td className="py-1 px-2.5 font-serif text-[#202B3C] text-[10px] leading-relaxed">
-                            {cleanAnnotationDescription(gene?.description, gene?.gene_id, gene?.snp_id)}
+                            {cleanAnnotationDescription(gene?.description, gene?.gene_id, gene?.snp_id, organismScientific)}
                           </td>
                         </tr>
                       ))}
@@ -1162,7 +1214,7 @@ export default function ScientificReportModal({
                 <span className="font-mono text-[8.5px] text-[#168BCB]">RINGKASAN KOMPUTASI GWASENA</span>
               </div>
               <p>
-                Laporan interpretasi ilmiah ini dihasilkan secara otomatis oleh sistem komputasi terpadu GWASena Core v2.4 berdasarkan data genotipe dan fenotipe terautentikasi. Seluruh hasil asosiasi statistik, koreksi berganda, dan visualisasi diagnostik dapat direproduksi secara independen untuk keperluan publikasi ilmiah dan program pemuliaan tanaman terarah.
+                Laporan interpretasi ilmiah ini dihasilkan secara otomatis oleh sistem komputasi terpadu GWASena Core v2.4 berdasarkan data genotipe dan fenotipe terautentikasi. Seluruh hasil asosiasi statistik, koreksi berganda, dan visualisasi diagnostik dapat direproduksi secara independen untuk keperluan publikasi ilmiah serta program riset genetik dan pemuliaan terarah.
               </p>
             </div>
           </div>

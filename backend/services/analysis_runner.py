@@ -171,6 +171,7 @@ def _save_results(db, analysis_id: int, result: dict) -> None:
         "asosiasi": result["asosiasi"],
         "snp_signifikan": significant,
         "snp_teratas": top,
+        "chromosome_count": len({str(s.get("chromosome")) for s in result["snp"] if s.get("chromosome") is not None}),
     }
     db.add_all([
         VisualizationResult(analysis_id=analysis_id, plot_type="ringkasan", plot_cache=ringkasan, plot_metadata={"judul": "Ringkasan Hasil Analisis"}),

@@ -4,7 +4,13 @@
  */
 
 import { create } from 'zustand';
-import { DEFAULT_ANALYSIS_CONFIG } from '../constants/defaultParams.js';
+import {
+  DEFAULT_ANALYSIS_CONFIG,
+  detectOrganismClientSide,
+  normalizeOrganismCode,
+  extractDefaultTraitFromColumns,
+  resolveTargetTraitName,
+} from '../constants/defaultParams.js';
 import { analysisService } from '../services/analysisService.js';
 
 const isLockedStatus = (status) => {
@@ -56,6 +62,9 @@ export const useAnalysisStore = create((set, get) => ({
   isComputing: false,
   isCompleted: false,
   isFailed: false,
+  progressAnalysisId: null,
+  globalProgress: 0,
+  stageProgress: { 1: 0, 2: 0, 3: 0, 4: 0 },
 
   /**
    * State Guard navigasi langkah wizard (BR-01, BR-02, BR-05, AC-10.1)
@@ -86,7 +95,34 @@ export const useAnalysisStore = create((set, get) => ({
 
   setCurrentAnalysis: (analysis, options = {}) => {
     const { preserveStep = false } = options;
-    set({ currentAnalysis: analysis, isSimulated: false });
+    const prevState = get();
+    const prevId = prevState.currentAnalysis?.analysis_id || prevState.currentAnalysis?.id;
+    const nextId = analysis?.analysis_id || analysis?.id;
+    const hydratedTrait = resolveTargetTraitName({
+      analysis,
+      configParams: prevId && nextId && String(prevId) === String(nextId) ? prevState.configParams : null,
+      uploadSummary: prevState.uploadSummary,
+    });
+    const nextOrg = analysis?.organism
+      ? normalizeOrganismCode(analysis.organism)
+      : prevState.configParams?.organism;
+    const switchedSession = nextId && String(prevState.progressAnalysisId || '') !== String(nextId);
+    set({
+      currentAnalysis: analysis,
+      isSimulated: false,
+      ...(switchedSession
+        ? {
+            progressAnalysisId: nextId,
+            globalProgress: 0,
+            stageProgress: { 1: 0, 2: 0, 3: 0, 4: 0 },
+          }
+        : {}),
+      configParams: {
+        ...prevState.configParams,
+        ...(nextOrg ? { organism: nextOrg } : {}),
+        ...(hydratedTrait && hydratedTrait !== '—' ? { trait: hydratedTrait } : {}),
+      },
+    });
     if (analysis?.status) {
       const status = String(analysis.status).toLowerCase();
       if (status === 'draft') {
@@ -95,14 +131,27 @@ export const useAnalysisStore = create((set, get) => ({
           isComputing: false,
           isCompleted: false,
           isFailed: false,
+          globalProgress: 0,
+          stageProgress: { 1: 0, 2: 0, 3: 0, 4: 0 },
         });
       } else if (status === 'tervalidasi') {
         if (!preserveStep && get().activeStep < 2) set({ activeStep: 2 });
-        set({ isComputing: false, isCompleted: false });
+        set({
+          isComputing: false,
+          isCompleted: false,
+          globalProgress: 0,
+          stageProgress: { 1: 0, 2: 0, 3: 0, 4: 0 },
+        });
       } else if (status === 'antre' || status === 'berjalan' || status === 'pending' || status === 'running') {
         set({ activeStep: 3, isComputing: true, isCompleted: false, isFailed: false });
       } else if (status === 'selesai' || status === 'completed' || status === 'success') {
-        set({ isComputing: false, isCompleted: true, isFailed: false });
+        set({
+          isComputing: false,
+          isCompleted: true,
+          isFailed: false,
+          globalProgress: 100,
+          stageProgress: { 1: 100, 2: 100, 3: 100, 4: 100 },
+        });
         if (!preserveStep && get().activeStep < 4) set({ activeStep: 4 });
       } else if (status === 'gagal' || status === 'failed') {
         set({
@@ -136,19 +185,62 @@ export const useAnalysisStore = create((set, get) => ({
   setUploadSummary: (summary) =>
     set((state) => {
       const valid = isSummaryValid(summary);
+      const traitsList =
+        summary?.sifat_tersedia ||
+        summary?.fenotipe?.daftar_sifat ||
+        summary?.fenotipe?.sifat_tersedia ||
+        [];
+      const detectedInfo =
+        summary?.detected_organism ||
+        (summary?.organism
+          ? {
+              organism: normalizeOrganismCode(summary.organism),
+              auto_detected: Boolean(summary.detected_organism?.auto_detected),
+            }
+          : detectOrganismClientSide({
+              filenames: [
+                summary?.genotipe?.nama_berkas,
+                summary?.fenotipe?.nama_berkas,
+              ],
+              traits: traitsList,
+            }));
+      const resolvedOrg = normalizeOrganismCode(
+        detectedInfo?.organism ||
+          summary?.organism ||
+          state.configParams?.organism ||
+          state.currentAnalysis?.organism
+      );
+      const detectedTrait =
+        summary?.trait_name ||
+        summary?.trait ||
+        extractDefaultTraitFromColumns(traitsList) ||
+        '';
+      const keepExistingTrait =
+        state.configParams?.trait &&
+        (traitsList.length === 0 || traitsList.includes(state.configParams.trait));
+      const resolvedTrait = keepExistingTrait
+        ? state.configParams.trait
+        : detectedTrait || state.configParams?.trait || '';
       return {
         uploadSummary: summary,
         isSimulated: false,
+        configParams: {
+          ...state.configParams,
+          organism: resolvedOrg,
+          detectedOrganism: detectedInfo,
+          ...(resolvedTrait ? { trait: resolvedTrait } : {}),
+        },
         currentAnalysis: state.currentAnalysis
           ? {
               ...state.currentAnalysis,
               status: valid ? 'tervalidasi' : state.currentAnalysis.status,
+              organism: resolvedOrg,
+              detected_organism: detectedInfo,
+              ...(resolvedTrait ? { trait_name: resolvedTrait } : {}),
               sifat_tersedia:
-                summary?.sifat_tersedia ||
-                summary?.fenotipe?.daftar_sifat ||
-                summary?.fenotipe?.sifat_tersedia ||
-                state.currentAnalysis.sifat_tersedia ||
-                [],
+                traitsList.length > 0
+                  ? traitsList
+                  : state.currentAnalysis.sifat_tersedia || [],
             }
           : summary?.analysis_id
           ? {
@@ -156,7 +248,10 @@ export const useAnalysisStore = create((set, get) => ({
               id: summary.analysis_id,
               analysis_name: 'Analisis GWAS',
               status: valid ? 'tervalidasi' : 'draft',
-              sifat_tersedia: summary?.sifat_tersedia || summary?.fenotipe?.sifat_tersedia || [],
+              organism: resolvedOrg,
+              detected_organism: detectedInfo,
+              ...(resolvedTrait ? { trait_name: resolvedTrait } : {}),
+              sifat_tersedia: traitsList,
             }
           : null,
       };
@@ -199,6 +294,55 @@ export const useAnalysisStore = create((set, get) => ({
 
   setComputationStage: (computationStage) => set({ computationStage }),
 
+  ensureProgressAnalysis: (analysisId) =>
+    set((state) => {
+      if (!analysisId) return state;
+      if (String(state.progressAnalysisId || '') === String(analysisId)) return state;
+      return {
+        progressAnalysisId: analysisId,
+        globalProgress: 0,
+        stageProgress: { 1: 0, 2: 0, 3: 0, 4: 0 },
+      };
+    }),
+
+  resetComputationProgress: (analysisId = null) =>
+    set({
+      progressAnalysisId: analysisId,
+      globalProgress: 0,
+      stageProgress: { 1: 0, 2: 0, 3: 0, 4: 0 },
+    }),
+
+  setGlobalProgress: (incomingPercent, maxCap = 100) =>
+    set((state) => {
+      const prev = Number(state.globalProgress) || 0;
+      const rawIncoming = Number(incomingPercent);
+      const safeIncoming = Number.isFinite(rawIncoming)
+        ? Math.min(maxCap, Math.max(0, rawIncoming))
+        : 0;
+      const rounded = Math.round(safeIncoming * 10) / 10;
+      const next = Math.max(prev, rounded);
+      if (next === prev) return state;
+      return { globalProgress: next };
+    }),
+
+  setStageProgress: (stageId, incomingPercent, maxCap = 100) =>
+    set((state) => {
+      const prev = Number(state.stageProgress?.[stageId]) || 0;
+      const rawIncoming = Number(incomingPercent);
+      const safeIncoming = Number.isFinite(rawIncoming)
+        ? Math.min(maxCap, Math.max(0, rawIncoming))
+        : 0;
+      const rounded = Math.round(safeIncoming * 10) / 10;
+      const next = Math.max(prev, rounded);
+      if (next === prev) return state;
+      return {
+        stageProgress: {
+          ...state.stageProgress,
+          [stageId]: next,
+        },
+      };
+    }),
+
   /**
    * Eksekusi parameter & pipeline nyata ke backend.
    * Jika terjadi galat apa pun (4xx, 5xx, network error), error dilempar tanpa simulasi palsu.
@@ -219,9 +363,17 @@ export const useAnalysisStore = create((set, get) => ({
       });
     }
     const currentPayload = payload || get().configParams;
+    const effectiveTrait =
+      currentPayload?.trait ||
+      resolveTargetTraitName({
+        analysis: get().currentAnalysis,
+        configParams: get().configParams,
+        uploadSummary: get().uploadSummary,
+      });
 
     await analysisService.saveParameters(analysisId, {
       ...currentPayload,
+      ...(effectiveTrait && effectiveTrait !== '—' ? { trait: effectiveTrait } : {}),
       n_pc: 3,
     });
     const res = await analysisService.runAnalysis(analysisId);
@@ -232,11 +384,15 @@ export const useAnalysisStore = create((set, get) => ({
       isComputing: true,
       isCompleted: false,
       isFailed: false,
+      progressAnalysisId: analysisId,
+      globalProgress: 0,
+      stageProgress: { 1: 0, 2: 0, 3: 0, 4: 0 },
       error: null,
       jobStatus: res?.status || 'antre',
       currentAnalysis: {
         ...(get().currentAnalysis || {}),
         status: res?.status || 'antre',
+        organism: currentPayload?.organism || get().currentAnalysis?.organism,
       },
     });
     return res;
@@ -257,5 +413,8 @@ export const useAnalysisStore = create((set, get) => ({
       isComputing: false,
       isCompleted: false,
       isFailed: false,
+      progressAnalysisId: null,
+      globalProgress: 0,
+      stageProgress: { 1: 0, 2: 0, 3: 0, 4: 0 },
     }),
 }));

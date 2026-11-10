@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import {
   History,
@@ -14,7 +14,8 @@ import {
   Trash2,
 } from 'lucide-react';
 import { analysisService } from '../services/analysisService.js';
-import { ANALYSIS_STATUSES } from '../constants/defaultParams.js';
+import { useAnalysisStore } from '../store/useAnalysisStore.js';
+import { ANALYSIS_STATUSES, formatScientificBinomial, detectOrganismClientSide } from '../constants/defaultParams.js';
 import ErrorMessageArea from '../components/common/ErrorMessageArea.jsx';
 import AccessDeniedState from '../components/common/AccessDeniedState.jsx';
 
@@ -35,28 +36,97 @@ export default function HistoryPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
 
-  async function loadHistory() {
+  const isMountedRef = useRef(true);
+  const activeControllerRef = useRef(null);
+
+  const normalizeHistoryPayload = (payload) => {
+    if (Array.isArray(payload)) return payload;
+    if (Array.isArray(payload?.items)) return payload.items;
+    if (Array.isArray(payload?.analyses)) return payload.analyses;
+    if (Array.isArray(payload?.data)) return payload.data;
+    return [];
+  };
+
+  const getStoreSessionFallback = () => {
+    const cur = useAnalysisStore.getState().currentAnalysis;
+    const aid = cur?.analysis_id || cur?.id;
+    if (!aid) return [];
+    return [
+      {
+        analysis_id: aid,
+        analysis_name: cur.analysis_name || `Analisis GWAS #${aid}`,
+        status: cur.status || 'draft',
+        organism: cur.organism || 'Allium sativum',
+        organism_label: cur.organism_label,
+        trait_name: cur.trait_name || cur.trait,
+        analysis_time: cur.analysis_time || new Date().toISOString(),
+      },
+    ];
+  };
+
+  const loadHistory = useCallback(async () => {
+    if (activeControllerRef.current) {
+      activeControllerRef.current.abort();
+    }
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    activeControllerRef.current = controller;
+    let didLocalTimeout = false;
+    const timeoutId = controller
+      ? setTimeout(() => {
+          didLocalTimeout = true;
+          controller.abort();
+        }, 5000)
+      : null;
+
     setIsLoading(true);
     setError(null);
     setIsAccessDenied(false);
 
     try {
-      const data = await analysisService.listAnalyses();
-      setAnalyses(Array.isArray(data) ? data : []);
+      const data = await analysisService.listAnalyses({
+        ...(controller ? { signal: controller.signal } : {}),
+        timeoutMs: 5000,
+      });
+      if (!isMountedRef.current) return;
+      const list = normalizeHistoryPayload(data);
+      setAnalyses(list);
     } catch (err) {
-      if (err.status === 403) {
+      if (!isMountedRef.current) return;
+      if (err?.isAborted && !err?.isTimeout && !didLocalTimeout) {
+        return;
+      }
+      if (err?.status === 403) {
         setIsAccessDenied(true);
       } else {
-        setError(err);
+        const localFallback = getStoreSessionFallback();
+        if (localFallback.length > 0) {
+          setAnalyses(localFallback);
+        } else {
+          setAnalyses([]);
+          setError(err);
+        }
       }
     } finally {
-      setIsLoading(false);
+      if (timeoutId !== null) clearTimeout(timeoutId);
+      if (activeControllerRef.current === controller) {
+        activeControllerRef.current = null;
+      }
+      if (isMountedRef.current) {
+        setIsLoading(false);
+      }
     }
-  }
+  }, []);
 
   useEffect(() => {
+    isMountedRef.current = true;
     loadHistory();
-  }, []);
+    return () => {
+      isMountedRef.current = false;
+      if (activeControllerRef.current) {
+        activeControllerRef.current.abort();
+      }
+    };
+  }, [loadHistory]);
 
   async function handleDeleteAnalysis(item) {
     const label = item.analysis_name || `#${item.analysis_id}`;
@@ -261,8 +331,22 @@ export default function HistoryPage() {
                       </td>
 
                       {/* Organisme */}
+                      {/* Organisme */}
                       <td className="py-3.5 px-4 hidden md:table-cell text-slate-800 dark:text-slate-200 font-serif italic text-sm">
-                        {item.organism || 'Genomic Pipeline'}
+                        {(() => {
+                          if (item.organism_label) return item.organism_label;
+                          const rawOrg = String(item.organism || '').trim();
+                          if (rawOrg && !/^allium sativum$/i.test(rawOrg)) {
+                            return formatScientificBinomial(rawOrg);
+                          }
+                          const inferred = detectOrganismClientSide({
+                            filenames: [item.analysis_name],
+                            traits: [item.trait_name],
+                          });
+                          return inferred.auto_detected
+                            ? formatScientificBinomial(inferred.organism)
+                            : rawOrg || 'Allium sativum';
+                        })()}
                       </td>
 
                       {/* Waktu Sesi */}

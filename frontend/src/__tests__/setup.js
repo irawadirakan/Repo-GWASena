@@ -7,7 +7,7 @@ import { useAnalysisStore } from '../store/useAnalysisStore.js';
 // Polyfill DOM APIs missing in jsdom
 if (typeof window !== 'undefined') {
   if (!window.matchMedia) {
-    window.matchMedia = vi.fn().mockImplementation((query) => ({
+    window.matchMedia = (query) => ({
       matches: false,
       media: query,
       onchange: null,
@@ -16,7 +16,7 @@ if (typeof window !== 'undefined') {
       addEventListener: vi.fn(),
       removeEventListener: vi.fn(),
       dispatchEvent: vi.fn(),
-    }));
+    });
   }
 
   if (!window.URL.createObjectURL) {

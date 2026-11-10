@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from backend.core.config import settings
 from backend.models import Analysis, AnalysisParameter, VisualizationResult
 from backend.services import plot_service
-from pipeline.annotation import annotate_from_gff3
+from pipeline.annotation import annotate_from_gff3, annotate_snps_auto, scientific_name
 
 LABEL_PARAM = [
     ("trait", "Sifat yang dianalisis"), ("model", "Model uji asosiasi"),
@@ -69,7 +69,7 @@ def _image(db: Session, analysis_id: int, jenis: str, alt: str) -> str:
     return f'<img{kelas} alt="{escape(alt)}" src="data:image/png;base64,{data}">'
 
 
-def build_report(db: Session, a: Analysis) -> str:
+def build_report(db: Session, a: Analysis, organism_override: str | None = None) -> str:
     ring = db.scalar(select(VisualizationResult).where(
         VisualizationResult.analysis_id == a.analysis_id, VisualizationResult.plot_type == "ringkasan"))
     r = ring.plot_cache if ring and ring.plot_cache else {}
@@ -119,7 +119,39 @@ def build_report(db: Session, a: Analysis) -> str:
     bagian.append(f"<h2>4. Uji Asosiasi ({escape(str(r.get('model', '')))})</h2>"
                   + _table(["Besaran", "Nilai"], rows_aso) + catatan_lam)
 
-    bagian.append("<h2>5. Manhattan Plot</h2>" + _image(db, a.analysis_id, "manhattan", "Manhattan plot")
+    n_sig = int(aso.get("jumlah_signifikan") or len(sig) or 0)
+    bonf_p = aso.get("ambang_bonferroni_p")
+    bonf_neglog = f"{-__import__('math').log10(bonf_p):.2f}" if isinstance(bonf_p, (int, float)) and bonf_p > 0 else "–"
+    org_raw = organism_override or a.organism
+    org_sci = scientific_name(org_raw)
+    trait_disp = str(r.get("trait") or a.trait_name or "sifat target")
+    peak = None
+    if sig:
+        peak = max(sig, key=lambda s: -(s.get("p_value") or 1.0) if s.get("neglog10p") is None else float(s.get("neglog10p")))
+    if n_sig > 0 and peak:
+        peak_p = peak.get("p_value")
+        peak_nl = peak.get("neglog10p")
+        if peak_nl is None and isinstance(peak_p, (int, float)) and peak_p > 0:
+            peak_nl = -__import__("math").log10(peak_p)
+        peak_nl_txt = f"{peak_nl:.2f}" if isinstance(peak_nl, (int, float)) else "–"
+        catatan_manhattan = (
+            '<p class="cat"><strong>Interpretasi Hasil Asosiasi Genomik (Manhattan Plot):</strong> '
+            f"Identifikasi lokus genomik mendeteksi {n_sig} varian SNP signifikan yang melampaui ambang batas Bonferroni "
+            f"(-log₁₀P ≥ {escape(bonf_neglog)}), dengan sinyal asosiasi puncak pada {escape(str(peak.get('snp_id', '–')))} "
+            f"(Kromosom {escape(str(peak.get('chromosome', '–')))}, -log₁₀P = {escape(peak_nl_txt)}). "
+            "Konsentrasi puncak pada kromosom tersebut mengindikasikan keberadaan Quantitative Trait Loci (QTL) utama "
+            f"yang mengendalikan variasi fenotipe {escape(trait_disp)} pada <em>{escape(org_sci)}</em>.</p>"
+        )
+    else:
+        catatan_manhattan = (
+            '<p class="cat"><strong>Interpretasi Hasil Asosiasi Genomik (Manhattan Plot):</strong> '
+            f"Tidak ditemukan varian SNP yang melampaui ambang batas konservatif Bonferroni (-log₁₀P = {escape(bonf_neglog)}). "
+            f"Hal ini mengindikasikan bahwa sifat {escape(trait_disp)} pada <em>{escape(org_sci)}</em> kemungkinan besar "
+            "dikendalikan oleh arsitektur poligenik dengan efek alelik minor per lokus, sehingga disarankan meninjau "
+            "kandidat teratas menggunakan ambang eksploratori FDR.</p>"
+        )
+
+    bagian.append("<h2>5. Manhattan Plot</h2>" + _image(db, a.analysis_id, "manhattan", "Manhattan plot") + catatan_manhattan
                   + "<h2>6. QQ Plot</h2>" + _image(db, a.analysis_id, "qq", "QQ plot"))
 
     def snp_rows(daftar):
@@ -129,7 +161,7 @@ def build_report(db: Session, a: Analysis) -> str:
     kolom = ["SNP", "Kromosom", "Posisi", "REF/ALT", "β", "SE", "p", "p Bonferroni", "q (FDR)"]
     if sig:
         bagian.append("<h2>7. SNP Signifikan</h2>" + _table(kolom, snp_rows(sig), {2, 4, 5, 6, 7, 8}))
-        anot = annotate_from_gff3(sig, settings.ANNOTATION_GFF3, settings.ANNOTATION_WINDOW_BP)
+        anot = annotate_snps_auto(sig, org_raw, settings.ANNOTATION_GFF3, settings.ANNOTATION_WINDOW_BP)
         if anot["status"] == "tersedia":
             rows_gen = [[k["snp_id"], g["gene_id"], g.get("nama"), g["letak"], g["jarak_bp"]]
                         for k in anot["kandidat"] for g in k["gen"]]
@@ -151,7 +183,7 @@ def build_report(db: Session, a: Analysis) -> str:
         "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
         f"<title>Laporan GWASena - {judul}</title><style>{CSS}</style></head><body>"
         f"<h1>Laporan Analisis GWAS</h1><div class=\"meta\">{judul} · ID sesi {a.analysis_id} · "
-        f"{escape(a.organism or 'Allium sativum')} · sifat {escape(str(r.get('trait', '–')))} · "
+        f"<em>{escape(org_sci)}</em> · sifat {escape(str(r.get('trait', '–')))} · "
         f"model {escape(str(r.get('model', '–')))}</div>"
         + "".join(bagian)
         + f"<footer>Dibuat oleh GWASena pada {waktu}. Hasil GWAS menunjukkan asosiasi statistik, "

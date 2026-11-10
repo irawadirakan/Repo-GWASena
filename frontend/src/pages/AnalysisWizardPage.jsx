@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { analysisService } from '../services/analysisService.js';
 import { useAnalysisStore } from '../store/useAnalysisStore.js';
-import { ANALYSIS_STATUSES } from '../constants/defaultParams.js';
+import { ANALYSIS_STATUSES, getOrganismMeta, resolveTargetTraitName } from '../constants/defaultParams.js';
 import WizardStepper from '../components/wizard/WizardStepper.jsx';
 import Step1Upload from '../components/wizard/Step1Upload.jsx';
 import Step2Config from '../components/wizard/Step2Config.jsx';
@@ -34,6 +34,7 @@ export default function AnalysisWizardPage() {
     setCurrentAnalysis,
     uploadSummary,
     setUploadSummary,
+    configParams,
   } = useAnalysisStore();
 
   const [isLoading, setIsLoading] = useState(true);
@@ -150,6 +151,15 @@ export default function AnalysisWizardPage() {
 
   const statusKey = safeSession?.status?.toLowerCase() || 'draft';
   const statusConfig = ANALYSIS_STATUSES[statusKey] || ANALYSIS_STATUSES.draft;
+  const resolvedSessionTrait = resolveTargetTraitName({
+    analysis: safeSession,
+    configParams,
+    uploadSummary,
+  });
+  const enrichedSession =
+    resolvedSessionTrait && resolvedSessionTrait !== '—'
+      ? { ...safeSession, trait_name: resolvedSessionTrait, trait: resolvedSessionTrait }
+      : safeSession;
   const availableTraits =
     uploadSummary?.fenotipe?.daftar_sifat ||
     uploadSummary?.fenotipe?.sifat_tersedia ||
@@ -197,7 +207,11 @@ export default function AnalysisWizardPage() {
         <div className="flex items-center gap-2 self-start sm:self-auto">
           <div className="glass-subcard px-4 py-2 text-sm flex items-center gap-2 text-slate-800 dark:text-slate-100 font-bold shadow-sm">
             <Dna className="h-4 w-4 text-[#0284C7] dark:text-[#06B6D4]" />
-            <span>{safeSession?.organism || 'Genomic Association Suite'}</span>
+            <span>
+              {safeSession?.organism
+                ? getOrganismMeta(safeSession.organism).label
+                : 'Genomic Association Suite'}
+            </span>
           </div>
         </div>
       </div>
@@ -242,6 +256,7 @@ export default function AnalysisWizardPage() {
         {activeStep === 3 && (
           <Step3Computation
             analysisId={id}
+            analysis={enrichedSession}
             onComplete={() => {
               setActiveStep(4);
               refreshAnalysisQuiet(id);
@@ -252,6 +267,7 @@ export default function AnalysisWizardPage() {
         {activeStep === 4 && (
           <Step4Results
             analysisId={id}
+            analysis={enrichedSession}
             onNavigateStep={(stepNum) => setActiveStep(stepNum)}
           />
         )}
@@ -266,7 +282,7 @@ export default function AnalysisWizardPage() {
         {activeStep === 6 && (
           <Step6Export
             analysisId={id}
-            analysis={safeSession}
+            analysis={enrichedSession}
             onNavigateStep={(stepNum) => setActiveStep(stepNum)}
           />
         )}

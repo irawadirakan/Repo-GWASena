@@ -1,22 +1,25 @@
 import { Outlet } from 'react-router-dom';
 import DnaBackdrop from '../components/common/DnaBackdrop.jsx';
 import BrandLogo from '../components/common/BrandLogo.jsx';
-import FigmaThemeToggle from '../components/common/FigmaThemeToggle.jsx';
+import DnaThemeToggle from '../components/common/DnaThemeToggle.jsx';
+import { useThemeStore } from '../store/useThemeStore.js';
 
 /**
  * AuthLayout - Pembungkus Layar Publik
  * Acuan: frontend/screens/01 — Login.png & 02 — Register.png
  */
 export default function AuthLayout() {
+  const { theme, toggleTheme } = useThemeStore();
+
   return (
     <DnaBackdrop showDna={false}>
       {/* ── Public Topbar Sesuai Figma (Floating Liquid Glass) ── */}
-      <header className="sticky top-0 z-40 flex items-center justify-between glass-navbar px-4 py-3 sm:px-8">
+      <header className="sticky top-0 z-40 flex items-center justify-between glass-navbar overflow-visible px-4 py-3 sm:px-8">
         <BrandLogo size="md" />
 
-        <div className="flex items-center gap-3">
-          {/* Theme Toggle Pill Sesuai Figma (Area kanan atas hanya berisi toggle tema) */}
-          <FigmaThemeToggle />
+        <div className="flex items-center gap-3 overflow-visible">
+          {/* Interactive DNA Helix Theme Toggle */}
+          <DnaThemeToggle externalTheme={theme} onToggleTheme={toggleTheme} />
         </div>
       </header>
 

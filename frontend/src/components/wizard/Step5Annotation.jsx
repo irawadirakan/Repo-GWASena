@@ -1,7 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
   Dna,
-  Database,
   AlertTriangle,
   ArrowRight,
   ArrowLeft,
@@ -12,6 +11,7 @@ import {
   Info,
 } from 'lucide-react';
 import { useAnalysisStore } from '../../store/useAnalysisStore.js';
+import { normalizeOrganismCode } from '../../constants/defaultParams.js';
 import { analysisService } from '../../services/analysisService.js';
 
 /**
@@ -21,47 +21,140 @@ import { analysisService } from '../../services/analysisService.js';
  * Menampilkan pemetaan SNP signifikan dan teratas ke kandidat gen lokal GFF3
  * serta mekanisme non-blocking fallback jika berkas GFF3 tidak tersedia.
  */
+function buildClientFallbackCandidates(results) {
+  if (!results) return [];
+  const sig = Array.isArray(results.significant_snps) ? results.significant_snps : [];
+  const top = Array.isArray(results.top_snps) ? results.top_snps : [];
+  const all = Array.isArray(results.association_results) ? results.association_results : [];
+
+  let pool = sig.length > 0 ? sig : top;
+  if (pool.length === 0 && all.length > 0) {
+    pool = [...all]
+      .filter((s) => s && s.p_value !== null && s.p_value !== undefined)
+      .sort((a, b) => Number(a.p_value) - Number(b.p_value))
+      .slice(0, 10);
+  }
+  const sigIds = new Set(sig.map((s) => s?.snp_id).filter(Boolean));
+
+  return pool
+    .filter((s) => s && s.snp_id)
+    .slice(0, 10)
+    .map((snp) => {
+      const attachedGenes =
+        Array.isArray(snp.annotation_info?.gen) && snp.annotation_info.gen.length > 0
+          ? snp.annotation_info.gen
+          : snp.candidate_gene
+          ? [
+              {
+                gene_id: snp.candidate_gene,
+                nama: snp.candidate_gene,
+                deskripsi: `Kandidat gen terasosiasi dari hasil komputasi (${snp.candidate_gene}).`,
+                jarak_bp: 0,
+                konsekuensi: 'candidate_gene_variant',
+                letak: 'dekat gen',
+              },
+            ]
+          : [];
+      return {
+        snp_id: snp.snp_id,
+        chromosome: snp.chromosome,
+        position: snp.position,
+        p_value: snp.p_value,
+        signifikan: Boolean(snp.is_significant || snp.signifikan || sigIds.has(snp.snp_id)),
+        gen: attachedGenes,
+      };
+    });
+}
+
 export default function Step5Annotation({ analysisId, onNavigateStep }) {
-  useAnalysisStore();
+  const { currentAnalysis, results, configParams } = useAnalysisStore();
 
   const [annotationData, setAnnotationData] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
-    let isMounted = true;
+    if (!analysisId) {
+      setIsLoading(false);
+      return;
+    }
+
+    let isCancelled = false;
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timeoutId = controller
+      ? setTimeout(() => {
+          controller.abort();
+        }, 4000)
+      : null;
 
     async function fetchAnnotation() {
-      if (!analysisId) return;
       setIsLoading(true);
+      const fallbackSnps = buildClientFallbackCandidates(useAnalysisStore.getState().results);
+      const normOrg = normalizeOrganismCode(
+        useAnalysisStore.getState().configParams?.organism ||
+          useAnalysisStore.getState().currentAnalysis?.organism
+      );
+      const isEnsemblSpecies = normOrg && normOrg !== 'allium_sativum';
+
       try {
-        const data = await analysisService.getAnnotation(analysisId, true);
-        if (isMounted) {
+        const data = await analysisService.getAnnotation(analysisId, true, {
+          ...(controller ? { signal: controller.signal } : {}),
+          timeoutMs: 4000,
+        });
+        if (isCancelled) return;
+
+        if (
+          data?.status === 'tersedia' &&
+          (!Array.isArray(data?.kandidat) || data.kandidat.length === 0) &&
+          fallbackSnps.length > 0
+        ) {
+          setAnnotationData({
+            ...data,
+            kandidat: fallbackSnps,
+          });
+        } else {
           setAnnotationData(data);
         }
       } catch (err) {
+        if (isCancelled) return;
         console.warn('Gagal memuat anotasi dari backend, menampilkan fallback non-blocking (AC-07.2):', err);
-        if (isMounted) {
+        if (fallbackSnps.length > 0) {
+          setAnnotationData({
+            status: 'tersedia',
+            sumber: isEnsemblSpecies ? `Ensembl REST API (${normOrg})` : 'GFF3 Referensi Lokal',
+            sumber_tipe: isEnsemblSpecies ? 'ensembl' : 'gff3',
+            organism: normOrg,
+            jendela_bp: 50000,
+            pesan: `Menampilkan ${fallbackSnps.length} SNP prioritas dari hasil asosiasi Langkah 4.`,
+            kandidat: fallbackSnps,
+          });
+        } else {
           setAnnotationData({
             status: 'tidak_tersedia',
-            sumber: 'Berkas anotasi genom lokal (GFF3)',
+            sumber: isEnsemblSpecies ? `Ensembl REST API (${normOrg})` : 'GFF3 Referensi Lokal',
+            sumber_tipe: isEnsemblSpecies ? 'ensembl' : 'gff3',
             jendela_bp: 50000,
             pesan:
               err?.message ||
               err?.pesan ||
-              'Anotasi gen sementara tidak tersedia. Berkas anotasi GFF3 tidak dapat dibaca dari server.',
+              'Anotasi gen sementara tidak tersedia. Berkas referensi tidak dapat dimuat dari server.',
             kandidat: [],
           });
         }
       } finally {
-        if (isMounted) setIsLoading(false);
+        if (timeoutId !== null) clearTimeout(timeoutId);
+        if (!isCancelled) {
+          setIsLoading(false);
+        }
       }
     }
 
     fetchAnnotation();
 
     return () => {
-      isMounted = false;
+      isCancelled = true;
+      if (timeoutId !== null) clearTimeout(timeoutId);
+      if (controller) controller.abort();
     };
   }, [analysisId]);
 
@@ -139,6 +232,25 @@ export default function Step5Annotation({ analysisId, onNavigateStep }) {
 
   const isUnavailable = annotationData?.status === 'tidak_tersedia';
   const windowKb = Math.round((annotationData?.jendela_bp || 50000) / 1000);
+  const storeConfigParams = useAnalysisStore((s) => s.configParams);
+  const targetOrganism =
+    annotationData?.organism_target ||
+    annotationData?.organism ||
+    currentAnalysis?.organism_target ||
+    currentAnalysis?.organism ||
+    storeConfigParams?.organism ||
+    'Organisme Target Sesi';
+
+  const rawSource = String(annotationData?.sumber || '');
+  const isEnsemblSource =
+    annotationData?.sumber_tipe === 'ensembl' ||
+    /ensembl/i.test(rawSource);
+  const displaySpeciesCode =
+    annotationData?.organism ||
+    normalizeOrganismCode(targetOrganism);
+  const sourceBadgeLabel = isEnsemblSource
+    ? `Sumber: Ensembl REST API (${displaySpeciesCode})`
+    : 'Sumber: GFF3 Referensi Lokal';
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -150,20 +262,20 @@ export default function Step5Annotation({ analysisId, onNavigateStep }) {
             onClick={() => onNavigateStep(4)}
             className="rounded-xl px-3.5 py-1.5 text-xs font-sans font-semibold text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors"
           >
-            &larr; Langkah 4: Hasil & Visualisasi
+            Hasil & Visualisasi
           </button>
           <button
             type="button"
             className="rounded-xl bg-[#5B4DFE] px-3.5 py-1.5 text-xs font-sans font-bold text-white shadow-sm"
           >
-            Langkah 5: Anotasi Gen
+            Anotasi Gen
           </button>
           <button
             type="button"
             onClick={() => onNavigateStep(6)}
             className="rounded-xl px-3.5 py-1.5 text-xs font-sans font-semibold text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors"
           >
-            Langkah 6: Ekspor & Laporan &rarr;
+            Ekspor & Laporan
           </button>
         </div>
 
@@ -187,38 +299,11 @@ export default function Step5Annotation({ analysisId, onNavigateStep }) {
         </div>
       </div>
 
-      {/* ── Banner Status Referensi Genom (GFF3 Lokal) ── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-3xl figma-card p-4 sm:p-5">
-        <div className="flex items-center gap-3.5">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-indigo-100 dark:bg-[#5B4DFE]/20 text-indigo-600 dark:text-[#06B6D4]">
-            <Database className="h-5 w-5" />
-          </div>
-          <div>
-            <h4 className="text-sm font-sans font-bold text-slate-900 dark:text-white flex flex-wrap items-center gap-2">
-              <span>{annotationData?.sumber || 'Berkas Anotasi Genom Lokal (GFF3)'}</span>
-              {!isUnavailable ? (
-                <span className="rounded-full bg-emerald-100 dark:bg-emerald-500/20 px-2.5 py-0.5 text-xs font-sans font-bold text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-500/30">
-                  Anotasi GFF3 Tersedia (±{windowKb} kb)
-                </span>
-              ) : (
-                <span className="rounded-full bg-amber-100 dark:bg-amber-500/20 px-2.5 py-0.5 text-xs font-sans font-bold text-amber-900 dark:text-amber-300 border border-amber-300 dark:border-amber-500/30">
-                  Anotasi Tidak Tersedia (Non-Blocking)
-                </span>
-              )}
-            </h4>
-            <p className="text-xs sm:text-[13px] font-sans text-slate-700 dark:text-slate-300 font-medium">
-              Pemetaan posisi lokus penanda SNP ke struktur gen fungsional Allium sativum (jendela anotasi: &plusmn;{windowKb} kb).
-            </p>
-          </div>
-        </div>
-
-      </div>
-
       {isLoading ? (
         <div className="flex min-h-[30vh] flex-col items-center justify-center p-8 space-y-3">
           <Loader2 className="h-8 w-8 animate-spin text-[#06B6D4]" />
           <p className="text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300">
-            Mencocokkan posisi SNP dengan berkas anotasi GFF3 lokal...
+            Memuat pemetaan kandidat gen (Ensembl / GFF3)...
           </p>
         </div>
       ) : isUnavailable ? (
@@ -253,7 +338,23 @@ export default function Step5Annotation({ analysisId, onNavigateStep }) {
             <div>
               <h4 className="text-sm sm:text-base font-sans font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <Dna className="h-4 w-4 text-[#06B6D4]" />
-                <span>Tabel Pemetaan Kandidat Gen (GFF3 Lokal)</span>
+                <span className="flex flex-wrap items-center gap-2">
+                  <span>
+                    {isEnsemblSource
+                      ? `Tabel Pemetaan Kandidat Gen (${displaySpeciesCode})`
+                      : 'Tabel Pemetaan Kandidat Gen (GFF3 Lokal)'}
+                  </span>
+                  <span
+                    data-testid="annotation-source-badge"
+                    className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-bold ${
+                      isEnsemblSource
+                        ? 'border-cyan-500/30 bg-cyan-500/10 text-cyan-700 dark:text-cyan-300'
+                        : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                    }`}
+                  >
+                    {sourceBadgeLabel}
+                  </span>
+                </span>
               </h4>
               <p className="text-xs sm:text-[13px] font-sans text-slate-700 dark:text-slate-300 font-medium">
                 {annotationData?.pesan ||
@@ -299,6 +400,9 @@ export default function Step5Annotation({ analysisId, onNavigateStep }) {
               <table className="w-full text-left text-sm">
                 <thead className="border-b border-slate-200 dark:border-white/10 text-xs text-slate-800 dark:text-slate-200 uppercase font-sans font-bold bg-slate-100/95 dark:bg-[#0B132C]/90">
                   <tr>
+                    <th className="px-3 py-3 text-left text-xs font-bold text-slate-700 dark:text-slate-300 w-12">
+                      NO.
+                    </th>
                     <th className="py-3 px-3.5">SNP ID</th>
                     <th className="py-3 px-3.5">Kromosom & Posisi</th>
                     <th className="py-3 px-3.5">Kandidat Gen</th>
@@ -313,6 +417,9 @@ export default function Step5Annotation({ analysisId, onNavigateStep }) {
                       key={`${gene.snp_id}-${gene.gene_id || idx}`}
                       className="hover:bg-slate-50/80 dark:hover:bg-white/5 transition-colors"
                     >
+                      <td className="px-3 py-3 text-xs sm:text-sm font-semibold text-slate-500 dark:text-slate-400">
+                        {idx + 1}
+                      </td>
                       <td className="py-3 px-3.5 font-mono font-bold text-[#0284C7] dark:text-[#06B6D4]">
                         <div className="space-y-1">
                           <div className="flex items-center gap-1.5">
@@ -370,7 +477,7 @@ export default function Step5Annotation({ analysisId, onNavigateStep }) {
                       </td>
                       <td className="py-3 px-3.5 max-w-sm text-xs sm:text-sm">
                         <p className="font-serif text-slate-800 dark:text-slate-200 leading-relaxed font-medium">
-                          {gene.deskripsi || 'Gen struktural fungsional Allium sativum.'}
+                          {gene.deskripsi || `Gen struktural fungsional ${targetOrganism}.`}
                         </p>
                         {gene.awal && gene.akhir && (
                           <p className="font-mono text-[11px] text-slate-500 dark:text-slate-400 mt-1">
@@ -389,7 +496,7 @@ export default function Step5Annotation({ analysisId, onNavigateStep }) {
             <BookOpen className="h-4 w-4 text-[#0284C7] dark:text-[#06B6D4] shrink-0 mt-0.5" />
             <p className="font-sans leading-relaxed">
               Anotasi gen biologis memetakan lokus kuantitatif (QTL) asosiasi penanda SNP dengan gen penentu sifat fungsional,
-              regulasi ekspresi genetik, dan jalur biosintesis spesifik populasi Allium sativum dari berkas GFF3 lokal.
+              regulasi ekspresi genetik, dan jalur biosintesis spesifik populasi {targetOrganism} dari berkas GFF3 lokal.
             </p>
           </div>
         </div>

@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   UploadCloud,
@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { analysisService } from '../../services/analysisService.js';
 import { useAnalysisStore } from '../../store/useAnalysisStore.js';
+import { detectOrganismClientSide, extractDefaultTraitFromColumns } from '../../constants/defaultParams.js';
 import ErrorMessageArea from '../common/ErrorMessageArea.jsx';
 
 /**
@@ -62,6 +63,50 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
   );
 
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [validationStageText, setValidationStageText] = useState('');
+  const progressTimersRef = useRef([]);
+
+  const clearProgressTimers = () => {
+    progressTimersRef.current.forEach((t) => clearTimeout(t));
+    progressTimersRef.current = [];
+  };
+
+  useEffect(() => {
+    return () => clearProgressTimers();
+  }, []);
+
+  const startStagedProgress = () => {
+    clearProgressTimers();
+    setUploadProgress(15);
+    setValidationStageText('Mengirim berkas & menginisiasi validasi...');
+    progressTimersRef.current.push(
+      setTimeout(() => {
+        setUploadProgress((prev) => (prev < 35 ? 35 : prev));
+        setValidationStageText('Membaca struktur berkas genotipe');
+      }, 250),
+      setTimeout(() => {
+        setUploadProgress((prev) => (prev < 70 ? 70 : prev));
+        setValidationStageText('Mencocokkan Sample ID & kovariat fenotipe');
+      }, 650),
+      setTimeout(() => {
+        setUploadProgress((prev) => (prev < 90 ? 90 : prev));
+        setValidationStageText('Mendeteksi profil kromosom & organisme');
+      }, 1100)
+    );
+  };
+
+  const completeStagedProgress = () => {
+    clearProgressTimers();
+    setUploadProgress(100);
+    setValidationStageText('Validasi selesai!');
+  };
+
+  const resetStagedProgress = () => {
+    clearProgressTimers();
+    setUploadProgress(0);
+    setValidationStageText('');
+  };
   const [uploadResult, setUploadResult] = useState(uploadSummary || null);
   const [error, setError] = useState(null);
   const [showStructureModal, setShowStructureModal] = useState(false);
@@ -162,6 +207,7 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
     setError(null);
     setLoadingBenchmarkMode(mode);
     setIsUploading(true);
+    startStagedProgress();
 
     try {
       // 1. Panggil endpoint dedicated backend: POST /api/analyses/benchmark
@@ -220,8 +266,32 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
         });
       }
 
-      setUploadResult(res);
-      setUploadSummary(res);
+      const benchmarkRes = {
+        ...res,
+        organism: res?.organism || 'allium_sativum',
+        detected_organism: res?.detected_organism || {
+          organism: 'allium_sativum',
+          kingdom: 'tanaman',
+          label: 'Bawang Putih (Allium sativum)',
+          detected_by: 'dataset contoh benchmark',
+          auto_detected: true,
+        },
+      };
+      const benchCols =
+        benchmarkRes?.fenotipe?.daftar_sifat ||
+        benchmarkRes?.fenotipe?.sifat_tersedia ||
+        benchmarkRes?.sifat_tersedia ||
+        ['bobot_umbi_g'];
+      const benchTrait = extractDefaultTraitFromColumns(benchCols);
+      const enrichedBench = {
+        ...benchmarkRes,
+        ...(benchTrait ? { trait: benchTrait, trait_name: benchTrait } : {}),
+      };
+      if (benchTrait) {
+        useAnalysisStore.getState().setConfigParams({ trait: benchTrait });
+      }
+      setUploadResult(enrichedBench);
+      setUploadSummary(enrichedBench);
       setError(null);
 
       // Auto-naming sinkronisasi jika nama sesi diawali kosong
@@ -239,8 +309,10 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
         }
       }
 
-      onUploadSuccess?.(res);
+      completeStagedProgress();
+      onUploadSuccess?.(enrichedBench);
     } catch (err) {
+      resetStagedProgress();
       console.error('Gagal memuat dataset benchmark dari server:', err);
       setError({
         message: err?.message || err?.pesan || 'Gagal memuat dataset benchmark dari server.',
@@ -309,6 +381,7 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
 
     setIsUploading(true);
     setError(null);
+    startStagedProgress();
 
     const formData = new FormData();
     formData.append('genotipe', genotypeFile);
@@ -320,8 +393,33 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
 
     try {
       const res = await analysisService.uploadDataset(analysisId, formData);
-      setUploadResult(res);
-      setUploadSummary(res);
+      const detected = res?.detected_organism || detectOrganismClientSide({
+        filenames: [genotypeFile?.name, phenotypeFile?.name, bimFile?.name, famFile?.name],
+        traits: res?.fenotipe?.daftar_sifat || res?.sifat_tersedia || [],
+      });
+      const enrichedRes = {
+        ...res,
+        organism: res?.organism || detected.organism,
+        detected_organism: detected,
+      };
+      const uploadedCols =
+        enrichedRes?.fenotipe?.daftar_sifat ||
+        enrichedRes?.fenotipe?.sifat_tersedia ||
+        enrichedRes?.sifat_tersedia ||
+        [];
+      const detectedTrait =
+        enrichedRes?.trait_name ||
+        enrichedRes?.trait ||
+        extractDefaultTraitFromColumns(uploadedCols);
+      const finalUploadRes = {
+        ...enrichedRes,
+        ...(detectedTrait ? { trait: detectedTrait, trait_name: detectedTrait } : {}),
+      };
+      if (detectedTrait) {
+        useAnalysisStore.getState().setConfigParams({ trait: detectedTrait });
+      }
+      setUploadResult(finalUploadRes);
+      setUploadSummary(finalUploadRes);
 
       // Auto-naming sinkronisasi jika nama sesi diawali kosong
       if (typeof window !== 'undefined' && localStorage.getItem(`gwasena_auto_name_${analysisId}`) === 'true') {
@@ -336,8 +434,10 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
         }
       }
 
-      onUploadSuccess?.(res);
+      completeStagedProgress();
+      onUploadSuccess?.(finalUploadRes);
     } catch (err) {
+      resetStagedProgress();
       console.error('Validasi berkas gagal atau ditolak server:', err);
       setError({
         message: err?.message || err?.pesan || 'Validasi berkas gagal diproses oleh server.',
@@ -865,7 +965,7 @@ sample_05,48.2,42.0,13
         </div>
 
         {/* Tombol Unggah & Validasi (Figma Primary CTA) */}
-        <div className="flex justify-center pt-2">
+        <div className="flex flex-col items-center gap-3 pt-2">
           <button
             type="submit"
             disabled={
@@ -879,7 +979,7 @@ sample_05,48.2,42.0,13
             {isUploading ? (
               <>
                 <Loader2 className="h-5 w-5 animate-spin" />
-                <span>Memvalidasi Format &amp; Mencocokkan Sample ID...</span>
+                <span>Memvalidasi Format &amp; Mencocokkan Sample ID... ({uploadProgress}%)</span>
               </>
             ) : (
               <>
@@ -888,6 +988,35 @@ sample_05,48.2,42.0,13
               </>
             )}
           </button>
+
+          {isUploading && (
+            <div
+              data-testid="upload-progress-container"
+              className="w-full max-w-lg rounded-2xl border border-cyan-400/30 bg-white/75 dark:bg-slate-900/75 px-4 py-3 shadow-sm space-y-2 animate-fade-in"
+            >
+              <div className="flex items-center justify-between text-xs font-sans">
+                <span className="font-semibold text-slate-700 dark:text-slate-200">
+                  {validationStageText || 'Memvalidasi berkas dataset...'}
+                </span>
+                <span className="font-mono font-bold text-[#0284C7] dark:text-[#06B6D4] tabular-nums">
+                  {uploadProgress}%
+                </span>
+              </div>
+              <div
+                role="progressbar"
+                aria-label="Progres validasi unggah berkas"
+                aria-valuenow={uploadProgress}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                className="h-2 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700"
+              >
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-[#5B4DFE] to-[#06B6D4] transition-all duration-300 ease-out"
+                  style={{ width: `${uploadProgress}%` }}
+                />
+              </div>
+            </div>
+          )}
         </div>
       </form>
 
@@ -906,6 +1035,14 @@ sample_05,48.2,42.0,13
                 </h3>
                 <span className="text-xs text-emerald-800 dark:text-emerald-400 font-medium">
                   {uploadResult.pesan || 'Berkas valid dan siap dikonfigurasi.'}
+                  {uploadResult.detected_organism?.auto_detected && (
+                    <span
+                      data-testid="step1-detected-organism-badge"
+                      className="ml-2 inline-flex items-center rounded-full bg-emerald-100 dark:bg-emerald-500/20 px-2.5 py-0.5 text-[11px] font-bold text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-500/30"
+                    >
+                      ✓ Organisme: {uploadResult.detected_organism.label || uploadResult.organism}
+                    </span>
+                  )}
                 </span>
               </div>
             </div>

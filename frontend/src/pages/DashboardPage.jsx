@@ -9,7 +9,6 @@ import {
   Loader2,
   X,
   Layers,
-  Sparkles,
 } from 'lucide-react';
 import { useAuthStore } from '../store/useAuthStore.js';
 import { useAnalysisStore } from '../store/useAnalysisStore.js';
@@ -176,52 +175,25 @@ export default function DashboardPage() {
   );
 
   return (
-    <div className="space-y-8 animate-fade-in pb-12">
-      {/* ── Banner Sambutan Peneliti & Organisme (3-Layer High Separation Glass) ── */}
-      <div className="relative overflow-hidden figma-card p-6 sm:p-8">
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 rounded-full border border-cyan-300 dark:border-[#06B6D4]/30 bg-cyan-50 dark:bg-[#06B6D4]/10 px-3 py-1 text-xs font-semibold text-cyan-900 dark:text-[#06B6D4]">
-              <Sprout className="h-3.5 w-3.5 text-cyan-700 dark:text-[#06B6D4]" />
-              <span>Alur Kerja Analisis Asosiasi Genomik GWASena</span>
-            </div>
-
-            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white font-sans">
-              Selamat datang kembali,{' '}
-              <span className="text-[#5B4DFE] dark:text-[#06B6D4]">{user?.username || 'Peneliti'}</span>!
-            </h1>
-
-            <p className="max-w-2xl font-serif text-base sm:text-lg text-slate-600 dark:text-slate-300 leading-relaxed">
-              Mulai sesi analisis asosiasi genomik baru atau lanjutkan evaluasi hasil riset terdahulu
-              dengan alur kerja terstandarisasi.
-            </p>
+    <>
+      <div className="space-y-8 animate-fade-in pb-12">
+      {/* ── Banner Sambutan Peneliti (Proportional Clean Hero Banner) ── */}
+      <div className="relative overflow-hidden figma-card p-6 sm:p-8 md:p-10">
+        <div className="relative z-10 space-y-3">
+          <div className="inline-flex items-center gap-2 rounded-full border border-cyan-300 dark:border-[#06B6D4]/30 bg-cyan-50 dark:bg-[#06B6D4]/10 px-3 py-1 text-xs font-semibold text-cyan-900 dark:text-[#06B6D4]">
+            <Sprout className="h-3.5 w-3.5 text-cyan-700 dark:text-[#06B6D4]" />
+            <span>Alur Kerja Analisis Asosiasi Genomik GWASena</span>
           </div>
 
-          {/* Ringkasan Aktivitas Riset (Evaluasi Tester Poin 8) */}
-          <div className="shrink-0 glass-subcard p-4 text-xs sm:text-sm space-y-2 min-w-[240px] border border-cyan-400/40 dark:border-cyan-500/20 bg-white/80 dark:bg-[#121B38]/80 shadow-sm rounded-2xl">
-            <div className="flex items-center justify-between border-b border-slate-200/80 dark:border-white/10 pb-1.5">
-              <span className="font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider text-[11px] font-sans flex items-center gap-1.5">
-                <Sparkles className="h-3 w-3 text-[#06B6D4]" />
-                <span>Ringkasan Aktivitas Riset</span>
-              </span>
-              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" title="Ruang Kerja Siap" />
-            </div>
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white font-sans">
+            Selamat datang kembali,{' '}
+            <span className="text-[#5B4DFE] dark:text-[#06B6D4]">{user?.username || 'Peneliti'}</span>!
+          </h1>
 
-            <div className="space-y-1">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-slate-600 dark:text-slate-400">Sesi Tersimpan:</span>
-                <span className="font-mono font-bold text-slate-900 dark:text-white">
-                  {sessionHistory.length} Sesi Terdaftar
-                </span>
-              </div>
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-slate-600 dark:text-slate-400">Ruang Kerja:</span>
-                <span className="font-sans font-semibold text-emerald-600 dark:text-emerald-400">
-                  Siap untuk Analisis
-                </span>
-              </div>
-            </div>
-          </div>
+          <p className="max-w-3xl font-serif text-base sm:text-lg text-slate-600 dark:text-slate-300 leading-relaxed">
+            Mulai sesi analisis asosiasi genomik baru atau lanjutkan evaluasi hasil riset terdahulu
+            dengan alur kerja terstandarisasi.
+          </p>
         </div>
 
         {/* Subtle decorative glow */}
@@ -406,19 +378,27 @@ export default function DashboardPage() {
       </div>
 
 
-      {/* ── Modal Dialog Inisiasi Analisis Baru (Dengan Custom Autocomplete & Penghapusan Riwayat) ── */}
+      </div>
+
+      {/* ── Modal Dialog Inisiasi Analisis Baru (Posisi Tinggi Bebas Scroll) ── */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="new-session-modal-title"
+          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 pt-16 sm:pt-24 md:pt-28 bg-slate-950/70 backdrop-blur-sm"
+        >
           <div className="w-full max-w-lg figma-card p-6 sm:p-7 shadow-2xl space-y-4 animate-modal-in">
             <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-3.5">
               <div className="flex items-center gap-2">
                 <Dna className="h-5 w-5 text-[#5B4DFE] dark:text-[#06B6D4]" />
-                <h3 className="text-lg font-bold text-slate-900 dark:text-white font-sans tracking-tight">
+                <h3 id="new-session-modal-title" className="text-lg font-bold text-slate-900 dark:text-white font-sans tracking-tight">
                   Inisiasi Sesi Analisis Baru
                 </h3>
               </div>
               <button
                 type="button"
+                aria-label="Tutup modal"
                 onClick={() => setIsModalOpen(false)}
                 className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-700 dark:hover:text-white active:scale-95 transition-all"
               >
@@ -470,9 +450,6 @@ export default function DashboardPage() {
                   )}
                 </div>
 
-                <span className="mt-1 block text-xs text-slate-600 dark:text-slate-300 font-medium font-sans">
-                  Opsional: Kosongkan untuk penamaan otomatis mengikuti berkas/sifat fenotipe di Langkah 1.
-                </span>
 
                 {/* Custom Autocomplete Dropdown Riwayat Nama Sesi (Hanya tampil jika isFocused dan filteredHistory.length > 0) */}
                 {isDropdownOpen && isFocused && filteredHistory.length > 0 && (
@@ -552,6 +529,6 @@ export default function DashboardPage() {
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }
