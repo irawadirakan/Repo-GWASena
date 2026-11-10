@@ -72,6 +72,7 @@ export default function App() {
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/history" element={<HistoryPage />} />
           <Route path="/analyses/:id" element={<AnalysisWizardPage />} />
+          <Route path="/sesi/:id" element={<AnalysisWizardPage />} />
         </Route>
 
         {/* ── Wildcard Fallback ── */}

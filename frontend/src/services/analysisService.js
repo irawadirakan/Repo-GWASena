@@ -104,6 +104,47 @@ export const analysisService = {
   },
 
   /**
+   * Muat dataset contoh benchmark (VCF atau PLINK)
+   * Otomatis membuat sesi baru di DB jika analysisId belum terdaftar / bernilai null / 404
+   * @param {string} format - 'VCF' | 'PLINK'
+   * @param {number|string|null} analysisId
+   */
+  async loadBenchmark(format = 'VCF', analysisId = null) {
+    return apiClient.post('/api/analyses/benchmark', {
+      format: (format || 'VCF').toUpperCase(),
+      analysis_id: analysisId ? Number(analysisId) || analysisId : null,
+    });
+  },
+
+  /**
+   * Unduh paket berkas contoh benchmark (ZIP)
+   * @param {'vcf'|'plink'|'all'} format
+   */
+  async downloadBenchmarkZip(format = 'all') {
+    const token = getStoredToken();
+    const headers = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const res = await fetch(`/api/analyses/benchmark/download?format=${format}`, {
+      method: 'GET',
+      headers,
+    });
+    if (!res.ok) {
+      throw new Error(`Gagal mengunduh berkas benchmark: HTTP ${res.status}`);
+    }
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `gwasena_benchmark_bawang_putih_${format}.zip`;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+    return true;
+  },
+
+  /**
    * Simpan konfigurasi parameter QC & model
    * @param {number|string} analysisId
    * @param {object} parameterConfig

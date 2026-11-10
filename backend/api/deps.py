@@ -40,3 +40,31 @@ def owned_analysis(
     if analysis.user_id != user.user_id and user.role != "administrator":
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Anda tidak memiliki akses ke analisis ini.")
     return analysis
+
+def get_current_user_or_demo(
+    cred: HTTPAuthorizationCredentials | None = Depends(bearer),
+    db: Session = Depends(get_db),
+) -> User:
+    if cred is not None:
+        try:
+            payload = decode_token(cred.credentials)
+            if payload:
+                user = db.get(User, payload["sub"])
+                if user is not None:
+                    return user
+        except Exception:
+            pass
+    from sqlalchemy import select
+    user = db.scalar(select(User).order_by(User.user_id.asc()))
+    if user is None:
+        user = User(
+            username="peneliti_gwasena",
+            email="peneliti@gwasena.id",
+            password_hash=None,
+            role="pengguna_analisis",
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+    return user
+

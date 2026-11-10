@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   UploadCloud,
   FileText,
@@ -26,6 +27,7 @@ import ErrorMessageArea from '../common/ErrorMessageArea.jsx';
  * Acuan: PR #24 (Dukungan Format PLINK Biner .bed/.bim/.fam) & FR-02
  */
 export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
+  const navigate = useNavigate();
   const {
     setActiveStep,
     setUploadSummary,
@@ -33,6 +35,9 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
     uploadSummary,
     loadMockGarlicDataset,
   } = useAnalysisStore();
+
+  const [loadingBenchmarkMode, setLoadingBenchmarkMode] = useState(null);
+  const [isDownloadingZip, setIsDownloadingZip] = useState(false);
 
   const [formatMode, setFormatMode] = useState(
     uploadSummary?.genotipe?.format?.toLowerCase()?.includes('plink') ? 'plink' : 'vcf'
@@ -157,77 +162,143 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
   // 1-Klik Instan: Gunakan Dataset Contoh Benchmark (VCF atau PLINK)
   const handleUseSampleData = async (mode = 'vcf') => {
     setError(null);
+    setLoadingBenchmarkMode(mode);
+    setIsUploading(true);
 
     try {
+      // 1. Panggil endpoint dedicated backend: POST /api/analyses/benchmark
+      const res = await analysisService.loadBenchmark(mode, analysisId);
+
+      // 2. Sinkronisasi Sesi: Jika backend membuat sesi baru (karena sesi sebelumnya 404/null),
+      // perbarui URL secara transparan tanpa reload halaman
+      const newAnalysisId = res.analysis_id;
+      if (newAnalysisId && String(newAnalysisId) !== String(analysisId)) {
+        navigate(`/analyses/${newAnalysisId}`, { replace: true });
+        useAnalysisStore.getState().setCurrentAnalysis({
+          id: newAnalysisId,
+          analysis_id: newAnalysisId,
+          analysis_name: 'Analisis Bobot Umbi Bawang Putih',
+          status: 'tervalidasi',
+          organism: 'Allium sativum (Bawang Putih)',
+        });
+      }
+
+      // 3. Pasang file representasi di kartu slot unggahan agar UI interaktif & valid
       if (mode === 'plink') {
-        const { bedFile, bimFile: bFile, famFile: fFile, csvFile } = await getExamplePlinkFiles();
         setFormatMode('plink');
-        setGenotypeFile(bedFile);
-        setBimFile(bFile);
-        setFamFile(fFile);
-        setPhenotypeFile(csvFile);
-
-        const mockSummary = {
-          ...MOCK_GARLIC_DATASET_SUMMARY,
-          genotipe: {
-            nama_berkas: 'genotipe_bawang_putih_mini.bed',
-            format: 'PLINK biner',
-            jumlah_sampel: 40,
-            jumlah_snp: 500,
-            varian_dilewati: { multialelik: 0 },
-          },
-        };
-        setUploadResult(mockSummary);
-        setUploadSummary(mockSummary);
-        setIsSimulated(true);
-
-        // Auto-naming sinkronisasi jika nama sesi diawali kosong
-        if (typeof window !== 'undefined' && localStorage.getItem(`gwasena_auto_name_${analysisId}`) === 'true') {
-          const cur = useAnalysisStore.getState().currentAnalysis;
-          if (cur) {
-            useAnalysisStore.getState().setCurrentAnalysis({
-              ...cur,
-              analysis_name: 'Analisis Bobot Umbi Bawang Putih',
-            });
-          }
-        }
-
-        onUploadSuccess?.(mockSummary);
+        setGenotypeFile({
+          name: 'genotipe_bawang_putih_mini.bed',
+          size: 5003,
+          type: 'application/octet-stream',
+        });
+        setBimFile({
+          name: 'genotipe_bawang_putih_mini.bim',
+          size: 17364,
+          type: 'text/plain',
+        });
+        setFamFile({
+          name: 'genotipe_bawang_putih_mini.fam',
+          size: 880,
+          type: 'text/plain',
+        });
+        setPhenotypeFile({
+          name: 'fenotipe_bawang_putih_mini.csv',
+          size: 1441,
+          type: 'text/csv',
+        });
       } else {
-        const { vcfFile, csvFile } = await getExampleDatasetFiles();
         setFormatMode('vcf');
-        setGenotypeFile(vcfFile);
+        setGenotypeFile({
+          name: 'genotipe_bawang_putih_mini.vcf',
+          size: 107529,
+          type: 'text/vcf',
+        });
         setBimFile(null);
         setFamFile(null);
-        setPhenotypeFile(csvFile);
-
-        const mockSummary = loadMockGarlicDataset
-          ? loadMockGarlicDataset()
-          : { ...MOCK_GARLIC_DATASET_SUMMARY };
-
-        setUploadResult(mockSummary);
-        setUploadSummary(mockSummary);
-        setIsSimulated(true);
-
-        // Auto-naming sinkronisasi jika nama sesi diawali kosong
-        if (typeof window !== 'undefined' && localStorage.getItem(`gwasena_auto_name_${analysisId}`) === 'true') {
-          const cur = useAnalysisStore.getState().currentAnalysis;
-          if (cur) {
-            useAnalysisStore.getState().setCurrentAnalysis({
-              ...cur,
-              analysis_name: 'Analisis Bobot Umbi Bawang Putih',
-            });
-          }
-        }
-
-        onUploadSuccess?.(mockSummary);
+        setPhenotypeFile({
+          name: 'fenotipe_bawang_putih_mini.csv',
+          size: 1441,
+          type: 'text/csv',
+        });
       }
+
+      setUploadResult(res);
+      setUploadSummary(res);
+      setIsSimulated(false);
+      setError(null);
+
+      // Auto-naming sinkronisasi jika nama sesi diawali kosong
+      if (typeof window !== 'undefined' && localStorage.getItem(`gwasena_auto_name_${analysisId}`) === 'true') {
+        const cur = useAnalysisStore.getState().currentAnalysis;
+        if (cur) {
+          useAnalysisStore.getState().setCurrentAnalysis({
+            ...cur,
+            analysis_name: 'Analisis Bobot Umbi Bawang Putih',
+          });
+        }
+      }
+
+      onUploadSuccess?.(res);
     } catch (err) {
-      console.error('Gagal menyiapkan dataset contoh:', err);
-      setError({
-        message: 'Gagal memuat dataset contoh.',
-        details: [err.message || String(err)],
-      });
+      console.warn('Gagal memuat benchmark dari backend, memeriksa fallback offline:', err);
+      const isNetworkError = !err.status || err.status === 0 || err.code === 'ERR_NETWORK' || err.status === 501;
+
+      if (isNetworkError) {
+        try {
+          if (mode === 'plink') {
+            const { bedFile, bimFile: bFile, famFile: fFile, csvFile } = await getExamplePlinkFiles();
+            setFormatMode('plink');
+            setGenotypeFile(bedFile);
+            setBimFile(bFile);
+            setFamFile(fFile);
+            setPhenotypeFile(csvFile);
+
+            const mockSummary = {
+              ...MOCK_GARLIC_DATASET_SUMMARY,
+              genotipe: {
+                nama_berkas: 'genotipe_bawang_putih_mini.bed',
+                format: 'PLINK biner',
+                jumlah_sampel: 40,
+                jumlah_snp: 500,
+                varian_dilewati: { multialelik: 0 },
+              },
+            };
+            setUploadResult(mockSummary);
+            setUploadSummary(mockSummary);
+            setIsSimulated(true);
+            onUploadSuccess?.(mockSummary);
+          } else {
+            const { vcfFile, csvFile } = await getExampleDatasetFiles();
+            setFormatMode('vcf');
+            setGenotypeFile(vcfFile);
+            setBimFile(null);
+            setFamFile(null);
+            setPhenotypeFile(csvFile);
+
+            const mockSummary = loadMockGarlicDataset
+              ? loadMockGarlicDataset()
+              : { ...MOCK_GARLIC_DATASET_SUMMARY };
+
+            setUploadResult(mockSummary);
+            setUploadSummary(mockSummary);
+            setIsSimulated(true);
+            onUploadSuccess?.(mockSummary);
+          }
+        } catch (fErr) {
+          setError({
+            message: 'Gagal memuat dataset contoh.',
+            details: [fErr.message || String(fErr)],
+          });
+        }
+      } else {
+        setError({
+          message: err.message || err.pesan || 'Gagal memuat dataset benchmark.',
+          details: err.details || err.rincian || [],
+        });
+      }
+    } finally {
+      setLoadingBenchmarkMode(null);
+      setIsUploading(false);
     }
   };
 
@@ -348,6 +419,18 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
     onNext?.();
   };
 
+  const handleDownloadBenchmarkZip = async (format = 'all') => {
+    setIsDownloadingZip(true);
+    try {
+      await analysisService.downloadBenchmarkZip(format);
+    } catch (err) {
+      console.warn('Gagal unduh zip dari backend, fallback unduh berkas individu:', err);
+      handleDownloadSampleFile(format === 'csv' ? 'csv' : 'vcf');
+    } finally {
+      setIsDownloadingZip(false);
+    }
+  };
+
   // Handler unduh contoh file langsung ke browser pengguna (Evaluasi Tester Poin 10)
   const handleDownloadSampleFile = (type) => {
     let content = '';
@@ -428,19 +511,29 @@ sample_05,48.2,42.0,13
         <div className="flex flex-wrap items-center gap-2 self-stretch sm:self-auto">
           <button
             type="button"
+            disabled={loadingBenchmarkMode !== null}
             onClick={() => handleUseSampleData('vcf')}
-            className="figma-btn-primary cursor-pointer whitespace-nowrap text-xs px-3.5 py-2"
+            className="figma-btn-primary cursor-pointer whitespace-nowrap text-xs px-3.5 py-2 disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-1.5"
           >
-            <Dna className="h-3.5 w-3.5" />
-            <span>Pakai VCF</span>
+            {loadingBenchmarkMode === 'vcf' ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Dna className="h-3.5 w-3.5" />
+            )}
+            <span>{loadingBenchmarkMode === 'vcf' ? 'Memuat VCF...' : 'Pakai VCF'}</span>
           </button>
           <button
             type="button"
+            disabled={loadingBenchmarkMode !== null}
             onClick={() => handleUseSampleData('plink')}
-            className="rounded-2xl border border-cyan-400/80 dark:border-cyan-500/30 bg-cyan-50 dark:bg-[#06B6D4]/15 px-3.5 py-2 text-xs font-sans font-bold text-cyan-900 dark:text-[#06B6D4] hover:bg-cyan-100 dark:hover:bg-[#06B6D4]/25 transition-all shadow-xs cursor-pointer whitespace-nowrap"
+            className="rounded-2xl border border-cyan-400/80 dark:border-cyan-500/30 bg-cyan-50 dark:bg-[#06B6D4]/15 px-3.5 py-2 text-xs font-sans font-bold text-cyan-900 dark:text-[#06B6D4] hover:bg-cyan-100 dark:hover:bg-[#06B6D4]/25 transition-all shadow-xs cursor-pointer whitespace-nowrap disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-1.5"
           >
-            <Layers className="h-3.5 w-3.5 inline mr-1" />
-            <span>Pakai PLINK</span>
+            {loadingBenchmarkMode === 'plink' ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Layers className="h-3.5 w-3.5" />
+            )}
+            <span>{loadingBenchmarkMode === 'plink' ? 'Memuat PLINK...' : 'Pakai PLINK'}</span>
           </button>
           <button
             type="button"
@@ -961,28 +1054,55 @@ sample_05,48.2,42.0,13
             </div>
 
             {/* Tab Selector */}
-            <div className="flex items-center gap-2 border-b border-slate-200 dark:border-white/10 pb-2 text-xs font-bold font-sans">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 dark:border-white/10 pb-2 text-xs font-bold font-sans">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setStructureTab('vcf')}
+                  className={`px-3 sm:px-4 py-2 rounded-xl transition-all cursor-pointer ${
+                    structureTab === 'vcf'
+                      ? 'bg-[#5B4DFE] text-white shadow-sm'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  1. Format VCF
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStructureTab('csv')}
+                  className={`px-3 sm:px-4 py-2 rounded-xl transition-all cursor-pointer ${
+                    structureTab === 'csv'
+                      ? 'bg-[#5B4DFE] text-white shadow-sm'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  2. Format CSV Fenotipe
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStructureTab('plink')}
+                  className={`px-3 sm:px-4 py-2 rounded-xl transition-all cursor-pointer ${
+                    structureTab === 'plink'
+                      ? 'bg-[#5B4DFE] text-white shadow-sm'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  3. Format PLINK Biner (.bed/.bim/.fam)
+                </button>
+              </div>
               <button
                 type="button"
-                onClick={() => setStructureTab('vcf')}
-                className={`px-4 py-2 rounded-xl transition-all cursor-pointer ${
-                  structureTab === 'vcf'
-                    ? 'bg-[#5B4DFE] text-white shadow-sm'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                }`}
+                disabled={isDownloadingZip}
+                onClick={() => handleDownloadBenchmarkZip('all')}
+                className="rounded-xl border border-emerald-500/40 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 px-3 py-1.5 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
+                title="Unduh semua berkas benchmark dalam satu berkas .zip"
               >
-                1. Format Genotipe (VCF)
-              </button>
-              <button
-                type="button"
-                onClick={() => setStructureTab('csv')}
-                className={`px-4 py-2 rounded-xl transition-all cursor-pointer ${
-                  structureTab === 'csv'
-                    ? 'bg-[#5B4DFE] text-white shadow-sm'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                }`}
-              >
-                2. Format Fenotipe (CSV)
+                {isDownloadingZip ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Download className="h-3.5 w-3.5" />
+                )}
+                <span>Unduh Paket Lengkap (.ZIP)</span>
               </button>
             </div>
 
@@ -1012,7 +1132,7 @@ sample_05,48.2,42.0,13
                   </button>
                 </div>
               </div>
-            ) : (
+            ) : structureTab === 'csv' ? (
               <div className="space-y-3 text-xs">
                 <p className="text-slate-700 dark:text-slate-300 font-medium">
                   Berkas CSV fenotipe wajib memiliki kolom identitas sampel (<code>sample_id</code>) yang 100% cocok dengan nama sampel di berkas VCF, diikuti 1 atau lebih kolom sifat kuantitatif.
@@ -1034,6 +1154,44 @@ sample_05,48.2,42.0,13
                   >
                     <Download className="h-3.5 w-3.5" />
                     <span>Unduh Contoh CSV (phenotype.csv)</span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3 text-xs">
+                <p className="text-slate-700 dark:text-slate-300 font-medium">
+                  Format PLINK biner membutuhkan triplet berkas yang lengkap: <code>.bed</code> (data genotipe biner), <code>.bim</code> (peta posisi SNP), dan <code>.fam</code> (daftar silsilah/ID sampel).
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] font-mono">
+                  <div className="p-2.5 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-[#070C1D]">
+                    <div className="font-bold text-cyan-600 dark:text-cyan-400 mb-1">Struktur .fam (Sample ID di kol 2)</div>
+                    <div className="text-slate-600 dark:text-slate-300 space-y-0.5">
+                      <div>sample_01 sample_01 0 0 0 -9</div>
+                      <div>sample_02 sample_02 0 0 0 -9</div>
+                      <div>sample_03 sample_03 0 0 0 -9</div>
+                      <div>sample_04 sample_04 0 0 0 -9</div>
+                    </div>
+                  </div>
+                  <div className="p-2.5 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-[#070C1D]">
+                    <div className="font-bold text-cyan-600 dark:text-cyan-400 mb-1">Struktur .bim (Chr Pos A1 A2)</div>
+                    <div className="text-slate-600 dark:text-slate-300 space-y-0.5">
+                      <div>chr1 snp_0001 0 124050 G A</div>
+                      <div>chr1 snp_0002 0 285620 T C</div>
+                      <div>chr2 snp_0003 0 145890 A G</div>
+                      <div>chr3 snp_0042 0 217454 T C</div>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between pt-2">
+                  <span className="text-[11px] text-slate-500">Mendukung genom Allium sativum (chr1-chr8)</span>
+                  <button
+                    type="button"
+                    disabled={isDownloadingZip}
+                    onClick={() => handleDownloadBenchmarkZip('plink')}
+                    className="figma-btn-primary py-2 px-3.5 text-xs cursor-pointer flex items-center gap-1.5"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    <span>Unduh Paket PLINK (.ZIP)</span>
                   </button>
                 </div>
               </div>

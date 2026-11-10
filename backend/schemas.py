@@ -22,6 +22,13 @@ class AnalysisCreate(BaseModel):
                                examples=["GWAS bobot umbi bawang putih"])
 
 
+class BenchmarkLoadRequest(BaseModel):
+    format: str = Field("VCF", description="Format dataset benchmark ('VCF' atau 'PLINK')")
+    analysis_id: int | str | None = Field(
+        None, description="ID analisis aktif jika ada; jika kosong atau invalid/404, dibuatkan sesi baru"
+    )
+
+
 class ParameterIn(BaseModel):
     # Field yang tidak dikenal ditolak (422), supaya salah nama field dari frontend
     # langsung kelihatan dan tidak diam-diam diabaikan.

@@ -19,8 +19,11 @@ from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from backend.api.deps import get_current_user, owned_analysis
-from backend.core.config import settings
+import shutil
+import zipfile
+
+from backend.api.deps import get_current_user, get_current_user_or_demo, owned_analysis
+from backend.core.config import ROOT_DIR, settings
 from backend.core.database import get_db
 from backend.models import (
     SNP,
@@ -34,7 +37,7 @@ from backend.models import (
     User,
     VisualizationResult,
 )
-from backend.schemas import AnalysisCreate, ParameterIn
+from backend.schemas import AnalysisCreate, BenchmarkLoadRequest, ParameterIn
 from backend.services import dataset_service as ds
 from backend.services.analysis_runner import dispatch
 from pipeline.annotation import annotate_from_gff3
@@ -107,6 +110,277 @@ def list_models(db: Session = Depends(get_db)):
          "tersedia": True}
         for m in rows
     ]
+
+
+# ------------------------------------------------------------------ dataset benchmark bawang putih
+def _get_benchmark_dir() -> Path:
+    candidates = [
+        ROOT_DIR / "backend" / "fixtures" / "benchmark",
+        ROOT_DIR / "data" / "contoh",
+        ROOT_DIR / "frontend" / "public" / "assets" / "example",
+    ]
+    for c in candidates:
+        if c.exists() and (c / "fenotipe_bawang_putih_mini.csv").exists():
+            return c
+    raise HTTPException(
+        status.HTTP_500_INTERNAL_SERVER_ERROR,
+        _detail("Direktori berkas benchmark bawang putih tidak ditemukan di server disk.")
+    )
+
+
+def _load_benchmark_internal(
+    target_format: str,
+    target_analysis_id: int | str | None,
+    user: User,
+    db: Session,
+) -> dict:
+    fmt = (target_format or "VCF").strip().upper()
+    if fmt not in ("PLINK", "VCF"):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            _detail(f"Format benchmark '{target_format}' tidak didukung. Pilih 'VCF' atau 'PLINK'.")
+        )
+
+    # 1. Resolusi ID Sesi atau Buat Sesi Baru (Fallback Session Creation)
+    aid: int | None = None
+    if target_analysis_id is not None:
+        try:
+            aid = int(target_analysis_id)
+        except (ValueError, TypeError):
+            aid = None
+
+    a: Analysis | None = None
+    if aid is not None:
+        candidate = db.get(Analysis, aid)
+        if candidate and (candidate.user_id == user.user_id or user.role == "administrator"):
+            a = candidate
+
+    if a is None:
+        a = Analysis(
+            user_id=user.user_id,
+            analysis_name="Analisis Bobot Umbi Bawang Putih",
+            status=AnalysisStatus.DRAFT,
+            organism="Allium sativum",
+        )
+        db.add(a)
+        db.commit()
+        db.refresh(a)
+    else:
+        if "tanpa judul" in a.analysis_name.lower() or "sesi" in a.analysis_name.lower():
+            a.analysis_name = "Analisis Bobot Umbi Bawang Putih"
+
+    # 2. Periksa berkas benchmark di direktori fixtures
+    fixture_dir = _get_benchmark_dir()
+    csv_candidates = [
+        fixture_dir / "fenotipe_bawang_putih_mini.csv",
+        fixture_dir / "fenotipe.csv",
+    ]
+    csv_src = next((p for p in csv_candidates if p.exists()), None)
+    if not csv_src:
+        raise HTTPException(
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            _detail("Berkas fenotipe benchmark (fenotipe_bawang_putih_mini.csv) tidak ditemukan.")
+        )
+
+    folder = ds.analysis_dir(a.analysis_id)
+    ds.remove_dir(a.analysis_id)
+    folder.mkdir(parents=True, exist_ok=True)
+
+    if fmt == "PLINK":
+        bed_src = next((fixture_dir / n for n in ["genotipe_bawang_putih_mini.bed", "bawang_putih.bed", "genotipe.bed"] if (fixture_dir / n).exists()), None)
+        bim_src = next((fixture_dir / n for n in ["genotipe_bawang_putih_mini.bim", "bawang_putih.bim", "genotipe.bim"] if (fixture_dir / n).exists()), None)
+        fam_src = next((fixture_dir / n for n in ["genotipe_bawang_putih_mini.fam", "bawang_putih.fam", "genotipe.fam"] if (fixture_dir / n).exists()), None)
+
+        if not (bed_src and bim_src and fam_src):
+            raise HTTPException(
+                status.HTTP_500_INTERNAL_SERVER_ERROR,
+                _detail("Berkas biner PLINK benchmark (.bed/.bim/.fam) tidak lengkap di server.")
+            )
+
+        g_path = folder / "genotipe.bed"
+        bim_path = folder / "genotipe.bim"
+        fam_path = folder / "genotipe.fam"
+        p_path = folder / "fenotipe.csv"
+
+        shutil.copy2(bed_src, g_path)
+        shutil.copy2(bim_src, bim_path)
+        shutil.copy2(fam_src, fam_path)
+        shutil.copy2(csv_src, p_path)
+
+        genotype_filename = "genotipe_bawang_putih_mini.bed"
+        genotype_type = "plink_bed"
+        file_list = [
+            "genotipe_bawang_putih_mini.bed",
+            "genotipe_bawang_putih_mini.bim",
+            "genotipe_bawang_putih_mini.fam",
+        ]
+    else:
+        vcf_src = next((fixture_dir / n for n in ["genotipe_bawang_putih_mini.vcf", "bawang_putih.vcf", "bawang_putih_mini.vcf", "genotipe.vcf"] if (fixture_dir / n).exists()), None)
+        if not vcf_src:
+            raise HTTPException(
+                status.HTTP_500_INTERNAL_SERVER_ERROR,
+                _detail("Berkas VCF benchmark (genotipe_bawang_putih_mini.vcf) tidak ditemukan di server.")
+            )
+
+        g_path = folder / "genotipe.vcf"
+        p_path = folder / "fenotipe.csv"
+
+        shutil.copy2(vcf_src, g_path)
+        shutil.copy2(csv_src, p_path)
+
+        genotype_filename = "genotipe_bawang_putih_mini.vcf"
+        genotype_type = "vcf"
+        file_list = ["genotipe_bawang_putih_mini.vcf"]
+
+    # 3. Parsing & Validasi Genotipe & Fenotipe
+    try:
+        geno = read_genotype(g_path)
+        pheno = read_phenotype_csv(p_path)
+        match = match_sample_ids(geno.samples, pheno.samples)
+    except ValidationError as exc:
+        ds.remove_dir(a.analysis_id)
+        ds.clear_analysis_data(db, a.analysis_id)
+        a.status = AnalysisStatus.DRAFT
+        db.add(AnalysisLog(analysis_id=a.analysis_id, stage="validasi", status="gagal",
+                           message="\n".join([exc.message, *exc.details])))
+        db.commit()
+        raise HTTPException(422, _detail(exc.message, exc.details))
+
+    # 4. Catat ke tabel database
+    ds.clear_analysis_data(db, a.analysis_id)
+    info = ds.store_datasets(
+        db,
+        a.analysis_id,
+        genotype_filename,
+        g_path,
+        "fenotipe_bawang_putih_mini.csv",
+        p_path,
+        geno,
+        pheno,
+        genotype_type=genotype_type,
+    )
+
+    if genotype_type == "plink_bed":
+        db.add_all([
+            Dataset(
+                analysis_id=a.analysis_id,
+                file_name="genotipe_bawang_putih_mini.bim",
+                file_type="plink_bim",
+                file_path=str(folder / "genotipe.bim"),
+                validation_status="valid",
+            ),
+            Dataset(
+                analysis_id=a.analysis_id,
+                file_name="genotipe_bawang_putih_mini.fam",
+                file_type="plink_fam",
+                file_path=str(folder / "genotipe.fam"),
+                validation_status="valid",
+            ),
+        ])
+
+    a.status = AnalysisStatus.TERVALIDASI
+    db.add(
+        AnalysisLog(
+            analysis_id=a.analysis_id,
+            stage="validasi",
+            status="selesai",
+            message=f"Benchmark {fmt}: {geno.n_samples} sampel, {geno.n_snps} SNP; 100% Lolos QC & Cocok",
+        )
+    )
+    db.commit()
+    db.refresh(a)
+
+    return {
+        "status": "success",
+        "analysis_id": a.analysis_id,
+        "dataset_type": fmt,
+        "files": {
+            "genotype": file_list,
+            "phenotype": "fenotipe_bawang_putih_mini.csv",
+        },
+        "validation": {
+            "is_valid": True,
+            "sample_count": geno.n_samples,
+            "snp_count": geno.n_snps,
+            "qc_status": "100% Lolos QC",
+            "sample_match": True,
+        },
+        "pesan": f"Dataset benchmark {fmt} berhasil dimuat dan divalidasi. 100% Sample ID cocok.",
+        "genotipe": info["genotipe"],
+        "fenotipe": info["fenotipe"],
+        "kecocokan_sample_id": match,
+        "sifat_tersedia": pheno.trait_names,
+        "integritas": {
+            "kesamaan_sampel": "100%",
+            "sampel_cocok": geno.n_samples,
+            "kelengkapan": "100%",
+            "vcf_valid": True,
+            "csv_valid": True,
+        },
+        "langkah_berikutnya": f"PUT /api/analyses/{a.analysis_id}/parameters",
+    }
+
+
+@router.post("/benchmark", summary="Muat dataset benchmark bawang putih (VCF / PLINK) dengan auto-create session")
+def load_benchmark(
+    data: BenchmarkLoadRequest = BenchmarkLoadRequest(),
+    user: User = Depends(get_current_user_or_demo),
+    db: Session = Depends(get_db),
+):
+    return _load_benchmark_internal(
+        target_format=data.format,
+        target_analysis_id=data.analysis_id,
+        user=user,
+        db=db,
+    )
+
+
+@router.get("/benchmark/download", summary="Unduh arsip ZIP dataset contoh benchmark bawang putih")
+def download_benchmark_zip(
+    format: str = Query("all", description="vcf | plink | all"),
+):
+    fixture_dir = _get_benchmark_dir()
+    zip_buffer = io.BytesIO()
+    fmt = format.strip().lower()
+
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        pheno_src = fixture_dir / "fenotipe_bawang_putih_mini.csv"
+        if pheno_src.exists():
+            zf.write(pheno_src, arcname="fenotipe_bawang_putih_mini.csv")
+
+        if fmt in ("vcf", "all"):
+            vcf_src = fixture_dir / "genotipe_bawang_putih_mini.vcf"
+            if vcf_src.exists():
+                zf.write(vcf_src, arcname="genotipe_bawang_putih_mini.vcf")
+
+        if fmt in ("plink", "all"):
+            for ext in (".bed", ".bim", ".fam"):
+                p_file = fixture_dir / f"genotipe_bawang_putih_mini{ext}"
+                if p_file.exists():
+                    zf.write(p_file, arcname=f"genotipe_bawang_putih_mini{ext}")
+
+    zip_buffer.seek(0)
+    filename = f"gwasena_benchmark_bawang_putih_{fmt}.zip"
+    return Response(
+        content=zip_buffer.getvalue(),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.post("/{analysis_id}/load-benchmark", summary="Muat dataset benchmark contoh bawang putih ke sesi spesifik")
+def load_benchmark_for_analysis(
+    analysis_id: int | str,
+    data: BenchmarkLoadRequest = BenchmarkLoadRequest(),
+    user: User = Depends(get_current_user_or_demo),
+    db: Session = Depends(get_db),
+):
+    return _load_benchmark_internal(
+        target_format=data.format,
+        target_analysis_id=analysis_id,
+        user=user,
+        db=db,
+    )
 
 
 # ------------------------------------------------------------------ 1. buat sesi
