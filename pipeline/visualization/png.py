@@ -10,7 +10,7 @@ import re
 
 from matplotlib.figure import Figure  # API Figure (tanpa pyplot): aman dipakai banyak permintaan sekaligus
 
-DPI = 200
+DPI = 300  # cukup tajam untuk laporan dan poster
 WARNA_KROMOSOM = ("#1f4e79", "#7fa7d1")  # dua warna berselang antar kromosom
 WARNA_SIGNIFIKAN = "#c0392b"
 WARNA_GARIS = "#c0392b"

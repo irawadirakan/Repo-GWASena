@@ -7,7 +7,7 @@ import urllib.parse
 import urllib.request
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import or_, select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from backend.api.deps import get_current_user
@@ -77,14 +77,17 @@ def _user_out(u: User) -> dict:
 @router.post("/register", status_code=status.HTTP_201_CREATED, summary="Daftar akun baru")
 def register(data: RegisterIn, db: Session = Depends(get_db)):
     _validate_not_dummy_email(data.email)
-    exists = db.scalar(
-        select(User).where(or_(User.username == data.username, User.email == data.email.lower()))
-    )
-    if exists:
-        raise HTTPException(status.HTTP_409_CONFLICT, "Username atau email sudah terdaftar.")
+    email = data.email.strip().lower()
+    if db.scalar(select(User).where(func.lower(User.username) == data.username.lower())):
+        raise HTTPException(status.HTTP_409_CONFLICT,
+                            {"pesan": "Username sudah dipakai.", "rincian": ["Pilih username lain."]})
+    if db.scalar(select(User).where(func.lower(User.email) == email)):
+        raise HTTPException(status.HTTP_409_CONFLICT,
+                            {"pesan": "Email sudah terdaftar.",
+                             "rincian": ["Masuk dengan email ini, atau gunakan email lain untuk akun baru."]})
     user = User(
         username=data.username,
-        email=data.email.lower(),
+        email=email,
         password_hash=hash_password(data.password),
         role="pengguna_analisis",
     )
@@ -102,7 +105,12 @@ def register(data: RegisterIn, db: Session = Depends(get_db)):
 @router.post("/login", summary="Login dan dapatkan token")
 def login(data: LoginIn, db: Session = Depends(get_db)):
     ident = data.username.strip()
-    user = db.scalar(select(User).where(or_(User.username == ident, User.email == ident.lower())))
+    # Isian berisi "@" dicari sebagai email, selain itu sebagai username. Email dibandingkan tanpa
+    # membedakan huruf besar/kecil, termasuk akun lama yang emailnya tersimpan dengan huruf besar.
+    if "@" in ident:
+        user = db.scalar(select(User).where(func.lower(User.email) == ident.lower()))
+    else:
+        user = db.scalar(select(User).where(User.username == ident))
     if user is None or not verify_password(data.password, user.password_hash):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Username/email atau kata sandi salah.")
     u_out = _user_out(user)
@@ -165,7 +173,7 @@ def google_auth(payload: GoogleAuthRequest, db: Session = Depends(get_db)):
     clean_email = email.strip().lower()
 
     # 3. Cari user berdasarkan email
-    user = db.scalar(select(User).where(User.email == clean_email))
+    user = db.scalar(select(User).where(func.lower(User.email) == clean_email))
 
     if not user:
         # Otomatis buatkan akun User baru (auto-register) dengan username unik

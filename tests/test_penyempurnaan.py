@@ -263,3 +263,28 @@ def test_swagger_tanpa_keterangan_di_judul():
     operasi = [d for o in paths.values() for d in o.values()]
     assert operasi and all("summary" not in d and "description" not in d for d in operasi)
     assert "/api/analyses/{analysis_id}/run" in paths
+
+
+def test_login_email_tidak_membedakan_huruf_besar():
+    """Email bisa dipakai login walau tersimpan atau diketik dengan huruf besar."""
+    from backend.core.security import hash_password
+
+    with TestClient(app) as c:
+        r = c.post("/api/auth/register",
+                   json={"username": "uji_email_besar", "email": "Uji.Email@Contoh.id", "password": "rahasia123"})
+        assert r.status_code == 201
+        for ident in ("uji_email_besar", "uji.email@contoh.id", "Uji.Email@Contoh.id", " uji.email@contoh.id "):
+            assert c.post("/api/auth/login", json={"username": ident, "password": "rahasia123"}).status_code == 200
+        # akun yang emailnya tersimpan dengan huruf besar (diisi lewat pgAdmin / skrip)
+        with SessionLocal() as db:
+            db.add(User(username="akun_manual", email="Akun.Manual@Contoh.id",
+                        password_hash=hash_password("rahasia123"), role="pengguna_analisis"))
+            db.commit()
+        assert c.post("/api/auth/login",
+                      json={"username": "akun.manual@contoh.id", "password": "rahasia123"}).status_code == 200
+        r = c.post("/api/auth/register",
+                   json={"username": "akun_lain", "email": "AKUN.MANUAL@contoh.id", "password": "rahasia123"})
+        assert r.status_code == 409 and r.json()["detail"]["pesan"] == "Email sudah terdaftar."
+        r = c.post("/api/auth/register",
+                   json={"username": "Akun_Manual", "email": "baru@contoh.id", "password": "rahasia123"})
+        assert r.status_code == 409 and r.json()["detail"]["pesan"] == "Username sudah dipakai."
