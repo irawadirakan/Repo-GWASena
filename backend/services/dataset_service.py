@@ -190,6 +190,7 @@ def store_datasets(
             "nama_berkas": phenotype_name,
             "jumlah_sampel": len(pheno.samples),
             "sifat_tersedia": pheno.trait_names,
+            "kolom_diabaikan": pheno.ignored,
             "varietas_tercatat": len(pheno.variety),
         },
     }

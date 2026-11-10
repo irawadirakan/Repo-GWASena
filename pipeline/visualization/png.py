@@ -10,7 +10,7 @@ import re
 
 from matplotlib.figure import Figure  # API Figure (tanpa pyplot): aman dipakai banyak permintaan sekaligus
 
-DPI = 200
+DPI = 300  # cukup tajam untuk laporan dan poster
 WARNA_KROMOSOM = ("#1f4e79", "#7fa7d1")  # dua warna berselang antar kromosom
 WARNA_SIGNIFIKAN = "#c0392b"
 WARNA_GARIS = "#c0392b"
@@ -60,7 +60,7 @@ def manhattan_png(data: dict, judul: str | None = None) -> bytes:
 
     ax.set_xticks(tengah)
     ax.set_xticklabels(kromosom, fontsize=8)
-    ax.set_xlabel("Kromosom")
+    ax.set_xlabel("Chromosome")
     ax.set_ylabel("-log10(p)")
     ax.set_ylim(bottom=0)
     ax.spines[["top", "right"]].set_visible(False)
@@ -83,8 +83,8 @@ def qq_png(data: dict, judul: str | None = None) -> bytes:
     max_x = max(ex + [1.0])
     max_y = max(ob + [max_x])
     ax.plot([0, max_x], [0, max_x], color=WARNA_GARIS, linestyle="--", linewidth=0.9)
-    ax.set_xlabel("-log10(p) harapan")
-    ax.set_ylabel("-log10(p) teramati")
+    ax.set_xlabel("Expected -log10(p)")
+    ax.set_ylabel("Observed -log10(p)")
     ax.set_xlim(0, max_x * 1.05)
     ax.set_ylim(0, max_y * 1.05)
     ax.spines[["top", "right"]].set_visible(False)

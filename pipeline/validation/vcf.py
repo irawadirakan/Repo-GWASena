@@ -62,7 +62,7 @@ def read_vcf(path: str | Path) -> GenotypeData:
     errors: list[str] = []
     samples: list[str] | None = None
     chrom, pos, ids, ref, alt, rows = [], [], [], [], [], []
-    skipped = {"multialelik": 0, "bukan_snp": 0}
+    skipped = {"multialelik": 0, "bukan_snp": 0, "posisi_tidak_diketahui": 0}
     seen_fileformat = False
 
     try:
@@ -126,6 +126,9 @@ def read_vcf(path: str | Path) -> GenotypeData:
                     if len(errors) >= MAX_ERRORS:
                         break
                     continue
+                if p <= 0:
+                    skipped["posisi_tidak_diketahui"] += 1
+                    continue
                 r, a = cols[3].upper(), cols[4].upper()
                 if "," in a:
                     skipped["multialelik"] += 1
@@ -146,7 +149,10 @@ def read_vcf(path: str | Path) -> GenotypeData:
                 ref.append(r)
                 alt.append(a)
                 rows.append(row)
-    except (OSError, EOFError, gzip.BadGzipFile) as exc:
+    except (EOFError, gzip.BadGzipFile):
+        raise ValidationError("Berkas VCF tidak dapat dibaca (mungkin rusak).",
+                              ["Berkas .gz terpotong atau rusak. Kompres ulang berkas VCF lalu unggah lagi."])
+    except OSError as exc:
         raise ValidationError("Berkas VCF tidak dapat dibaca (mungkin rusak).", [str(exc)])
     except UnicodeDecodeError:
         raise ValidationError("Berkas VCF bukan berkas teks yang valid.")

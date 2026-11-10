@@ -1,6 +1,7 @@
 """Mengisi data referensi awal (idempoten, aman dijalankan berulang)."""
 from sqlalchemy import or_, select
 
+from backend.core.config import settings
 from backend.core.database import SessionLocal
 from backend.core.security import hash_password
 from backend.models import AnalysisModel, User
@@ -56,8 +57,8 @@ def seed_reference_data() -> None:
             if not exists:
                 db.add(AnalysisModel(**item))
 
-        # 2. Seed Default Users
-        for u in DEFAULT_USERS:
+        # 2. Seed Default Users (akun demo; dimatikan di production lewat SEED_DEMO_USERS)
+        for u in (DEFAULT_USERS if settings.SEED_DEMO_USERS else []):
             exists_user = db.scalar(
                 select(User).where(
                     or_(User.username == u["username"], User.email == u["email"].lower())

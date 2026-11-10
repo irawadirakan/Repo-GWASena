@@ -2,7 +2,7 @@
 import logging
 import math
 from fastapi import BackgroundTasks
-from sqlalchemy import insert, select
+from sqlalchemy import insert, select, update
 
 from backend.core.config import settings
 from backend.core.database import SessionLocal
@@ -14,8 +14,10 @@ from backend.models import (
     AnalysisStatus,
     AssociationResult,
     Dataset,
+    Sample,
     VisualizationResult,
 )
+from backend.services import plot_service
 from backend.services.dataset_service import GENOTYPE_TYPES, dataset_paths
 from pipeline.errors import PipelineError
 from pipeline.runner import run_pipeline
@@ -74,6 +76,15 @@ def run_analysis(analysis_id: int) -> None:
             db.rollback()
             analysis.status = AnalysisStatus.GAGAL
             _log(db, analysis_id, "simpan", "gagal", f"Hasil gagal disimpan.\n{exc}")
+            return
+
+        # PNG Manhattan dan QQ langsung dibuat agar file_path tercatat (AC-08.1).
+        # Bila matplotlib belum terpasang, PNG dibuat nanti saat endpoint /png dipanggil.
+        try:
+            plot_service.render_all(db, analysis_id)
+        except Exception:  # noqa: BLE001
+            logger.exception("PNG analisis %s gagal dibuat; dapat dibuat ulang lewat endpoint /png", analysis_id)
+            db.rollback()
 
 
 def _save_results(db, analysis_id: int, result: dict) -> None:
@@ -116,6 +127,38 @@ def _save_results(db, analysis_id: int, result: dict) -> None:
     if rows:
         db.execute(insert(AssociationResult), rows)
 
+    # Tandai sampel dan SNP yang tidak lolos QC (kolom passed_qc)
+    lolos = result.get("qc_lolos") or {}
+    if geno_ds is not None and lolos:
+        sampel_lolos = set(lolos.get("sampel") or [])
+        for s in db.scalars(select(Sample).where(Sample.dataset_id == geno_ds.dataset_id)).all():
+            s.passed_qc = s.sample_code in sampel_lolos
+        varian_lolos = set(lolos.get("varian_index") or [])
+        stat = result.get("statistik_snp") or {}
+        maf, miss = stat.get("maf") or [], stat.get("missing_rate") or []
+        baris_snp = [
+            {"snp_id": pk, "passed_qc": i in varian_lolos,
+             "maf": maf[i] if i < len(maf) else None,
+             "missing_rate": miss[i] if i < len(miss) else None}
+            for i, pk in enumerate(snp_ids)
+        ]
+        # ORM bulk UPDATE berdasarkan primary key (snp_id), dikirim per 5.000 baris
+        for k in range(0, len(baris_snp), 5000):
+            db.execute(update(SNP), baris_snp[k:k + 5000])
+
+    # Nilai PC yang dipakai sebagai kovariat disimpan sebagai bagian parameter analisis (AC-04.2)
+    param = db.scalar(select(AnalysisParameter).where(AnalysisParameter.analysis_id == analysis_id))
+    if param is not None:
+        pca = result["pca"]
+        param.parameter_config = {
+            **(param.parameter_config or {}),
+            "pca_kovariat": {
+                "jumlah_pc": pca.get("jumlah_pc"),
+                "variansi_dijelaskan": pca.get("variansi_dijelaskan"),
+                "nilai_per_sampel": pca.get("titik"),
+            },
+        }
+
     significant = [r for r in result["snp"] if r["signifikan"]]
     top = sorted((r for r in result["snp"] if r["p_value"] is not None),
                  key=lambda r: r["p_value"])[:10]
@@ -134,7 +177,7 @@ def _save_results(db, analysis_id: int, result: dict) -> None:
         VisualizationResult(analysis_id=analysis_id, plot_type="manhattan",
                             plot_cache=result["plot"]["manhattan"], plot_metadata={"garis_bonferroni": result["plot"]["manhattan"].get("garis_bonferroni")}),
         VisualizationResult(analysis_id=analysis_id, plot_type="qq", plot_cache=result["plot"]["qq"], plot_metadata={"lambda_gc": result["plot"]["qq"].get("lambda_gc")}),
-        VisualizationResult(analysis_id=analysis_id, plot_type="pca", plot_cache=result["pca"], plot_metadata={"persen_varians": result["pca"].get("persen_varians")}),
+        VisualizationResult(analysis_id=analysis_id, plot_type="pca", plot_cache=result["pca"], plot_metadata={"variansi_dijelaskan": result["pca"].get("variansi_dijelaskan")}),
     ])
     db.add(AnalysisLog(analysis_id=analysis_id, stage="simpan", status="selesai",
                        message=f"{len(rows)} hasil asosiasi disimpan ke database"))
@@ -172,3 +215,24 @@ def dispatch(analysis_id: int, background_tasks: BackgroundTasks) -> str:
         return "celery"
     background_tasks.add_task(run_analysis, analysis_id)
     return "background"
+
+
+def recover_stuck_analyses() -> int:
+    """Menandai gagal analisis yang tertinggal berstatus antre/berjalan setelah server dimulai ulang.
+
+    Pada mode latar belakang FastAPI, proses analisis ikut berhenti ketika server mati,
+    sehingga statusnya tidak akan pernah berubah dan sesi terkunci selamanya. Bila Celery
+    worker aktif, analisis dibiarkan karena mungkin masih dikerjakan worker.
+    """
+    if settings.PIPELINE_MODE == "celery" or (settings.PIPELINE_MODE == "auto" and _worker_available()):
+        return 0
+    with SessionLocal() as db:
+        macet = db.scalars(select(Analysis).where(
+            Analysis.status.in_([AnalysisStatus.ANTRE, AnalysisStatus.BERJALAN]))).all()
+        for a in macet:
+            a.status = AnalysisStatus.GAGAL
+            db.add(AnalysisLog(analysis_id=a.analysis_id, stage=None, status="gagal",
+                               message="Analisis terhenti karena server dimulai ulang.\n"
+                                       "Jalankan ulang analisis dengan menekan tombol Jalankan."))
+        db.commit()
+        return len(macet)

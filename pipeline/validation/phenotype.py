@@ -23,6 +23,8 @@ class PhenotypeData:
     samples: list[str]
     traits: dict[str, np.ndarray]  # nama sifat -> nilai (NaN = hilang)
     variety: dict[str, str] = field(default_factory=dict)
+    # kolom yang tidak dipakai sebagai sifat beserta alasannya (ditampilkan ke pengguna)
+    ignored: dict[str, str] = field(default_factory=dict)
 
     @property
     def trait_names(self) -> list[str]:
@@ -78,32 +80,54 @@ def read_phenotype_csv(path: str | Path) -> PhenotypeData:
 
     data_rows = rows[1:]
     traits: dict[str, np.ndarray] = {}
+    ignored: dict[str, str] = {}
     for j, name in enumerate(header):
         if j in (id_idx, var_idx):
             continue
-        values, numeric = [], True
-        for r in data_rows:
-            v = r[j].strip().replace(",", ".") if dialect.delimiter != "," else r[j].strip()
+        values, bad = [], None
+        for i, r in enumerate(data_rows, start=2):
+            v = r[j].strip()
             if v.lower() in MISSING:
                 values.append(np.nan)
                 continue
-            try:
-                values.append(float(v))
-            except ValueError:
-                numeric = False
+            angka = _to_float(v)
+            if angka is None:
+                bad = f"bukan angka (baris {i}: '{v[:20]}')"
                 break
-        if numeric:
-            arr = np.asarray(values, dtype=float)
-            if np.isfinite(arr).sum() >= 2:
-                traits[name] = arr
+            values.append(angka)
+        if bad:
+            ignored[name or f"kolom {j + 1}"] = bad
+            continue
+        arr = np.asarray(values, dtype=float)
+        if np.isfinite(arr).sum() < 2:
+            ignored[name or f"kolom {j + 1}"] = "nilai terisi kurang dari 2"
+        elif np.nanstd(arr) == 0:
+            ignored[name or f"kolom {j + 1}"] = "semua nilai sama (tidak bervariasi)"
+        else:
+            traits[name] = arr
 
     if not traits:
         raise ValidationError(
-            "CSV fenotipe tidak memiliki kolom sifat numerik.",
-            ["Minimal satu kolom berisi angka, mis. bobot_umbi_g."],
+            "CSV fenotipe tidak memiliki kolom sifat numerik yang dapat dianalisis.",
+            ["Minimal satu kolom berisi angka, mis. bobot_umbi_g."]
+            + [f"Kolom '{k}' diabaikan: {v}." for k, v in ignored.items()],
         )
 
     variety = {}
     if var_idx is not None:
         variety = {r[id_idx].strip(): r[var_idx].strip() for r in data_rows if r[var_idx].strip()}
-    return PhenotypeData(samples=samples, traits=traits, variety=variety)
+    return PhenotypeData(samples=samples, traits=traits, variety=variety, ignored=ignored)
+
+
+def _to_float(v: str) -> float | None:
+    """Menerima 27.1 maupun 27,1 (desimal koma dari Excel berbahasa Indonesia)."""
+    for kandidat in (v, v.replace(",", ".") if v.count(",") == 1 and "." not in v else None):
+        if kandidat is None:
+            continue
+        try:
+            x = float(kandidat)
+        except ValueError:
+            continue
+        if np.isfinite(x):
+            return x
+    return None

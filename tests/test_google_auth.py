@@ -1,71 +1,86 @@
-"""Uji fitur autentikasi Google OAuth (FR-01): login, auto-register, dan token JWT."""
-import base64
-import json
+"""Uji login Google (FR-01, NFR-05): hanya ID token terverifikasi yang diterima.
+
+Pemeriksaan ke server Google diganti tiruan (monkeypatch) agar uji tidak butuh internet.
+"""
+import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
+from backend.api import auth
+from backend.core.config import settings
 from backend.main import app
 
+CLIENT_ID = "gwasena-uji.apps.googleusercontent.com"
 
-def test_google_auto_register_and_login():
+
+@pytest.fixture
+def google_aktif(monkeypatch):
+    monkeypatch.setattr(settings, "GOOGLE_CLIENT_ID", CLIENT_ID)
+
+    def palsu(credential: str) -> dict:
+        if credential == "token-sah-budi":
+            return {"aud": CLIENT_ID, "iss": "https://accounts.google.com", "sub": "123",
+                    "email": "budi.santoso@apps.ipb.ac.id", "email_verified": "true",
+                    "name": "Dr. Budi Santoso"}
+        raise HTTPException(401, "Token Google tidak valid atau sudah kedaluwarsa.")
+
+    monkeypatch.setattr(auth, "verify_google_credential", palsu)
+
+
+def test_token_sah_mendaftar_lalu_masuk_lagi_tanpa_duplikasi(google_aktif):
     with TestClient(app) as c:
-        # 1. User baru mendaftar otomatis via Google (email & name)
-        r = c.post(
-            "/api/auth/google",
-            json={
-                "email": "budi.santoso@apps.ipb.ac.id",
-                "name": "Dr. Budi Santoso",
-                "google_sub": "google-sub-12345",
-            },
-        )
+        r = c.post("/api/auth/google", json={"credential": "token-sah-budi"})
         assert r.status_code == 200, r.text
         data = r.json()
-        assert "access_token" in data
         assert data["pengguna"]["email"] == "budi.santoso@apps.ipb.ac.id"
-        assert "budi" in data["pengguna"]["username"]
-
-        token = data["access_token"]
-        headers = {"Authorization": f"Bearer {token}"}
-
-        # 2. Token valid untuk mengakses /api/auth/me
-        me = c.get("/api/auth/me", headers=headers)
+        me = c.get("/api/auth/me", headers={"Authorization": f"Bearer {data['access_token']}"})
         assert me.status_code == 200
-        assert me.json()["email"] == "budi.santoso@apps.ipb.ac.id"
-
-        # 3. User yang sama login kembali via Google -> berhasil login tanpa duplikasi
-        r2 = c.post(
-            "/api/auth/google",
-            json={
-                "email": "budi.santoso@apps.ipb.ac.id",
-                "name": "Dr. Budi Santoso",
-            },
-        )
-        assert r2.status_code == 200
+        r2 = c.post("/api/auth/google", json={"credential": "token-sah-budi"})
         assert r2.json()["pengguna"]["user_id"] == data["pengguna"]["user_id"]
 
 
-def test_google_auth_with_jwt_credential():
+def test_email_saja_tanpa_token_ditolak(google_aktif):
+    """Celah lama: mengirim email admin tanpa token membuat siapa pun bisa masuk sebagai admin."""
     with TestClient(app) as c:
-        # Buat dummy Google ID Token JWT
-        header_b64 = base64.urlsafe_b64encode(b'{"alg":"RS256","typ":"JWT"}').decode().rstrip("=")
-        payload = {
-            "iss": "https://accounts.google.com",
-            "sub": "google-user-9988",
-            "email": "researcher.gwas@gmail.com",
-            "name": "Peneliti GWAS",
-            "email_verified": True,
-        }
-        payload_b64 = base64.urlsafe_b64encode(json.dumps(payload).encode()).decode().rstrip("=")
-        sig_b64 = base64.urlsafe_b64encode(b"dummysignature").decode().rstrip("=")
-        dummy_credential = f"{header_b64}.{payload_b64}.{sig_b64}"
-
-        r = c.post("/api/auth/google", json={"credential": dummy_credential})
-        assert r.status_code == 200, r.text
-        data = r.json()
-        assert data["pengguna"]["email"] == "researcher.gwas@gmail.com"
-        assert "access_token" in data
-
-
-def test_google_auth_missing_email_raises_400():
-    with TestClient(app) as c:
-        r = c.post("/api/auth/google", json={})
+        r = c.post("/api/auth/google", json={"email": "admin@gwasena.local", "name": "Penyusup"})
         assert r.status_code == 400
+
+
+def test_token_palsu_ditolak(google_aktif):
+    with TestClient(app) as c:
+        r = c.post("/api/auth/google", json={"credential": "aaa.bbb.ccc"})
+        assert r.status_code == 401
+
+
+def test_login_google_mati_bila_client_id_kosong(monkeypatch):
+    monkeypatch.setattr(settings, "GOOGLE_CLIENT_ID", "")
+    with TestClient(app) as c:
+        r = c.post("/api/auth/google", json={"credential": "apa-saja"})
+        assert r.status_code == 503
+
+
+def test_klaim_untuk_aplikasi_lain_ditolak(monkeypatch):
+    """aud harus sama dengan GOOGLE_CLIENT_ID; token untuk aplikasi lain tidak boleh dipakai."""
+    monkeypatch.setattr(settings, "GOOGLE_CLIENT_ID", CLIENT_ID)
+
+    class Resp:
+        def __init__(self, body):
+            self.body = body
+
+        def read(self):
+            return self.body
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    import json
+    klaim = {"aud": "aplikasi-lain", "iss": "accounts.google.com",
+             "email": "x@gmail.com", "email_verified": "true"}
+    monkeypatch.setattr(auth.urllib.request, "urlopen",
+                        lambda url, timeout=10: Resp(json.dumps(klaim).encode()))
+    with pytest.raises(HTTPException) as exc:
+        auth.verify_google_credential("token")
+    assert exc.value.status_code == 401

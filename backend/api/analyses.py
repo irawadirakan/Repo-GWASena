@@ -7,16 +7,17 @@ Urutan pemakaian:
   4. POST /api/analyses/{id}/run                jalankan QC -> PCA -> GLM/MLM -> koreksi
   5. GET  /api/analyses/{id}/status             pantau kemajuan
   6. GET  /api/analyses/{id}/results            lihat hasil
-  7. GET  /api/analyses/{id}/results/csv        unduh hasil CSV
+  7. GET  /api/analyses/{id}/results/csv        unduh hasil CSV (?hanya_signifikan=true untuk SNP signifikan)
 """
 import csv
 import io
 import time
 from pathlib import Path
 
+import numpy as np
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile, status
-from fastapi.responses import Response
-from sqlalchemy import select
+from fastapi.responses import HTMLResponse, Response
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from backend.api.deps import get_current_user, owned_analysis
@@ -31,15 +32,18 @@ from backend.models import (
     AnalysisStatus,
     AssociationResult,
     Dataset,
+    Phenotype,
     User,
     VisualizationResult,
 )
 from backend.schemas import AnalysisCreate, AnalysisUpdate, ParameterIn
 from backend.services import dataset_service as ds
+from backend.services import plot_service, report_service
 from backend.services.analysis_runner import dispatch
 from pipeline.annotation import annotate_from_gff3
 from pipeline.errors import ValidationError
-from pipeline.runner import STAGES
+from pipeline.runner import MIN_SAMPLES, STAGES
+from pipeline.visualization.downsample import smart_downsample
 from pipeline.validation import match_sample_ids, read_genotype, read_phenotype_csv
 
 router = APIRouter(prefix="/api/analyses", tags=["2. analisis (alur utama)"])
@@ -121,7 +125,8 @@ def create_analysis(data: AnalysisCreate, user: User = Depends(get_current_user)
     db.add(a)
     db.commit()
     db.refresh(a)
-    return {**_summary(a), "langkah_berikutnya": f"POST /api/analyses/{a.analysis_id}/upload"}
+    return {**_summary(a), "pesan": "Sesi analisis dibuat. Unggah berkas genotipe dan fenotipe.",
+            "langkah_berikutnya": f"POST /api/analyses/{a.analysis_id}/upload"}
 
 
 @router.get("/{analysis_id}", summary="Detail sesi analisis")
@@ -141,14 +146,64 @@ def get_analysis(a: Analysis = Depends(owned_analysis), db: Session = Depends(ge
 
 @router.patch("/{analysis_id}", summary="Perbarui nama atau atribut sesi analisis")
 def update_analysis(data: AnalysisUpdate, a: Analysis = Depends(owned_analysis), db: Session = Depends(get_db)):
-    if data.analysis_name:
-        a.analysis_name = data.analysis_name.strip()
-        db.commit()
-        db.refresh(a)
-    return _summary(a)
+    nama = data.analysis_name.strip()
+    if not nama:
+        raise HTTPException(422, _detail("Nama sesi tidak boleh kosong."))
+    a.analysis_name = nama
+    db.commit()
+    db.refresh(a)
+    return {**_summary(a), "pesan": "Nama sesi diperbarui."}
+
+
+@router.delete("/{analysis_id}", summary="Hapus sesi analisis beserta berkas dan hasilnya (riwayat)")
+def delete_analysis(a: Analysis = Depends(owned_analysis), db: Session = Depends(get_db)):
+    if a.status in LOCKED:
+        raise HTTPException(status.HTTP_409_CONFLICT,
+                            _detail("Analisis sedang berjalan; sesi belum dapat dihapus.",
+                                    ["Tunggu sampai status selesai atau gagal, lalu coba lagi."]))
+    aid, nama = a.analysis_id, a.analysis_name
+    ds.clear_analysis_data(db, aid)
+    db.execute(delete(AnalysisParameter).where(AnalysisParameter.analysis_id == aid),
+               execution_options={"synchronize_session": False})
+    db.delete(a)
+    db.commit()
+    ds.remove_dir(aid)
+    return {"pesan": f"Sesi analisis '{nama}' telah dihapus.", "analysis_id": aid}
 
 
 # ------------------------------------------------------------------ 2. unggah & validasi
+def _check_minimum(geno) -> None:
+    """Menolak data yang pasti gagal dianalisis, supaya pengguna tahu sejak tahap unggah (AC-02.2)."""
+    if geno.n_snps == 0:
+        raise ValidationError(
+            "Berkas genotipe tidak berisi SNP bialelik yang dapat dianalisis.",
+            [f"Varian dilewati: {geno.skipped}" if geno.skipped else "Berkas tidak memiliki baris varian.",
+             "GWASena hanya memakai SNP dengan satu alel REF dan satu alel ALT (A, C, G, T)."])
+    if geno.n_samples < MIN_SAMPLES:
+        raise ValidationError(
+            "Jumlah sampel terlalu sedikit untuk analisis GWAS.",
+            [f"Berkas berisi {geno.n_samples} sampel; minimal {MIN_SAMPLES} sampel."])
+
+
+def _upload_warnings(geno, pheno) -> list[str]:
+    """Hal yang tidak menggagalkan unggahan tetapi perlu diketahui pengguna."""
+    out = []
+    for nama, alasan in pheno.ignored.items():
+        out.append(f"Kolom '{nama}' tidak dipakai sebagai sifat: {alasan}.")
+    for alasan, n in (geno.skipped or {}).items():
+        label = {"multialelik": "multialelik", "bukan_snp": "bukan SNP (indel atau basa selain A/C/G/T)",
+                 "posisi_tidak_diketahui": "posisinya tidak diketahui (0 atau negatif)"}.get(alasan, alasan)
+        out.append(f"{n} varian dilewati karena {label}.")
+    for nama, nilai in pheno.traits.items():
+        terisi = int(np.isfinite(nilai).sum())
+        if terisi < MIN_SAMPLES:
+            out.append(f"Sifat '{nama}' hanya terisi pada {terisi} sampel (minimal {MIN_SAMPLES}); "
+                       "sifat ini tidak dapat dianalisis.")
+        elif terisi < len(nilai):
+            out.append(f"Sifat '{nama}' kosong pada {len(nilai) - terisi} sampel; sampel tersebut "
+                       "tidak ikut dalam uji asosiasi sifat ini.")
+    return out
+
 @router.post("/{analysis_id}/upload", summary="2. Unggah genotipe (VCF atau PLINK biner) + CSV dan validasi")
 def upload(
     a: Analysis = Depends(owned_analysis),
@@ -183,6 +238,7 @@ def upload(
         geno = read_genotype(g_path)
         pheno = read_phenotype_csv(p_path)
         match = match_sample_ids(geno.samples, pheno.samples)
+        _check_minimum(geno)
     except ValidationError as exc:
         ds.remove_dir(a.analysis_id)
         ds.clear_analysis_data(db, a.analysis_id)
@@ -211,6 +267,7 @@ def upload(
     db.refresh(a)
     return {
         "pesan": "Berkas valid. Lanjutkan ke pengaturan parameter.",
+        "peringatan": _upload_warnings(geno, pheno),
         "analysis_id": a.analysis_id,
         "analysis_name": a.analysis_name,
         "status": a.status,
@@ -236,6 +293,13 @@ def set_parameters(data: ParameterIn, a: Analysis = Depends(owned_analysis),
         raise HTTPException(422,
                             _detail(f"Sifat '{data.trait}' tidak ada di berkas fenotipe.",
                                     [f"Pilihan sifat: {', '.join(traits)}"]))
+    terisi = db.scalar(select(func.count(Phenotype.phenotype_id)).where(
+        Phenotype.analysis_id == a.analysis_id, Phenotype.trait_name == data.trait,
+        Phenotype.phenotype_value.is_not(None)))
+    if terisi is not None and terisi < MIN_SAMPLES:
+        raise HTTPException(422, _detail(
+            f"Sifat '{data.trait}' hanya terisi pada {terisi} sampel; minimal {MIN_SAMPLES} sampel.",
+            ["Pilih sifat lain atau lengkapi nilai sifat pada CSV fenotipe lalu unggah ulang."]))
     model = db.scalar(select(AnalysisModel).where(AnalysisModel.model_name == data.model))
     a.model_id = model.model_id if model else None
     a.model_name = data.model
@@ -300,6 +364,17 @@ def run(background_tasks: BackgroundTasks, a: Analysis = Depends(owned_analysis)
 
 
 # ------------------------------------------------------------------ 5. status
+STATUS_TEXT = {
+    AnalysisStatus.DRAFT: ("Berkas belum diunggah.", "POST /api/analyses/{id}/upload"),
+    AnalysisStatus.TERVALIDASI: ("Berkas valid. Atur parameter lalu jalankan analisis.",
+                                 "PUT /api/analyses/{id}/parameters"),
+    AnalysisStatus.ANTRE: ("Analisis menunggu giliran dijalankan.", "GET /api/analyses/{id}/status"),
+    AnalysisStatus.BERJALAN: ("Analisis sedang berjalan.", "GET /api/analyses/{id}/status"),
+    AnalysisStatus.SELESAI: ("Analisis selesai.", "GET /api/analyses/{id}/results"),
+    AnalysisStatus.GAGAL: ("Analisis gagal.", "PUT /api/analyses/{id}/parameters"),
+}
+
+
 @router.get("/{analysis_id}/status", summary="5. Pantau kemajuan analisis")
 def get_status(a: Analysis = Depends(owned_analysis), db: Session = Depends(get_db)):
     logs = db.scalars(select(AnalysisLog).where(AnalysisLog.analysis_id == a.analysis_id)
@@ -322,16 +397,36 @@ def get_status(a: Analysis = Depends(owned_analysis), db: Session = Depends(get_
     if a.status == AnalysisStatus.GAGAL and failed and failed.message:
         lines = failed.message.splitlines()
         galat = {"tahap": failed.stage, "pesan": lines[0], "rincian": lines[1:]}
+
+    # kalimat status yang siap ditampilkan antarmuka
+    teks, langkah = STATUS_TEXT.get(a.status, ("", None))
+    if a.status == AnalysisStatus.BERJALAN and current:
+        urutan = [c for c, _ in STAGES].index(current) + 1
+        teks = f"Sedang menjalankan tahap {urutan} dari {len(STAGES)}: {dict(STAGES)[current]}."
+    elif a.status == AnalysisStatus.SELESAI:
+        teks = (f"Analisis selesai: {a.significant_count or 0} SNP signifikan"
+                + (f", λGC = {a.lambda_gc:.3f}." if a.lambda_gc is not None else "."))
+    elif a.status == AnalysisStatus.GAGAL and galat:
+        nama_tahap = dict(STAGES).get(galat["tahap"], galat["tahap"] or "persiapan")
+        teks = f"Analisis gagal pada tahap {nama_tahap}: {galat['pesan']}"
+
+    mulai = next((log.timestamp for log in logs if log.status == "berjalan"), None)
+    akhir = logs[-1].timestamp if logs and a.status in (AnalysisStatus.SELESAI, AnalysisStatus.GAGAL) else None
     tip_pool = TIPS.get(current or "qc")
     return {
         "analysis_id": a.analysis_id,
         "status": a.status,
+        "pesan_status": teks,
         "terkunci": a.status in LOCKED,
         "tahap_sekarang": current,
         "progres_persen": round(100 * done / len(STAGES)),
         "tahap": stages,
         "galat": galat,
+        "waktu_mulai": mulai,
+        "waktu_selesai": akhir,
+        "durasi_detik": round((akhir - mulai).total_seconds(), 1) if mulai and akhir else None,
         "tips_edukatif": tip_pool[int(time.time() // 10) % len(tip_pool)],
+        "langkah_berikutnya": langkah.format(id=a.analysis_id) if langkah else None,
     }
 
 
@@ -355,14 +450,23 @@ def get_results(a: Analysis = Depends(owned_analysis), db: Session = Depends(get
     ringkasan = _get_cache(db, a.analysis_id, "ringkasan") or {}
     param = db.scalar(select(AnalysisParameter).where(AnalysisParameter.analysis_id == a.analysis_id))
     base = f"/api/analyses/{a.analysis_id}"
+    n_sig = len(ringkasan.get("snp_signifikan") or [])
+    pesan = (f"Ditemukan {n_sig} SNP signifikan." if n_sig else
+             "Tidak ada SNP yang signifikan setelah koreksi. Lihat snp_teratas untuk SNP dengan nilai p terkecil.")
     return {
         "analysis_id": a.analysis_id,
         "analysis_name": a.analysis_name,
         "status": a.status,
+        "pesan": pesan,
         "parameter": param.parameter_config if param else None,
         **ringkasan,
         "tautan": {
             "unduh_csv": f"{base}/results/csv",
+            "unduh_csv_signifikan": f"{base}/results/csv?hanya_signifikan=true",
+            "unduh_png_manhattan": f"{base}/plots/manhattan/png",
+            "unduh_png_qq": f"{base}/plots/qq/png",
+            "anotasi": f"{base}/annotation",
+            "laporan_web": f"{base}/report",
             "data_manhattan": f"{base}/plots/manhattan",
             "data_qq": f"{base}/plots/qq",
             "data_pca": f"{base}/plots/pca",
@@ -371,46 +475,43 @@ def get_results(a: Analysis = Depends(owned_analysis), db: Session = Depends(get
 
 
 @router.get("/{analysis_id}/plots/{jenis}", summary="Data titik untuk Manhattan, QQ, atau PCA plot")
-def get_plot(jenis: str, a: Analysis = Depends(owned_analysis), db: Session = Depends(get_db)):
+def get_plot(
+    jenis: str,
+    maks_titik: int | None = Query(
+        None, ge=0,
+        description="Khusus Manhattan: batas jumlah titik (smart downsampling). Kosong = memakai "
+                    "MANHATTAN_MAX_POINTS dari .env; 0 = kirim semua titik."),
+    a: Analysis = Depends(owned_analysis),
+    db: Session = Depends(get_db),
+):
     if jenis not in ("manhattan", "qq", "pca"):
         raise HTTPException(status.HTTP_404_NOT_FOUND, _detail("Jenis plot: manhattan, qq, atau pca."))
     _require_done(a)
-    return _get_cache(db, a.analysis_id, jenis) or {}
+    data = _get_cache(db, a.analysis_id, jenis) or {}
+    if jenis == "manhattan" and data.get("titik"):
+        batas = settings.MANHATTAN_MAX_POINTS if maks_titik is None else maks_titik
+        ring = smart_downsample(data["titik"], batas)
+        data = {**data, **ring}
+    return data
 
 
 @router.get("/{analysis_id}/plots/{jenis}/png", summary="Unduh Manhattan atau QQ plot (PNG)",
             response_class=Response,
             responses={200: {"content": {"image/png": {}}, "description": "Berkas gambar PNG"}})
 def get_plot_png(jenis: str, a: Analysis = Depends(owned_analysis), db: Session = Depends(get_db)):
-    if jenis not in ("manhattan", "qq"):
+    if jenis not in plot_service.PNG_TYPES:
         raise HTTPException(status.HTTP_404_NOT_FOUND, _detail("Jenis plot PNG: manhattan atau qq."))
     _require_done(a)
-    row = db.scalar(select(VisualizationResult).where(
-        VisualizationResult.analysis_id == a.analysis_id, VisualizationResult.plot_type == jenis))
-    if row is None or not row.plot_cache:
+    # PNG dibuat saat analisis selesai dan lokasinya dicatat di visualization_results.file_path
+    # (AC-08.1). Bila belum ada (mis. matplotlib baru dipasang), dibuat sekarang.
+    try:
+        png = plot_service.render_png(db, a.analysis_id, jenis)
+    except plot_service.PngUnavailable:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, _detail(
+            "Ekspor PNG belum tersedia karena paket matplotlib belum terpasang.",
+            ["Jalankan: pip install -r backend/requirements.txt"]))
+    if png is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, _detail("Data plot tidak ditemukan untuk analisis ini."))
-
-    # PNG dibuat sekali lalu disimpan; lokasinya dicatat di visualization_results.file_path (AC-08.1).
-    path = Path(row.file_path) if row.file_path else None
-    if path is not None and path.is_file():
-        png = path.read_bytes()
-    else:
-        try:
-            from pipeline.visualization import manhattan_png, qq_png
-        except ImportError:
-            raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, _detail(
-                "Ekspor PNG belum tersedia karena paket matplotlib belum terpasang.",
-                ["Jalankan: pip install -r backend/requirements.txt"]))
-        ringkasan = _get_cache(db, a.analysis_id, "ringkasan") or {}
-        nama = "Manhattan plot" if jenis == "manhattan" else "QQ plot"
-        judul = f"{nama} - {ringkasan.get('trait', '')} ({ringkasan.get('model', '')})"
-        png = manhattan_png(row.plot_cache, judul) if jenis == "manhattan" else qq_png(row.plot_cache, judul)
-        folder = ds.analysis_dir(a.analysis_id) / "plot"
-        folder.mkdir(parents=True, exist_ok=True)
-        path = folder / f"{jenis}.png"
-        path.write_bytes(png)
-        row.file_path = str(path)
-        db.commit()
     return Response(content=png, media_type="image/png", headers={
         "Content-Disposition": f'attachment; filename="gwasena_sesi{a.analysis_id}_{jenis}.png"'})
 
@@ -440,7 +541,9 @@ def get_annotation(
             AssociationResult.snp_code == k["snp_id"],
         ))
         if db_res:
-            db_res.candidate_gene = k.get("gene_id") or k.get("gene_name")
+            # k["gen"] berisi daftar gen terdekat (paling dekat lebih dulu); simpan gen pertama
+            gen = k.get("gen") or []
+            db_res.candidate_gene = (gen[0].get("gene_id") or gen[0].get("gene_name")) if gen else None
             db_res.annotation_info = k
     db.commit()
 
@@ -452,26 +555,53 @@ def get_annotation(
 
 # ------------------------------------------------------------------ 7. unduh CSV
 @router.get("/{analysis_id}/results/csv", summary="7. Unduh hasil asosiasi (CSV)")
-def download_csv(a: Analysis = Depends(owned_analysis), db: Session = Depends(get_db)):
+def download_csv(
+    hanya_signifikan: bool = Query(False, description="true = hanya SNP yang signifikan setelah koreksi"),
+    a: Analysis = Depends(owned_analysis),
+    db: Session = Depends(get_db),
+):
     _require_done(a)
-    rows = db.execute(
+    stmt = (
         select(SNP.chromosome, SNP.position, SNP.variant_code, SNP.ref_allele, SNP.alt_allele,
                AssociationResult.effect_size, AssociationResult.std_error,
-               AssociationResult.p_value, AssociationResult.q_value)
+               AssociationResult.p_value, AssociationResult.q_value,
+               AssociationResult.is_significant, AssociationResult.candidate_gene)
         .select_from(AssociationResult)
         .join(SNP, SNP.snp_id == AssociationResult.snp_id)
         .where(AssociationResult.analysis_id == a.analysis_id)
         .order_by(SNP.snp_id)
-    ).all()
+    )
+    rows = db.execute(stmt).all()
+    # Bonferroni dihitung dari SEMUA SNP yang diuji, walau yang diekspor hanya yang signifikan
     m = sum(1 for r in rows if r.p_value is not None)
+    if hanya_signifikan:
+        rows = [r for r in rows if r.is_significant]
     buf = io.StringIO()
     w = csv.writer(buf)
     w.writerow(["Chr", "Pos", "SNP_ID", "Ref_Allele", "Alt_Allele", "Beta_OR", "SE",
-                "P_Value", "P_Bonferroni", "Q_Value_FDR"])
+                "P_Value", "P_Bonferroni", "Q_Value_FDR", "Signifikan", "Kandidat_Gen"])
     for r in rows:
         p_bonf = min(r.p_value * m, 1.0) if r.p_value is not None else None
         w.writerow([r.chromosome, r.position, r.variant_code, r.ref_allele, r.alt_allele,
-                    r.effect_size, r.std_error, r.p_value, p_bonf, r.q_value])
-    filename = f"gwasena_analisis_{a.analysis_id}_hasil.csv"
+                    r.effect_size, r.std_error, r.p_value, p_bonf, r.q_value,
+                    "ya" if r.is_significant else "tidak", r.candidate_gene or ""])
+    akhiran = "snp_signifikan" if hanya_signifikan else "hasil"
+    filename = f"gwasena_analisis_{a.analysis_id}_{akhiran}.csv"
     return Response(content=buf.getvalue(), media_type="text/csv",
                     headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+
+# ------------------------------------------------------------------ 8. laporan web
+@router.get("/{analysis_id}/report", summary="8. Laporan hasil analisis (Web Report HTML)",
+            response_class=HTMLResponse)
+def web_report(
+    unduh: bool = Query(False, description="true = diunduh sebagai berkas .html"),
+    a: Analysis = Depends(owned_analysis),
+    db: Session = Depends(get_db),
+):
+    _require_done(a)
+    html = report_service.build_report(db, a)
+    headers = {}
+    if unduh:
+        headers["Content-Disposition"] = f'attachment; filename="gwasena_analisis_{a.analysis_id}_laporan.html"'
+    return HTMLResponse(content=html, headers=headers)

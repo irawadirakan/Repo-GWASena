@@ -10,11 +10,14 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.utils import get_openapi
 
 from backend import models  # noqa: F401  (mendaftarkan semua 12 tabel)
-from backend.api import analyses, auth, health, meta
+from backend.api import admin, analyses, auth, health, meta
+from backend.core import errors
 from backend.core.config import settings
 from backend.core.database import init_db
+from backend.services.analysis_runner import recover_stuck_analyses
 
 logger = logging.getLogger("gwasena")
 
@@ -29,6 +32,12 @@ async def lifespan(app: FastAPI):
         except Exception as exc:  # noqa: BLE001
             # Aplikasi tetap menyala agar /api/health bisa menunjukkan masalahnya.
             logger.error("Gagal terhubung/membuat tabel DB: %s", exc)
+    try:
+        n = recover_stuck_analyses()
+        if n:
+            logger.warning("%s analisis yang terhenti saat server mati ditandai gagal.", n)
+    except Exception as exc:  # noqa: BLE001
+        logger.error("Gagal memeriksa analisis yang terhenti: %s", exc)
     yield
 
 
@@ -47,8 +56,27 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-for r in (health.router, meta.router, auth.router, analyses.router):
+for r in (health.router, meta.router, auth.router, analyses.router, admin.router):
     app.include_router(r)
+
+errors.register(app)
+
+
+def openapi_tanpa_keterangan():
+    """Tampilan /docs hanya menampilkan metode dan alamat endpoint, tanpa teks keterangan di judulnya."""
+    if app.openapi_schema:
+        return app.openapi_schema
+    schema = get_openapi(title=app.title, version=app.version, description=app.description, routes=app.routes)
+    for path in schema.get("paths", {}).values():
+        for op in path.values():
+            if isinstance(op, dict):
+                op.pop("summary", None)
+                op.pop("description", None)
+    app.openapi_schema = schema
+    return schema
+
+
+app.openapi = openapi_tanpa_keterangan
 
 
 @app.get("/", include_in_schema=False)
