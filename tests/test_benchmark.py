@@ -27,7 +27,7 @@ def test_load_benchmark_vcf_creates_session_if_null():
         assert data["validation"]["is_valid"] is True
         assert data["validation"]["sample_count"] == 40
         assert data["validation"]["snp_count"] == 500
-        assert data["validation"]["qc_status"] == "100% Lolos QC"
+        assert data["validation"]["qc_status"].startswith("Lolos validasi")
         assert "fenotipe_bawang_putih_mini.csv" in data["files"]["phenotype"]
 
 

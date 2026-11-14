@@ -12,17 +12,20 @@ Urutan pemakaian:
 import csv
 import gzip
 import io
+import shutil
 import time
+import zipfile
 from pathlib import Path
 
 import numpy as np
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import HTMLResponse, Response
 from sqlalchemy import delete, func, select
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from backend.api.deps import get_current_user, owned_analysis
-from backend.core.config import settings
+from backend.core.config import ROOT_DIR, settings
 from backend.core.database import get_db
 from backend.models import (
     SNP,
@@ -39,9 +42,9 @@ from backend.models import (
 )
 from backend.schemas import AnalysisCreate, AnalysisUpdate, ParameterIn
 from backend.services import dataset_service as ds
-from backend.services import plot_service, report_service
+from backend.services import annotation_service, plot_service, report_service
 from backend.services.analysis_runner import dispatch
-from pipeline.annotation import annotate_from_gff3, annotate_snps_auto, detect_organism_from_dataset, scientific_name
+from pipeline.annotation import detect_organism_from_dataset, scientific_name
 from pipeline.errors import ValidationError
 from pipeline.runner import MIN_SAMPLES, STAGES
 from pipeline.visualization.downsample import smart_downsample
@@ -356,28 +359,39 @@ def upload(
     fam: UploadFile | None = File(None, description="Wajib bila genotipe berupa .bed: berkas .fam"),
     db: Session = Depends(get_db),
 ):
+    # field berkas opsional yang dikirim kosong dianggap tidak diunggah
+    bim = bim if bim is not None and bim.filename else None
+    fam = fam if fam is not None and fam.filename else None
+    sumber = {"genotipe": genotipe, "fenotipe": fenotipe, "bim": bim, "fam": fam}
+    return _ingest(a, db, {k: (v.filename if v else None) for k, v in sumber.items()},
+                   lambda key, target: ds.save_upload(sumber[key], target))
+
+
+def _ingest(a: Analysis, db: Session, names: dict, save) -> dict:
+    """Simpan, validasi, dan catat berkas genotipe + fenotipe untuk satu sesi.
+
+    ``names`` berisi nama berkas asli (genotipe, fenotipe, bim, fam); ``save(key, target)`` menulis
+    isi berkas ``key`` ke ``target``. Dipakai oleh unggahan pengguna dan dataset contoh.
+    """
     if a.status in LOCKED:
         raise HTTPException(status.HTTP_409_CONFLICT,
                             _detail("Analisis sedang berjalan; unggahan dikunci sampai selesai."))
     folder = ds.analysis_dir(a.analysis_id)
-    # field berkas opsional yang dikirim kosong dianggap tidak diunggah
-    bim = bim if bim is not None and bim.filename else None
-    fam = fam if fam is not None and fam.filename else None
+    g_name, p_name, bim_name, fam_name = names["genotipe"], names["fenotipe"], names.get("bim"), names.get("fam")
     try:
-        plink = ds.is_plink(genotipe.filename)
-        ds.check_extensions(genotipe.filename, fenotipe.filename,
-                            bim.filename if bim else None, fam.filename if fam else None)
+        plink = ds.is_plink(g_name)
+        ds.check_extensions(g_name, p_name, bim_name, fam_name)
         ds.remove_dir(a.analysis_id)
         folder.mkdir(parents=True, exist_ok=True)
         if plink:
             g_path = folder / "genotipe.bed"
-            ds.save_upload(bim, folder / "genotipe.bim")
-            ds.save_upload(fam, folder / "genotipe.fam")
+            save("bim", folder / "genotipe.bim")
+            save("fam", folder / "genotipe.fam")
         else:
-            g_path = folder / ("genotipe.vcf.gz" if genotipe.filename.lower().endswith(".gz") else "genotipe.vcf")
+            g_path = folder / ("genotipe.vcf.gz" if g_name.lower().endswith(".gz") else "genotipe.vcf")
         p_path = folder / "fenotipe.csv"
-        ds.save_upload(genotipe, g_path)
-        ds.save_upload(fenotipe, p_path)
+        save("genotipe", g_path)
+        save("fenotipe", p_path)
         geno = read_genotype(g_path)
         pheno = read_phenotype_csv(p_path)
         match = match_sample_ids(geno.samples, pheno.samples)
@@ -392,13 +406,12 @@ def upload(
         raise HTTPException(422, _detail(exc.message, exc.details))
 
     ds.clear_analysis_data(db, a.analysis_id)
-    info = ds.store_datasets(db, a.analysis_id, genotipe.filename, g_path,
-                             fenotipe.filename, p_path, geno, pheno,
+    info = ds.store_datasets(db, a.analysis_id, g_name, g_path, p_name, p_path, geno, pheno,
                              genotype_type="plink_bed" if plink else "vcf")
     # Auto-rename sesi jika pengguna membiarkan nama default
-    default_names = {"Sesi Analisis Baru", "Analisis Asosiasi Genomik 2026", "Analisis Baru", ""}
+    default_names = {"Sesi Analisis Baru", "Analisis Asosiasi Genomik 2026", "Analisis Baru", "Analisis Tanpa Judul", ""}
     if a.analysis_name in default_names or a.analysis_name.startswith("Sesi Analisis"):
-        stem = Path(genotipe.filename).stem
+        stem = Path(g_name).stem
         if stem.lower().endswith(".vcf"):
             stem = Path(stem).stem
         a.analysis_name = f"Analisis {stem}"
@@ -406,7 +419,7 @@ def upload(
     vcf_header = _read_vcf_header_preview(g_path) if not plink else ""
     distinct_chroms = {str(c).strip() for c in (geno.chrom or []) if str(c).strip()}
     detected_org = detect_organism_from_dataset(
-        filenames=[f for f in [genotipe.filename, fenotipe.filename, bim.filename if bim else None, fam.filename if fam else None] if f],
+        filenames=[f for f in [g_name, p_name, bim_name, fam_name] if f],
         traits=list(pheno.traits.keys()),
         num_chromosomes=len(distinct_chroms) or None,
         vcf_header=vcf_header,
@@ -435,6 +448,97 @@ def upload(
         "detected_organism": detected_org,
         "langkah_berikutnya": f"PUT /api/analyses/{a.analysis_id}/parameters",
     }
+
+
+# ------------------------------------------------------------------ dataset contoh (benchmark)
+CONTOH_DIR = ROOT_DIR / "data" / "contoh"
+BENCHMARK_FILES = {
+    "VCF": {"genotipe": "genotipe_bawang_putih_mini.vcf", "fenotipe": "fenotipe_bawang_putih_mini.csv"},
+    "PLINK": {"genotipe": "genotipe_bawang_putih_mini.bed", "bim": "genotipe_bawang_putih_mini.bim",
+              "fam": "genotipe_bawang_putih_mini.fam", "fenotipe": "fenotipe_bawang_putih_mini.csv"},
+}
+
+
+class BenchmarkIn(BaseModel):
+    format: str = Field("VCF", description="VCF atau PLINK")
+    analysis_id: int | str | None = Field(None, description="Sesi yang dipakai; kosong atau tidak valid = sesi baru")
+
+
+def _load_benchmark(user: User, db: Session, fmt: str, analysis_id) -> dict:
+    fmt = (fmt or "VCF").strip().upper()
+    if fmt not in BENCHMARK_FILES:
+        raise HTTPException(422, _detail("Format dataset contoh tidak dikenal.", ["Pilihan: VCF atau PLINK"]))
+    files = BENCHMARK_FILES[fmt]
+    hilang = [n for n in files.values() if not (CONTOH_DIR / n).is_file()]
+    if hilang:
+        raise HTTPException(500, _detail("Berkas dataset contoh tidak ditemukan di server.",
+                                         [f"Tidak ada: data/contoh/{n}" for n in hilang]))
+
+    # Pakai sesi yang diminta bila milik pengguna dan tidak sedang berjalan; selain itu buat sesi baru.
+    a = None
+    try:
+        a = db.get(Analysis, int(analysis_id)) if analysis_id not in (None, "") else None
+    except (TypeError, ValueError):
+        a = None
+    sesi_baru = a is None or a.user_id != user.user_id or a.status in LOCKED
+    if sesi_baru:
+        a = Analysis(user_id=user.user_id, analysis_name="Analisis Bobot Umbi Bawang Putih (contoh)",
+                     status=AnalysisStatus.DRAFT)
+        db.add(a)
+        db.commit()
+        db.refresh(a)
+
+    hasil = _ingest(a, db, {"genotipe": files["genotipe"], "fenotipe": files["fenotipe"],
+                            "bim": files.get("bim"), "fam": files.get("fam")},
+                    lambda key, target: shutil.copyfile(CONTOH_DIR / files[key], target))
+    g, f = hasil.get("genotipe") or {}, hasil.get("fenotipe") or {}
+    return {
+        **hasil,
+        "status": "success",
+        "status_analisis": hasil["status"],
+        "sesi_baru": sesi_baru,
+        "dataset_type": fmt,
+        "pesan": "Dataset contoh bawang putih dimuat. Lanjutkan ke pengaturan parameter.",
+        "validation": {
+            "is_valid": True,
+            "sample_count": g.get("jumlah_sampel"),
+            "snp_count": g.get("jumlah_snp"),
+            "trait_count": len(f.get("daftar_sifat") or f.get("sifat_tersedia") or []),
+            "qc_status": "Lolos validasi berkas (QC dijalankan saat analisis)",
+        },
+        "files": {
+            "genotype": [files[k] for k in ("genotipe", "bim", "fam") if k in files],
+            "phenotype": [files["fenotipe"]],
+        },
+    }
+
+
+@router.post("/benchmark", summary="Muat dataset contoh bawang putih (VCF atau PLINK) ke sesi analisis")
+def load_benchmark(data: BenchmarkIn, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    return _load_benchmark(user, db, data.format, data.analysis_id)
+
+
+@router.post("/{analysis_id}/load-benchmark", summary="Muat dataset contoh ke sesi tertentu")
+def load_benchmark_to(analysis_id: int, data: BenchmarkIn | None = None,
+                      user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    return _load_benchmark(user, db, data.format if data else "VCF", analysis_id)
+
+
+@router.get("/benchmark/download", summary="Unduh berkas dataset contoh (ZIP)",
+            response_class=Response, responses={200: {"content": {"application/zip": {}}}})
+def download_benchmark(format: str = Query("all", description="vcf, plink, atau all")):
+    fmt = format.strip().lower()
+    if fmt not in ("vcf", "plink", "all"):
+        raise HTTPException(422, _detail("Format tidak dikenal.", ["Pilihan: vcf, plink, atau all"]))
+    names = set()
+    for key in (["VCF", "PLINK"] if fmt == "all" else [fmt.upper()]):
+        names.update(BENCHMARK_FILES[key].values())
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for n in sorted(names):
+            zf.write(CONTOH_DIR / n, arcname=n)
+    return Response(buf.getvalue(), media_type="application/zip", headers={
+        "Content-Disposition": f'attachment; filename="gwasena_benchmark_bawang_putih_{fmt}.zip"'})
 
 
 # ------------------------------------------------------------------ 3. parameter
@@ -706,35 +810,12 @@ def get_annotation(
     sertakan_teratas: bool = Query(
         False, description="Ikut menganotasi 10 SNP dengan nilai p terkecil, berguna bila tidak ada "
                            "SNP yang signifikan"),
+    segarkan: bool = Query(False, description="true = abaikan cache dan minta ulang ke sumber anotasi"),
     db: Session = Depends(get_db),
 ):
     _require_done(a)
-    ringkasan = _get_cache(db, a.analysis_id, "ringkasan") or {}
-    snps = list(ringkasan.get("snp_signifikan") or [])
-    signifikan = {s["snp_id"] for s in snps}
-    label = "SNP signifikan"
-    if sertakan_teratas:
-        snps += [s for s in ringkasan.get("snp_teratas") or [] if s["snp_id"] not in signifikan]
-        label = "SNP (signifikan dan teratas)"
     org_code, _ = _resolve_session_organism(db, a)
-    hasil = annotate_snps_auto(snps, org_code, settings.ANNOTATION_GFF3, settings.ANNOTATION_WINDOW_BP, label)
-    for k in hasil["kandidat"]:
-        k["signifikan"] = k["snp_id"] in signifikan
-        db_res = db.scalar(select(AssociationResult).where(
-            AssociationResult.analysis_id == a.analysis_id,
-            AssociationResult.snp_code == k["snp_id"],
-        ))
-        if db_res:
-            # k["gen"] berisi daftar gen terdekat (paling dekat lebih dulu); simpan gen pertama
-            gen = k.get("gen") or []
-            db_res.candidate_gene = (gen[0].get("gene_id") or gen[0].get("gene_name")) if gen else None
-            db_res.annotation_info = k
-    db.commit()
-
-    if hasil["status"] == "tersedia" and not snps:
-        hasil["pesan"] += " Gunakan sertakan_teratas=true untuk melihat kandidat gen di sekitar SNP teratas."
-    return {"analysis_id": a.analysis_id, "trait": ringkasan.get("trait"),
-            "model": ringkasan.get("model"), **hasil}
+    return annotation_service.annotate(db, a, org_code, sertakan_teratas, segarkan)
 
 
 # ------------------------------------------------------------------ 7. unduh CSV
