@@ -61,6 +61,13 @@ class Settings:
         ROOT_DIR / os.getenv("ANNOTATION_GFF3", "./data/contoh/anotasi_bawang_putih_contoh.gff3")
     ).resolve()
     ANNOTATION_WINDOW_BP: int = int(os.getenv("ANNOTATION_WINDOW_BP", "50000"))
+    # Sumber anotasi: "ensembl" (bawaan, semua organisme lewat Ensembl) atau "otomatis"
+    # (bawang putih memakai berkas GFF3 lokal ANNOTATION_GFF3, organisme lain Ensembl).
+    ANNOTATION_SOURCE: str = os.getenv("ANNOTATION_SOURCE", "ensembl").strip().lower()
+    # Batas waktu total (detik) satu kali anotasi melalui Ensembl REST API.
+    ANNOTATION_TIMEOUT_TOTAL: float = float(os.getenv("ANNOTATION_TIMEOUT_TOTAL", "25"))
+    # true = anotasi gen kandidat langsung dihitung setelah analisis selesai (hasilnya di-cache).
+    ANNOTATION_AUTO: bool = _as_bool(os.getenv("ANNOTATION_AUTO", "true"))
 
     # Smart downsampling Manhattan plot: di atas batas ini, titik non-signifikan diringkas
     # agar grafik interaktif tetap ringan (SNP signifikan selalu dipertahankan).

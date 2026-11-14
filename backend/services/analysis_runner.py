@@ -86,6 +86,13 @@ def run_analysis(analysis_id: int) -> None:
             logger.exception("PNG analisis %s gagal dibuat; dapat dibuat ulang lewat endpoint /png", analysis_id)
             db.rollback()
 
+        # Anotasi gen kandidat dihitung sekali dan di-cache, sehingga layar Anotasi Gen dan kolom
+        # Kandidat_Gen pada CSV langsung terisi tanpa menunggu Ensembl saat dibuka.
+        if settings.ANNOTATION_AUTO:
+            from backend.services.annotation_service import precompute
+
+            precompute(db, analysis)
+
 
 def _save_results(db, analysis_id: int, result: dict) -> None:
     geno_ds = db.scalar(select(Dataset).where(Dataset.analysis_id == analysis_id,
@@ -171,6 +178,7 @@ def _save_results(db, analysis_id: int, result: dict) -> None:
         "asosiasi": result["asosiasi"],
         "snp_signifikan": significant,
         "snp_teratas": top,
+        "chromosome_count": len({str(s.get("chromosome")) for s in result["snp"] if s.get("chromosome") is not None}),
     }
     db.add_all([
         VisualizationResult(analysis_id=analysis_id, plot_type="ringkasan", plot_cache=ringkasan, plot_metadata={"judul": "Ringkasan Hasil Analisis"}),

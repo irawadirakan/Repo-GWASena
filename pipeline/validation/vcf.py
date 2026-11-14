@@ -57,6 +57,25 @@ def _gt_to_dosage(field_value: str) -> float:
     return float(a + b)
 
 
+# Tabel cepat untuk nilai GT yang paling sering muncul; nilai lain diproses _gt_to_dosage.
+_GT_LUT: dict[str, float] = {
+    "0/0": 0.0, "0|0": 0.0, "0/1": 1.0, "1/0": 1.0, "0|1": 1.0, "1|0": 1.0, "1/1": 2.0, "1|1": 2.0,
+    "./.": np.nan, ".|.": np.nan, ".": np.nan, "": np.nan,
+}
+
+
+def _row_to_dosage(values: list[str]) -> list[float]:
+    get = _GT_LUT.get
+    out = [get(v) for v in values]
+    if None in out:
+        for k, d in enumerate(out):
+            if d is None:
+                v = values[k]
+                d = get(v.split(":", 1)[0]) if ":" in v else None
+                out[k] = d if d is not None else _gt_to_dosage(v)
+    return out
+
+
 def read_vcf(path: str | Path) -> GenotypeData:
     path = Path(path)
     errors: list[str] = []
@@ -137,7 +156,7 @@ def read_vcf(path: str | Path) -> GenotypeData:
                     skipped["bukan_snp"] += 1
                     continue
                 try:
-                    row = [_gt_to_dosage(v) for v in cols[9:]]
+                    row = _row_to_dosage(cols[9:])
                 except ValueError as exc:
                     errors.append(f"Baris {lineno}: {exc}.")
                     if len(errors) >= MAX_ERRORS:

@@ -180,7 +180,7 @@ def run_pipeline(
     return {
         "trait": trait,
         "model": model,
-        "qc": qc.as_dict(geno.n_samples, geno.n_snps),
+        "qc": qc.as_dict(geno.n_samples, geno.n_snps, trait_name=trait),
         # dipakai backend untuk menandai kolom passed_qc pada tabel samples dan snps
         "qc_lolos": {"sampel": samples_kept, "varian_index": [int(j) for j in v_idx]},
         "statistik_snp": {

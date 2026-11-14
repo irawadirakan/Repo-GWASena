@@ -40,3 +40,9 @@ def owned_analysis(
     if analysis.user_id != user.user_id and user.role != "administrator":
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Anda tidak memiliki akses ke analisis ini.")
     return analysis
+
+
+def require_admin(user: User = Depends(get_current_user)) -> User:
+    if user.role != "administrator":
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Akses ditolak: khusus administrator.")
+    return user

@@ -25,11 +25,21 @@ def require_admin(user: User = Depends(get_current_user)) -> User:
 @router.get("/ringkasan", summary="Ringkasan jumlah pengguna dan analisis per status")
 def ringkasan(_: User = Depends(require_admin), db: Session = Depends(get_db)):
     per_status = dict(db.execute(select(Analysis.status, func.count()).group_by(Analysis.status)).all())
+    jumlah_pengguna = db.scalar(select(func.count()).select_from(User))
+    jumlah_analisis = sum(per_status.values())
+    aktif = per_status.get(AnalysisStatus.ANTRE, 0) + per_status.get(AnalysisStatus.BERJALAN, 0)
     return {
-        "jumlah_pengguna": db.scalar(select(func.count()).select_from(User)),
-        "jumlah_analisis": sum(per_status.values()),
+        # nama field yang dipakai halaman Admin pada antarmuka
+        "total_pengguna": jumlah_pengguna,
+        "total_analisis": jumlah_analisis,
+        "analisis_aktif": aktif,
+        "analisis_selesai": per_status.get(AnalysisStatus.SELESAI, 0),
+        "analisis_gagal": per_status.get(AnalysisStatus.GAGAL, 0),
         "analisis_per_status": {s: per_status.get(s, 0) for s in STATUS_SEMUA},
-        "job_aktif": per_status.get(AnalysisStatus.ANTRE, 0) + per_status.get(AnalysisStatus.BERJALAN, 0),
+        # nama lama tetap dikirim agar klien lama tidak rusak
+        "jumlah_pengguna": jumlah_pengguna,
+        "jumlah_analisis": jumlah_analisis,
+        "job_aktif": aktif,
     }
 
 
@@ -62,6 +72,6 @@ def daftar_job(
                                       "rincian": [f"Pilihan: {', '.join(STATUS_SEMUA)}, aktif"]})
         stmt = stmt.where(Analysis.status == status_job)
     return [{"analysis_id": a.analysis_id, "analysis_name": a.analysis_name, "pemilik": username,
-             "status": a.status, "trait_name": a.trait_name, "model_name": a.model_name,
+             "username": username, "organism": a.organism, "status": a.status, "trait_name": a.trait_name, "model_name": a.model_name,
              "significant_count": a.significant_count, "dibuat": a.created_at, "diperbarui": a.updated_at}
             for a, username in db.execute(stmt).all()]

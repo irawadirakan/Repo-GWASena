@@ -48,7 +48,8 @@ def test_data_tersimpan_sesuai_rancangan():
                 assert row.file_path and Path(row.file_path).is_file()
 
 
-def test_anotasi_mengisi_kolom_candidate_gene():
+def test_anotasi_mengisi_kolom_candidate_gene(monkeypatch):
+    monkeypatch.setenv("ANNOTATION_SOURCE", "otomatis")  # uji jalur GFF3 lokal
     with TestClient(app) as c:
         h = _login(c, "penguji_kandidat")
         aid = _jalankan(c, h, "Uji kandidat gen")

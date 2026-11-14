@@ -123,47 +123,33 @@ def store_datasets(
     db.add_all([ds_geno, ds_pheno])
     db.flush()
 
-    samples = [
-        Sample(
-            dataset_id=ds_geno.dataset_id,
-            analysis_id=analysis_id,
-            sample_code=s,
-            variety=pheno.variety.get(s),
-            passed_qc=True,
-        )
-        for s in geno.samples
-    ]
-    db.add_all(samples)
-    snps = [
-        SNP(
-            dataset_id=ds_geno.dataset_id,
-            analysis_id=analysis_id,
-            variant_code=geno.ids[j],
-            snp_code=geno.ids[j],
-            chromosome=geno.chrom[j],
-            position=geno.pos[j],
-            ref_allele=geno.ref[j],
-            alt_allele=geno.alt[j],
-            passed_qc=True,
-        )
-        for j in range(geno.n_snps)
-    ]
-    db.add_all(snps)
-    db.flush()
+    # Sampel dan SNP disisipkan sekaligus (bulk INSERT ... RETURNING) agar unggahan data besar cepat;
+    # sort_by_parameter_order menjamin urutan ID sama dengan urutan baris yang dikirim.
+    sample_res = db.execute(
+        insert(Sample).returning(Sample.sample_id, sort_by_parameter_order=True),
+        [{"dataset_id": ds_geno.dataset_id, "analysis_id": analysis_id, "sample_code": s,
+          "variety": pheno.variety.get(s), "passed_qc": True} for s in geno.samples],
+    )
+    sample_pk = dict(zip(geno.samples, (r[0] for r in sample_res)))
+    snp_res = db.execute(
+        insert(SNP).returning(SNP.snp_id, sort_by_parameter_order=True),
+        [{"dataset_id": ds_geno.dataset_id, "analysis_id": analysis_id, "variant_code": geno.ids[j],
+          "snp_code": geno.ids[j], "chromosome": geno.chrom[j], "position": geno.pos[j],
+          "ref_allele": geno.ref[j], "alt_allele": geno.alt[j], "passed_qc": True}
+         for j in range(geno.n_snps)],
+    )
+    snp_pk = [r[0] for r in snp_res]
 
-    sample_pk = {s.sample_code: s.sample_id for s in samples}
     genotype_stored = geno.n_samples * geno.n_snps <= settings.MAX_GENOTYPE_ROWS
     if genotype_stored:
         rows = []
         for i, s in enumerate(geno.samples):
-            for j, snp in enumerate(snps):
-                v = geno.dosage[i, j]
-                rows.append({
-                    "sample_id": sample_pk[s],
-                    "snp_id": snp.snp_id,
-                    "genotype_value": None if v != v else int(v),
-                })
-        db.execute(insert(Genotype), rows)
+            sid = sample_pk[s]
+            for j, v in enumerate(geno.dosage[i].tolist()):
+                rows.append({"sample_id": sid, "snp_id": snp_pk[j],
+                             "genotype_value": None if v != v else int(v)})
+        for k in range(0, len(rows), 50_000):
+            db.execute(insert(Genotype), rows[k:k + 50_000])
 
     pheno_rows = []
     for trait, values in pheno.traits.items():

@@ -54,7 +54,8 @@ def test_berkas_tanpa_gen_menghasilkan_tidak_tersedia(tmp_path):
     assert annotate_from_gff3([SNP_UTAMA], path)["status"] == "tidak_tersedia"
 
 
-def test_endpoint_anotasi():
+def test_endpoint_anotasi(monkeypatch):
+    monkeypatch.setenv("ANNOTATION_SOURCE", "otomatis")  # uji jalur GFF3 lokal
     from fastapi.testclient import TestClient
 
     from backend.main import app
