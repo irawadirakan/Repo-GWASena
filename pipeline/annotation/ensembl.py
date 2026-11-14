@@ -9,6 +9,7 @@ serta fallback ke berkas GFF3 lokal untuk Allium sativum atau bila kosong.
 from __future__ import annotations
 
 import json
+import os
 from concurrent.futures import ThreadPoolExecutor
 import logging
 import re
@@ -106,6 +107,20 @@ SPECIES_ALIASES: dict[str, str] = {
 
 LOCAL_GFF3_SPECIES = {"allium_sativum"}
 
+
+def gff3_lokal_aktif() -> bool:
+    """Sumber anotasi diatur lewat variabel lingkungan ANNOTATION_SOURCE.
+
+    - ``ensembl`` (bawaan): semua organisme, termasuk bawang putih, dianotasi melalui Ensembl REST API.
+      Berkas GFF3 lokal tidak dipakai sementara karena berkas yang ada hanya anotasi contoh.
+    - ``otomatis``: bawang putih memakai berkas GFF3 lokal (ANNOTATION_GFF3), organisme lain Ensembl.
+    """
+    return os.getenv("ANNOTATION_SOURCE", "ensembl").strip().lower() in ("otomatis", "gff3")
+
+
+def _source_for(code: str) -> str:
+    return "gff3" if code in LOCAL_GFF3_SPECIES and gff3_lokal_aktif() else "ensembl"
+
 ENSEMBL_SUPPORTED_SPECIES = {
     code for code in set(SPECIES_ALIASES.values()) if code not in LOCAL_GFF3_SPECIES
 }
@@ -127,7 +142,7 @@ SPECIES_DISPLAY_NAMES: dict[str, str] = {
     "solanum_tuberosum": "Kentang (Solanum tuberosum)",
     "triticum_aestivum": "Gandum (Triticum aestivum)",
     "arabidopsis_thaliana": "Arabidopsis thaliana",
-    "allium_sativum": "Bawang Putih (Allium sativum - GFF3 Lokal)",
+    "allium_sativum": "Bawang Putih (Allium sativum)",
 }
 
 # Urutan aturan penting agar kata kunci spesifik (mis. mus_musculus / solanum_tuberosum)
@@ -154,11 +169,13 @@ _DATASET_DETECTION_RULES: list[tuple[tuple[str, ...], str, str, str]] = [
 
 
 def _keyword_matches(corpus: str, keyword: str) -> bool:
-    """Cocokkan kata kunci pada korpus teks dengan pembatas non-alfanumerik agar akurat."""
+    """Cocokkan kata kunci sebagai kata utuh (dibatasi karakter non-alfanumerik).
+
+    Pencocokan sebagian kata tidak dipakai karena menimbulkan salah deteksi, misalnya kata
+    "otomatis" mengandung "tomat" sehingga sesi bawang putih terbaca sebagai tomat.
+    """
     escaped = re.escape(keyword)
-    if len(keyword) <= 4:
-        return bool(re.search(rf"(?<![a-z0-9]){escaped}(?![a-z0-9])", corpus))
-    return keyword in corpus
+    return bool(re.search(rf"(?<![a-z0-9]){escaped}(?![a-z0-9])", corpus))
 
 
 def scientific_name(organism: str | None) -> str:
@@ -195,7 +212,7 @@ def detect_organism_from_dataset(
                     "label": label,
                     "detected_by": "nama berkas/profil dataset",
                     "matched_keyword": kw,
-                    "source": "gff3" if code in LOCAL_GFF3_SPECIES else "ensembl",
+                    "source": _source_for(code),
                     "auto_detected": True,
                 }
 
@@ -229,7 +246,7 @@ def detect_organism_from_dataset(
             "kingdom": "tanaman",
             "label": "Bawang Putih (Allium sativum)",
             "detected_by": "heuristik profil kromosom (8) & sifat umbi",
-            "source": "gff3",
+            "source": _source_for("allium_sativum"),
             "auto_detected": True,
         }
 
@@ -237,9 +254,9 @@ def detect_organism_from_dataset(
         "organism": "allium_sativum",
         "organism_label": "Allium sativum",
         "kingdom": "tanaman",
-        "label": "Bawang Putih (Allium sativum - GFF3 Lokal)",
-        "detected_by": "default referensi lokal",
-        "source": "gff3",
+        "label": "Bawang Putih (Allium sativum)",
+        "detected_by": "bawaan (organisme tidak terdeteksi)",
+        "source": _source_for("allium_sativum"),
         "auto_detected": False,
     }
 
@@ -257,13 +274,13 @@ def _format_custom_display_name(species_code: str) -> str:
 def resolve_species_target(organism: str | None) -> tuple[str, str]:
     """Petakan input organisme atau nama ilmiah kustom menjadi (kode_ensembl, mode_anotasi).
 
-    ``allium_sativum`` (atau kosong) diarahkan ke ``"gff3"`` lokal; spesies hewan
-    maupun tumbuhan lain (termasuk ketikan bebas pengguna seperti ``"Felis catus"``)
+    ``allium_sativum`` (atau kosong) diarahkan ke ``"gff3"`` lokal hanya bila ANNOTATION_SOURCE=otomatis;
+    secara bawaan semua organisme diarahkan ke ``"ensembl"``. Spesies hewan maupun tumbuhan lain (termasuk ketikan bebas pengguna seperti ``"Felis catus"``)
     dinormalisasi ke ``snake_case`` dan diarahkan ke ``"ensembl"``.
     """
     raw = (organism or "").strip().lower()
     if not raw:
-        return "allium_sativum", "gff3"
+        return "allium_sativum", _source_for("allium_sativum")
 
     base = re.sub(r"\s*\([^)]*\)", "", raw).strip()
     canonical = SPECIES_ALIASES.get(raw) or SPECIES_ALIASES.get(base)
@@ -273,9 +290,7 @@ def resolve_species_target(organism: str | None) -> tuple[str, str]:
         normalized = re.sub(r"[^a-z0-9_]", "", normalized).strip("_")
         canonical = normalized or "allium_sativum"
 
-    if canonical in LOCAL_GFF3_SPECIES:
-        return canonical, "gff3"
-    return canonical, "ensembl"
+    return canonical, _source_for(canonical)
 
 
 def _ssl_context() -> ssl.SSLContext | None:
@@ -407,38 +422,99 @@ def annotate_snp_with_ensembl(
 
     if not isinstance(data, list):
         return []
+    return _parse_genes(data, pos_int)
 
+
+# ------------------------------------------------------------------ anotasi banyak SNP
+# Cache di memori agar wilayah yang sama tidak diminta ulang ke Ensembl selama server hidup.
+_REGION_CACHE: dict[tuple, list[dict]] = {}
+_SPECIES_CACHE: dict[str, dict] = {}
+_REGION_CACHE_MAX = 5000
+
+
+class _SpeciesNotFound(Exception):
+    """Spesies tidak dikenal di kedua server Ensembl (HTTP 400/404)."""
+
+
+def clear_cache() -> None:
+    """Kosongkan cache Ensembl (dipakai pengujian)."""
+    _REGION_CACHE.clear()
+    _SPECIES_CACHE.clear()
+
+
+def _species_info(species_code: str, timeout: float) -> dict:
+    """Cari server Ensembl yang memuat spesies dan nama versi genomnya (assembly).
+
+    Mengembalikan {"server": url, "versi_genom": str | None}. Melempar _SpeciesNotFound bila
+    kedua server menjawab 400/404, atau OSError/URLError bila koneksi gagal.
+    """
+    if species_code in _SPECIES_CACHE:
+        return _SPECIES_CACHE[species_code]
+    path = f"/info/assembly/{urllib.parse.quote(species_code, safe='')}"
+    not_found = 0
+    last_exc: Exception | None = None
+    for server in (ENSEMBL_REST_URL, ENSEMBL_GENOMES_REST_URL):
+        try:
+            data = _open_json_request(f"{server}{path}", timeout=timeout)
+        except urllib.error.HTTPError as exc:
+            if exc.code in (400, 404):
+                not_found += 1
+                continue
+            last_exc = exc
+            continue
+        except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError, ValueError) as exc:
+            last_exc = exc
+            break  # server utama tidak terjangkau: jangan buang waktu ke server kedua
+        versi = (data.get("assembly_name") or data.get("default_coord_system_version")) if isinstance(data, dict) else None
+        info = {"server": server, "versi_genom": versi}
+        _SPECIES_CACHE[species_code] = info
+        return info
+    if not_found == 2:
+        raise _SpeciesNotFound(species_code)
+    raise last_exc or OSError("Ensembl tidak dapat dihubungi")
+
+
+def _query_region(server: str, species_code: str, chrom: str, pos: int, window_bp: int,
+                  timeout: float) -> list[dict]:
+    """Minta gen di sekitar satu SNP. Melempar galat bila gagal (berbeda dengan 'tidak ada gen')."""
+    start_pos, end_pos = max(1, pos - window_bp), pos + window_bp
+    key = (server, species_code, chrom, start_pos, end_pos)
+    if key in _REGION_CACHE:
+        return _REGION_CACHE[key]
+    path = (f"/overlap/region/{urllib.parse.quote(species_code, safe='')}/"
+            f"{urllib.parse.quote(chrom, safe='')}:{start_pos}-{end_pos}?feature=gene")
+    try:
+        data = _open_json_request(f"{server}{path}", timeout=timeout)
+    except urllib.error.HTTPError as exc:
+        if exc.code == 400:  # kromosom tidak dikenal pada versi genom ini -> tidak ada gen
+            data = []
+        else:
+            raise
+    genes = _parse_genes(data, pos) if isinstance(data, list) else []
+    if len(_REGION_CACHE) < _REGION_CACHE_MAX:
+        _REGION_CACHE[key] = genes
+    return genes
+
+
+def _parse_genes(data: list, pos_int: int) -> list[dict]:
     candidates: list[dict] = []
     for raw in data:
         if not isinstance(raw, dict):
             continue
         g_start = int(raw.get("start") or 0)
         g_end = int(raw.get("end") or g_start)
-        strand_raw = raw.get("strand")
-        untai = "-" if str(strand_raw) in ("-1", "-") else "+"
+        untai = "-" if str(raw.get("strand")) in ("-1", "-") else "+"
         konsekuensi, jarak_bp, letak = _ensembl_relation(pos_int, g_start, g_end, untai)
-
         external_name = (raw.get("external_name") or "").strip()
         ensembl_id = (raw.get("id") or "").strip()
         gene_symbol = external_name or ensembl_id or "Gen Ensembl"
         biotype = (raw.get("biotype") or "protein_coding").replace("_", " ")
         description = (raw.get("description") or "").strip() or f"Gen Ensembl ({ensembl_id or gene_symbol}; {biotype})"
-
-        candidates.append(
-            {
-                "gene_id": gene_symbol,
-                "ensembl_id": ensembl_id or gene_symbol,
-                "nama": gene_symbol,
-                "deskripsi": description,
-                "awal": g_start,
-                "akhir": g_end,
-                "untai": untai,
-                "jarak_bp": jarak_bp,
-                "konsekuensi": konsekuensi,
-                "letak": letak,
-            }
-        )
-
+        candidates.append({
+            "gene_id": gene_symbol, "ensembl_id": ensembl_id or gene_symbol, "nama": gene_symbol,
+            "deskripsi": description, "awal": g_start, "akhir": g_end, "untai": untai,
+            "jarak_bp": jarak_bp, "konsekuensi": konsekuensi, "letak": letak,
+        })
     candidates.sort(key=lambda item: (item["jarak_bp"], item["gene_id"]))
     return candidates
 
@@ -449,66 +525,122 @@ def annotate_with_ensembl(
     window_bp: int = 50_000,
     max_per_snp: int = 5,
     label: str = "SNP signifikan",
+    timeout_total: float = 25.0,
+    timeout_request: float = 6.0,
+    max_workers: int = 8,
 ) -> dict:
-    """Anotasi daftar SNP menggunakan Ensembl REST API dengan format kompatibel M-07."""
-    kandidat: list[dict] = []
-    total_genes = 0
+    """Anotasi daftar SNP melalui Ensembl REST API.
 
-    def _query_one(snp: dict) -> list[dict]:
-        chrom = snp.get("chromosome")
-        pos = snp.get("position")
-        if chrom is None or pos is None:
-            return []
-        try:
-            return annotate_snp_with_ensembl(species, chrom, int(pos), window_bp=window_bp, timeout=3.0)[:max_per_snp]
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("Gagal kueri Ensembl paralel untuk %s: %s", snp.get("snp_id"), exc)
-            return []
-
-    if len(snps) > 1:
-        with ThreadPoolExecutor(max_workers=min(5, len(snps))) as executor:
-            gene_lists = list(executor.map(_query_one, snps))
-    else:
-        gene_lists = [_query_one(snp) for snp in snps]
-
-    for snp, genes in zip(snps, gene_lists):
-        chrom = snp.get("chromosome")
-        pos = snp.get("position")
-        total_genes += len(genes)
-        kandidat.append(
-            {
-                "snp_id": snp.get("snp_id"),
-                "chromosome": chrom,
-                "position": pos,
-                "p_value": snp.get("p_value"),
-                "gen": genes,
-            }
-        )
+    - Satu permintaan /info/assembly menentukan server (utama atau Ensembl Genomes) dan versi genom.
+    - Permintaan wilayah dikirim paralel dengan batas waktu total ``timeout_total`` detik.
+    - Bila tiga permintaan pertama gagal semua, sisa permintaan dihentikan (Ensembl dianggap tidak
+      terjangkau) agar pengguna tidak menunggu lama.
+    - SNP yang gagal diminta ditandai ``status_anotasi = "gagal"``, berbeda dari SNP yang memang
+      tidak memiliki gen di sekitarnya (``"berhasil"`` dengan daftar gen kosong).
+    """
+    import threading
+    import time
+    from concurrent.futures import wait
 
     display_name = _format_custom_display_name(species)
-    if not snps:
-        pesan = f"Tidak ada {label} untuk dianotasi melalui Ensembl REST API ({species})."
-    elif total_genes == 0:
-        pesan = (
-            f"Tidak ditemukan gen kandidat Ensembl dalam ±{window_bp // 1000} kb "
-            f"untuk {len(snps)} {label} pada {display_name}."
-        )
-    else:
-        pesan = (
-            f"Ditemukan {total_genes} kandidat gen dari Ensembl REST API ({species}) "
-            f"dalam jendela ±{window_bp // 1000} kb untuk {len(snps)} {label}."
-        )
-
-    return {
-        "status": "tersedia",
+    base = {
         "sumber": f"Ensembl REST API ({species})",
         "sumber_tipe": "ensembl",
         "organism": species,
         "organism_target": display_name,
         "jendela_bp": int(window_bp),
-        "kandidat": kandidat,
-        "pesan": pesan,
+        "versi_genom": None,
     }
+
+    def _semua_gagal(pesan: str) -> dict:
+        return {**base, "status": "tidak_tersedia", "pesan": pesan, "jumlah_gagal": len(snps),
+                "kandidat": [{"snp_id": s.get("snp_id"), "chromosome": s.get("chromosome"),
+                              "position": s.get("position"), "p_value": s.get("p_value"),
+                              "gen": [], "status_anotasi": "gagal"} for s in snps]}
+
+    if not snps:
+        return {**base, "status": "tersedia", "kandidat": [], "jumlah_gagal": 0,
+                "pesan": f"Tidak ada {label} untuk dianotasi melalui Ensembl REST API ({species})."}
+
+    try:
+        info = _species_info(species, timeout_request)
+    except _SpeciesNotFound:
+        if species == "allium_sativum":
+            return _semua_gagal("Genom bawang putih (Allium sativum) belum tersedia di Ensembl, sehingga gen "
+                                "kandidat belum dapat dicari. Hasil uji asosiasi tetap dapat dipakai; anotasi "
+                                "akan tersedia setelah genom bawang putih dimuat di Ensembl Plants atau berkas "
+                                "anotasi genom rujukan dipasang.")
+        return _semua_gagal(f"Spesies '{display_name}' tidak tersedia di Ensembl, sehingga gen kandidat "
+                            "tidak dapat dicari. Pilih organisme lain pada pengaturan parameter bila "
+                            "nama organisme belum tepat.")
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Ensembl tidak terjangkau untuk %s: %s", species, exc)
+        return _semua_gagal("Ensembl REST API tidak dapat dihubungi (periksa koneksi internet), sehingga "
+                            "gen kandidat belum dapat dicari. Coba muat ulang anotasi beberapa saat lagi.")
+    base["versi_genom"] = info["versi_genom"]
+
+    hasil: list[list[dict] | None] = [None] * len(snps)
+    state = {"gagal": 0, "berhasil": 0, "berhenti": False}
+    lock = threading.Lock()
+
+    def _one(i: int, snp: dict) -> None:
+        if state["berhenti"]:
+            return
+        chrom, pos = snp.get("chromosome"), snp.get("position")
+        if chrom is None or pos is None:
+            hasil[i] = []
+            return
+        try:
+            genes = _query_region(info["server"], species, _clean_ensembl_chrom(chrom), int(pos),
+                                  int(window_bp), timeout_request)[:max_per_snp]
+            hasil[i] = genes
+            with lock:
+                state["berhasil"] += 1
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Ensembl gagal untuk %s: %s", snp.get("snp_id"), exc)
+            with lock:
+                state["gagal"] += 1
+                if state["gagal"] >= 3 and state["berhasil"] == 0:
+                    state["berhenti"] = True
+
+    mulai = time.monotonic()
+    pool = ThreadPoolExecutor(max_workers=max(1, min(max_workers, len(snps))))
+    futures = [pool.submit(_one, i, s) for i, s in enumerate(snps)]
+    wait(futures, timeout=timeout_total)
+    habis_waktu = any(not f.done() for f in futures)
+    state["berhenti"] = True
+    pool.shutdown(wait=False, cancel_futures=True)
+    durasi = time.monotonic() - mulai
+
+    kandidat, total_genes, jumlah_gagal = [], 0, 0
+    for snp, genes in zip(snps, hasil):
+        ok = genes is not None
+        jumlah_gagal += 0 if ok else 1
+        total_genes += len(genes or [])
+        kandidat.append({"snp_id": snp.get("snp_id"), "chromosome": snp.get("chromosome"),
+                         "position": snp.get("position"), "p_value": snp.get("p_value"),
+                         "gen": genes or [], "status_anotasi": "berhasil" if ok else "gagal"})
+
+    if jumlah_gagal == len(snps):
+        hasil_akhir = _semua_gagal("Permintaan ke Ensembl REST API gagal atau melebihi batas waktu, sehingga "
+                                   "gen kandidat belum dapat dicari. Coba muat ulang anotasi beberapa saat lagi.")
+        hasil_akhir["versi_genom"] = info["versi_genom"]
+        return hasil_akhir
+
+    if total_genes == 0:
+        pesan = (f"Tidak ditemukan gen kandidat Ensembl dalam ±{window_bp // 1000} kb untuk "
+                 f"{len(snps) - jumlah_gagal} {label} pada {display_name}.")
+    else:
+        pesan = (f"Ditemukan {total_genes} kandidat gen dari Ensembl REST API ({species}) dalam jendela "
+                 f"±{window_bp // 1000} kb untuk {len(snps) - jumlah_gagal} {label}.")
+    if jumlah_gagal:
+        sebab = f"melebihi batas waktu {timeout_total:.0f} detik" if habis_waktu else "gagal diminta"
+        pesan += f" {jumlah_gagal} SNP {sebab}; muat ulang anotasi untuk mencoba lagi."
+    if info["versi_genom"]:
+        pesan += (f" Gen dicari pada genom {info['versi_genom']}; pastikan posisi SNP memakai versi genom "
+                  "yang sama.")
+    logger.info("Anotasi Ensembl %s: %d SNP, %d gagal, %.1f detik", species, len(snps), jumlah_gagal, durasi)
+    return {**base, "status": "tersedia", "kandidat": kandidat, "jumlah_gagal": jumlah_gagal, "pesan": pesan}
 
 
 def annotate_snps_auto(
@@ -517,6 +649,7 @@ def annotate_snps_auto(
     gff3_path: str | Path | None,
     window_bp: int = 50_000,
     label: str = "SNP signifikan",
+    timeout_total: float = 25.0,
 ) -> dict:
     """Pilih mesin anotasi secara dinamis: Ensembl REST API atau GFF3 Referensi Lokal."""
     canonical_species, mode = resolve_species_target(organism)
@@ -526,6 +659,7 @@ def annotate_snps_auto(
             species=canonical_species,
             window_bp=window_bp,
             label=label,
+            timeout_total=timeout_total,
         )
 
     try:
@@ -533,8 +667,12 @@ def annotate_snps_auto(
     except AnnotationUnavailable as exc:
         raise AnnotationUnavailable(str(exc)) from exc
 
+    for k in hasil.get("kandidat") or []:
+        k.setdefault("status_anotasi", "berhasil")
     return {
         **hasil,
+        "versi_genom": None,
+        "jumlah_gagal": 0,
         "sumber_tipe": "gff3",
         "organism": canonical_species,
         "organism_target": _format_custom_display_name(canonical_species),

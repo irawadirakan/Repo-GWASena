@@ -33,8 +33,25 @@ Tiga fitur backend baru. Endpoint lama tidak berubah, jadi frontend yang sudah t
 
 ## 3. Anotasi gen kandidat
 
-- Sumber: berkas anotasi genom GFF3 lokal (`ANNOTATION_GFF3` di `.env`). Ensembl REST API pada rancangan
-  awal belum dipakai karena genom bawang putih belum ditemukan di Ensembl Plants (perlu dipastikan kembali).
+- Sumber anotasi diatur dengan `ANNOTATION_SOURCE` di `.env`:
+  - `ensembl` (bawaan): semua organisme, termasuk bawang putih, dianotasi melalui Ensembl REST API. Berkas
+    GFF3 lokal sementara tidak dipakai karena berkas yang tersedia hanya anotasi contoh. Selama genom bawang
+    putih belum ada di Ensembl, sesi bawang putih mendapat `status: "tidak_tersedia"` dengan pesan yang jelas,
+    tanpa mengganggu hasil analisis lain.
+  - `otomatis`: bawang putih memakai berkas GFF3 lokal (`ANNOTATION_GFF3`), organisme lain memakai Ensembl.
+    Dipakai kembali bila berkas GFF3 genom rujukan bawang putih sudah tersedia.
+- Ensembl: satu permintaan `/info/assembly` menentukan server (rest.ensembl.org atau rest.ensemblgenomes.org)
+  dan versi genom (`versi_genom`, misalnya GRCm39). Permintaan per SNP dikirim paralel dengan batas waktu total
+  `ANNOTATION_TIMEOUT_TOTAL` (bawaan 25 detik); bila tiga permintaan pertama gagal semua, sisa permintaan
+  dihentikan. SNP yang gagal diberi `status_anotasi: "gagal"` (berbeda dari SNP yang memang tidak memiliki gen
+  di sekitarnya), dan bila semua gagal respons berstatus `tidak_tersedia`.
+- Posisi SNP harus memakai versi genom yang sama dengan `versi_genom`. Data DROPS memakai B73 RefGen v2 dan
+  data mencit HS1940 memakai genom lama, sedangkan Ensembl memakai versi terbaru, sehingga gen yang ditemukan
+  untuk data uji tersebut belum tentu gen kandidat yang sebenarnya.
+- Hasil anotasi dihitung otomatis setelah analisis selesai (`ANNOTATION_AUTO=true`) dan disimpan di tabel
+  `visualization_results` (`anotasi` dan `anotasi_teratas`), sehingga layar Anotasi Gen, kolom Kandidat_Gen
+  pada CSV, dan laporan web langsung terisi. Parameter `segarkan=true` mengabaikan cache. Hasil yang sebagian
+  gagal tidak disimpan agar dicoba lagi pada pemanggilan berikutnya.
 - Berkas bawaan `data/contoh/anotasi_bawang_putih_contoh.gff3` adalah anotasi **CONTOH** untuk data dummy
   (bukan data biologis), dibuat dengan `python tools/buat_anotasi_contoh.py`. Salah satu gen sengaja
   tumpang tindih dengan `snp_chr3_0042`.
@@ -46,6 +63,15 @@ Tiga fitur backend baru. Endpoint lama tidak berubah, jadi frontend yang sudah t
   penanda `signifikan` (true/false).
 - Bila berkas tidak ada atau rusak: respons 200 dengan `status: "tidak_tersedia"` dan `pesan`, tanpa
   mengganggu hasil analisis lain (AC-07.2).
+
+## 4. Dataset contoh (benchmark)
+
+- `POST /api/analyses/benchmark` dengan body `{"format": "VCF"}` atau `{"format": "PLINK", "analysis_id": 5}`
+  memuat data contoh bawang putih (40 sampel, 500 SNP) ke sesi milik pengguna. Bila `analysis_id` kosong,
+  bukan milik pengguna, atau sedang berjalan, sesi baru dibuat (`sesi_baru: true`).
+- `POST /api/analyses/{id}/load-benchmark` sama seperti di atas untuk sesi tertentu.
+- `GET /api/analyses/benchmark/download?format=vcf|plink|all` mengunduh berkas contoh dalam ZIP (tanpa login).
+- Berkas diambil dari `data/contoh/`, sama dengan yang dipakai pada pengujian.
 
 ## Perubahan dari rancangan
 

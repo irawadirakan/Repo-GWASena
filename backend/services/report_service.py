@@ -11,10 +11,9 @@ from html import escape
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from backend.core.config import settings
 from backend.models import Analysis, AnalysisParameter, VisualizationResult
-from backend.services import plot_service
-from pipeline.annotation import annotate_from_gff3, annotate_snps_auto, scientific_name
+from backend.services import annotation_service, plot_service
+from pipeline.annotation import scientific_name
 
 LABEL_PARAM = [
     ("trait", "Sifat yang dianalisis"), ("model", "Model uji asosiasi"),
@@ -89,6 +88,9 @@ def build_report(db: Session, a: Analysis, organism_override: str | None = None)
         "<h2>2. Quality Control</h2>"
         f"<p>Data awal {qc.get('sampel_awal', '–')} sampel dan {qc.get('snp_awal', '–')} SNP; "
         f"lolos QC {qc.get('sampel_lolos', '–')} sampel dan {qc.get('snp_lolos', '–')} SNP.</p>"
+        + _table(["Data", "Lolos QC / Data awal"],
+                 [["Sampel", f"{qc.get('sampel_lolos', '–')} / {qc.get('sampel_awal', '–')}"],
+                  ["SNP", f"{qc.get('snp_lolos', '–')} / {qc.get('snp_awal', '–')}"]])
         + _table(["Kriteria", "Ambang", "Sampel", "SNP", "Keterangan"], rows_qc, {2, 3}))
 
     var = pca.get("variansi_dijelaskan") or []
@@ -161,7 +163,7 @@ def build_report(db: Session, a: Analysis, organism_override: str | None = None)
     kolom = ["SNP", "Kromosom", "Posisi", "REF/ALT", "β", "SE", "p", "p Bonferroni", "q (FDR)"]
     if sig:
         bagian.append("<h2>7. SNP Signifikan</h2>" + _table(kolom, snp_rows(sig), {2, 4, 5, 6, 7, 8}))
-        anot = annotate_snps_auto(sig, org_raw, settings.ANNOTATION_GFF3, settings.ANNOTATION_WINDOW_BP)
+        anot = annotation_service.annotate(db, a, org_raw, sertakan_teratas=False)
         if anot["status"] == "tersedia":
             rows_gen = [[k["snp_id"], g["gene_id"], g.get("nama"), g["letak"], g["jarak_bp"]]
                         for k in anot["kandidat"] for g in k["gen"]]

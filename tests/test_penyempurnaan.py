@@ -191,7 +191,8 @@ def test_panel_admin_hanya_untuk_administrator():
 
 
 # ------------------------------------------------------------------ laporan web
-def test_laporan_web_lengkap():
+def test_laporan_web_lengkap(monkeypatch):
+    monkeypatch.setenv("ANNOTATION_SOURCE", "otomatis")  # uji jalur GFF3 lokal
     with TestClient(app) as c:
         h = _login(c, "uji_laporan")
         aid = _selesai(c, h, "Uji laporan", "MLM")

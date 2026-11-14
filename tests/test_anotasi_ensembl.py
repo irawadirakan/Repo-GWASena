@@ -53,11 +53,19 @@ def test_resolve_species_target():
     assert resolve_species_target("Capra hircus") == ("capra_hircus", "ensembl")
     assert resolve_species_target("Solanum tuberosum") == ("solanum_tuberosum", "ensembl")
 
-    # Local GFF3 fallback solely for Allium sativum or empty
+    # Bawaan (ANNOTATION_SOURCE=ensembl): bawang putih juga lewat Ensembl, GFF3 lokal tidak dipakai
+    assert resolve_species_target("allium_sativum") == ("allium_sativum", "ensembl")
+    assert resolve_species_target(None) == ("allium_sativum", "ensembl")
+
+
+def test_resolve_species_target_gff3_lokal(monkeypatch):
+    # ANNOTATION_SOURCE=otomatis: GFF3 lokal hanya untuk Allium sativum atau kosong
+    monkeypatch.setenv("ANNOTATION_SOURCE", "otomatis")
     assert resolve_species_target("allium_sativum") == ("allium_sativum", "gff3")
     assert resolve_species_target("Allium sativum") == ("allium_sativum", "gff3")
     assert resolve_species_target(None) == ("allium_sativum", "gff3")
     assert resolve_species_target("") == ("allium_sativum", "gff3")
+    assert resolve_species_target("mus_musculus") == ("mus_musculus", "ensembl")
 
 
 def test_detect_organism_from_dataset():
@@ -206,6 +214,7 @@ def test_annotate_snps_auto_dual_kingdom(monkeypatch):
     assert res_ensembl["kandidat"][0]["gen"][0]["gene_id"] == "Sox21"
 
     snp_garlic = [{"snp_id": "snp_chr1_0001", "chromosome": 1, "position": 402_000, "p_value": 1e-6}]
+    monkeypatch.setenv("ANNOTATION_SOURCE", "otomatis")
     res_gff3 = annotate_snps_auto(snp_garlic, "Allium sativum", GFF3, window_bp=50_000)
     assert res_gff3["status"] == "tersedia"
     assert res_gff3["sumber_tipe"] == "gff3"

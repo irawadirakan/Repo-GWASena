@@ -28,7 +28,9 @@ def check_features() -> dict:
     gff3 = settings.ANNOTATION_GFF3
     return {
         "ekspor_png": png,
-        "anotasi_gff3": {"ok": gff3.is_file(), "berkas": gff3.name},
+        "sumber_anotasi": settings.ANNOTATION_SOURCE,
+        "anotasi_gff3": {"ok": gff3.is_file(), "berkas": gff3.name,
+                         "dipakai": settings.ANNOTATION_SOURCE in ("otomatis", "gff3")},
         "login_google": {"ok": bool(settings.GOOGLE_CLIENT_ID),
                          **({} if settings.GOOGLE_CLIENT_ID else {"error": "GOOGLE_CLIENT_ID belum diisi."})},
         "mode_pipeline": settings.PIPELINE_MODE,
