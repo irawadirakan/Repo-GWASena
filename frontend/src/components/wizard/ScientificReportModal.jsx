@@ -114,7 +114,7 @@ function ReportFooter({ analysisId, currentPage = 1, totalPages = 2 }) {
       <div className="flex items-center justify-between gap-4">
         {/* Kiri: Mesin Komputasi, Hash SHA-256 & Status Publikasi */}
         <div className="flex items-center gap-2">
-          <span className="font-semibold text-[#17243B]">GWASena Core v2.4</span>
+          <span className="font-semibold text-[#17243B]">GWASena</span>
           <span>&bull;</span>
           <span className="font-mono text-[8.5px] text-[#64748B]">
             SHA256: GWAS-{analysisId || '1'}-{hash}
@@ -750,7 +750,7 @@ export default function ScientificReportModal({
                     Mesin Komputasi
                   </span>
                   <span className="block font-mono text-[10px] text-[#263B5B] break-words leading-tight mt-0.5">
-                    GWASena Core v2.4 (FastAPI)
+                    FastAPI (Python Pipeline)
                   </span>
                 </div>
               </div>
@@ -1214,7 +1214,7 @@ export default function ScientificReportModal({
                 <span className="font-mono text-[8.5px] text-[#168BCB]">RINGKASAN KOMPUTASI GWASENA</span>
               </div>
               <p>
-                Laporan interpretasi ilmiah ini dihasilkan secara otomatis oleh sistem komputasi terpadu GWASena Core v2.4 berdasarkan data genotipe dan fenotipe terautentikasi. Seluruh hasil asosiasi statistik, koreksi berganda, dan visualisasi diagnostik dapat direproduksi secara independen untuk keperluan publikasi ilmiah serta program riset genetik dan pemuliaan terarah.
+                Laporan interpretasi ilmiah ini dihasilkan secara otomatis oleh sistem komputasi terpadu GWASena berdasarkan data genotipe dan fenotipe terautentikasi. Seluruh hasil asosiasi statistik, koreksi berganda, dan visualisasi diagnostik dapat direproduksi secara independen untuk keperluan publikasi ilmiah serta program riset genetik dan pemuliaan terarah.
               </p>
             </div>
           </div>

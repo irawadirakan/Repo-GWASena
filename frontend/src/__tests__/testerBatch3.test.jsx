@@ -5,10 +5,13 @@ import Plotly from 'plotly.js-dist-min';
 import { useAnalysisStore } from '../store/useAnalysisStore.js';
 import { useAuthStore } from '../store/useAuthStore.js';
 import DashboardPage from '../pages/DashboardPage.jsx';
+import Step2Config from '../components/wizard/Step2Config.jsx';
 import Step3Computation from '../components/wizard/Step3Computation.jsx';
+import { EDU_HINTS, TIPS_EDUKATIF } from '../constants/eduHints.js';
 import Step4Results from '../components/wizard/Step4Results.jsx';
 import Step5Annotation from '../components/wizard/Step5Annotation.jsx';
 import Step6Export from '../components/wizard/Step6Export.jsx';
+import ScientificReportModal from '../components/wizard/ScientificReportModal.jsx';
 import HistoryPage from '../pages/HistoryPage.jsx';
 import { mockResponse, stubFetchRoutes } from './testHelpers.js';
 
@@ -423,5 +426,65 @@ describe('Evaluasi Tester Batch 3 (Progress Stages, Pill Tabs, & Anti-Infinite-L
     expect(screen.getByTestId('stage-percent-2')).toHaveTextContent('100%');
     expect(screen.getByTestId('stage-percent-3')).toHaveTextContent('100%');
     expect(screen.getByTestId('stage-percent-4')).toHaveTextContent('100%');
+  });
+
+  it('Step2Config & eduHints: generalisasi teks HWE & Kinship ramah Dual-Kingdom (Hewan & Tumbuhan)', () => {
+    useAnalysisStore.setState({
+      currentAnalysis: { analysis_id: 21, status: 'tervalidasi', organism: 'mus_musculus', trait_name: 'CD8' },
+      uploadSummary: {
+        status: 'tervalidasi',
+        kecocokan_sample_id: { status: 'cocok' },
+        fenotipe: { daftar_sifat: ['CD8'] },
+      },
+    });
+
+    render(<Step2Config analysisId={21} onStarted={vi.fn()} />);
+
+    expect(screen.queryByText(/Nonaktif secara bawaan untuk tanaman klonal/i)).not.toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'Nonaktif secara default. Aktifkan untuk populasi kawin acak (seperti hewan/ternak), dan nonaktifkan untuk varietas klonal/penyerbuk sendiri (tanaman).'
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Aktifkan HWE terutama pada analisis populasi hewan atau organisme dengan perkawinan acak\./i)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Untuk tanaman galur inbred, klonal, atau silang dalam, disarankan tetap menonaktifkan filter ini guna mencegah hilangnya varian sejati\./i)
+    ).toBeInTheDocument();
+
+    expect(EDU_HINTS.hwe.hint).toMatch(/populasi hewan/i);
+    expect(EDU_HINTS.king_cutoff.hint).toMatch(/hewan ternak maupun koleksi plasma nutfah tanaman/i);
+    const tipHwe = TIPS_EDUKATIF.find((t) => t.id === 4);
+    expect(tipHwe.teks).toMatch(/hewan\/ternak/i);
+    expect(tipHwe.teks).toMatch(/galur inbred/i);
+  });
+
+  it('ScientificReportModal menghapus label Core v2.4 menjadi GWASena dan menampilkan FastAPI (Python Pipeline) sebagai Mesin Komputasi', async () => {
+    stubFetchRoutes(async () => mockResponse(404, {}));
+
+    render(
+      <ScientificReportModal
+        isOpen={true}
+        onClose={vi.fn()}
+        analysisId={33}
+        analysis={{ analysis_id: 33, analysis_name: 'Uji Ekspor Bersih', organism: 'mus_musculus' }}
+        results={{
+          association_results: [],
+          significant_snps: [],
+          top_snps: [],
+          qq_data: [],
+          summary: { trait: 'CD8', model: 'MLM', chromosome_count: 19, neg_log10_threshold: 5.0, asosiasi: { jumlah_signifikan: 0, lambda_gc: 1.0 } },
+        }}
+        annotationData={{ status: 'tidak_tersedia', pesan: '', kandidat: [] }}
+        configParams={{ organism: 'mus_musculus', trait: 'CD8', model: 'MLM', n_pc: 3 }}
+      />
+    );
+
+    await screen.findByText('Mesin Komputasi');
+    expect(screen.getByText('FastAPI (Python Pipeline)')).toBeInTheDocument();
+    expect(screen.getAllByText('GWASena').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText(/sistem komputasi terpadu GWASena berdasarkan data genotipe/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Core v2\.4/i)).not.toBeInTheDocument();
   });
 });

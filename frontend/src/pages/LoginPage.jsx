@@ -194,7 +194,7 @@ export default function LoginPage() {
             className="w-full figma-btn-secondary py-2.5 text-xs sm:text-sm font-bold cursor-pointer"
           >
             <Sparkles className="h-4 w-4 text-[#0284C7] dark:text-[#06B6D4]" />
-            <span>Masuk Akun Peneliti Terdaftar</span>
+            <span>Mulai Sekarang!</span>
           </button>
         </form>
 

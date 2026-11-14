@@ -611,7 +611,7 @@ export default function Step2Config({
                     Ambang Batas HWE p-value (hwe)
                   </span>
                   <span className="text-xs sm:text-[13px] text-slate-700 dark:text-slate-300 font-medium font-sans">
-                    {isHweActive ? 'Rekomendasi nilai awal: 1e-6' : 'Nonaktif secara bawaan untuk tanaman klonal'}
+                    {isHweActive ? 'Rekomendasi nilai awal: 1e-6' : 'Nonaktif secara default. Aktifkan untuk populasi kawin acak (seperti hewan/ternak), dan nonaktifkan untuk varietas klonal/penyerbuk sendiri (tanaman).'}
                   </span>
                 </div>
                 {isHweActive ? (
@@ -633,7 +633,7 @@ export default function Step2Config({
               <div className="rounded-xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 p-3.5 text-xs sm:text-sm text-slate-800 dark:text-slate-200 leading-relaxed flex items-start gap-2.5 font-medium">
                 <Info className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
                 <span className="leading-relaxed">
-                  <strong>Catatan Penggunaan Filter HWE & Kinship:</strong> Filter ini bersifat opsional dan dinonaktifkan secara default. Aktifkan hanya jika sesuai dengan struktur dan sistem reproduksi populasi yang dianalisis.
+                  <strong>Catatan Penggunaan Filter HWE & Kinship:</strong> Filter ini bersifat opsional. Aktifkan HWE terutama pada analisis populasi hewan atau organisme dengan perkawinan acak. Untuk tanaman galur inbred, klonal, atau silang dalam, disarankan tetap menonaktifkan filter ini guna mencegah hilangnya varian sejati.
                 </span>
               </div>
             </div>

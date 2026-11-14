@@ -22,12 +22,12 @@ export const EDU_HINTS = {
   hwe: {
     label: 'Hardy-Weinberg Equilibrium (hwe)',
     defaultValue: '1e-6',
-    hint: 'Menguji penyimpangan frekuensi genotipe dari keseimbangan populasi. Pada populasi klonal, vegetatif, atau hasil seleksi buatan, penyimpangan HWE alami lumrah terjadi sehingga filter ini disarankan nonaktif atau menggunakan ambang longgar (1e-6).',
+    hint: 'Menguji penyimpangan frekuensi genotipe dari kesetimbangan Hardy-Weinberg. Aktifkan filter ini terutama pada analisis populasi hewan atau organisme kawin acak, dan nonaktifkan untuk tanaman galur inbred, penyerbuk sendiri, atau klonal guna mencegah hilangnya varian sejati.',
   },
   king_cutoff: {
     label: 'Relatedness / Kinship Cutoff (king_cutoff)',
     defaultValue: 0.177,
-    hint: 'Batas koefisien kekerabatan antar-sampel (0.177 setara hubungan derajat pertama / klon dekat). Membantu mengidentifikasi duplikasi klon pada koleksi plasma nutfah.',
+    hint: 'Batas koefisien kekerabatan antar-sampel (0.177 setara hubungan kekerabatan derajat pertama / individu berkerabat sangat dekat). Membantu mengidentifikasi duplikasi sampel maupun kekerabatan dekat pada populasi hewan ternak maupun koleksi plasma nutfah tanaman.',
   },
   pca: {
     label: 'PCA Otomatis (n_pc = 3)',
@@ -40,7 +40,7 @@ export const EDU_HINTS = {
   },
   mlm: {
     label: 'MLM (Mixed Linear Model)',
-    hint: 'Menggabungkan kovariat PCA (efek tetap) dan matriks kekerabatan genetik / Kinship secara otomatis (efek acak). Sangat direkomendasikan untuk populasi dengan struktur kekerabatan kompleks atau klonal guna menekan positif palsu.',
+    hint: 'Menggabungkan kovariat PCA (efek tetap) dan matriks kekerabatan genetik / Kinship secara otomatis (efek acak). Sangat direkomendasikan untuk populasi hewan maupun tanaman dengan struktur kekerabatan atau silsilah kompleks guna menekan positif palsu.',
   },
   bonferroni: {
     label: 'Koreksi Bonferroni',
@@ -76,12 +76,12 @@ export const TIPS_EDUKATIF = [
   {
     id: 4,
     judul: '4. Kesetimbangan Hardy-Weinberg (HWE)',
-    teks: 'Deviasi ekstrem dari HWE pada populasi alami sering mencerminkan galat genotyping atau duplikasi segmental genom. Pada populasi persilangan buatan atau tanaman klonal, filter ini dinonaktifkan.',
+    teks: 'Deviasi ekstrem dari HWE pada populasi kawin acak (hewan/ternak) sering mencerminkan galat genotyping. Sebaliknya, pada varietas tanaman galur inbred, penyerbuk sendiri, atau klonal, filter ini disarankan tetap nonaktif guna mencegah hilangnya varian sejati.',
   },
   {
     id: 5,
     judul: '5. Koefisien Kekerabatan KING (kinship)',
-    teks: 'Algoritma KING mengestimasi hubungan kekerabatan antar-aksesi secara tangguh tanpa mengasumsikan frekuensi alel homogen, mencegah duplikasi sampel atau klon identik.',
+    teks: 'Algoritma KING mengestimasi hubungan kekerabatan antar-sampel secara tangguh tanpa mengasumsikan frekuensi alel homogen, mencegah bias akibat duplikasi sampel atau kekerabatan dekat pada populasi hewan maupun tanaman.',
   },
   {
     id: 6,
