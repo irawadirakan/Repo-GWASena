@@ -10,6 +10,7 @@ Urutan pemakaian:
   7. GET  /api/analyses/{id}/results/csv        unduh hasil CSV (?hanya_signifikan=true untuk SNP signifikan)
 """
 import csv
+import gzip
 import io
 import time
 from pathlib import Path
@@ -40,7 +41,7 @@ from backend.schemas import AnalysisCreate, AnalysisUpdate, ParameterIn
 from backend.services import dataset_service as ds
 from backend.services import plot_service, report_service
 from backend.services.analysis_runner import dispatch
-from pipeline.annotation import annotate_from_gff3
+from pipeline.annotation import annotate_from_gff3, annotate_snps_auto, detect_organism_from_dataset, scientific_name
 from pipeline.errors import ValidationError
 from pipeline.runner import MIN_SAMPLES, STAGES
 from pipeline.visualization.downsample import smart_downsample
@@ -84,14 +85,62 @@ def _detail(message: str, details: list[str] | None = None) -> dict:
     return {"pesan": message, "rincian": details or []}
 
 
-def _summary(a: Analysis) -> dict:
+def _resolve_session_organism(db: Session | None, a: Analysis) -> tuple[str, str]:
+    """Kembalikan (kode_organisme, nama_ilmiah) akurat; inferensi sesi lama bila masih default."""
+    raw = (a.organism or "").strip()
+    if raw and raw.lower() not in ("allium sativum", "allium sativum l.", "allium_sativum"):
+        return raw, scientific_name(raw)
+
+    if db is not None:
+        ds_names = db.scalars(select(Dataset.file_name).where(Dataset.analysis_id == a.analysis_id)).all()
+        chrom_rows = db.scalars(
+            select(SNP.chromosome).where(SNP.analysis_id == a.analysis_id).distinct()
+        ).all()
+        sample_snps = db.scalars(
+            select(SNP.snp_code).where(SNP.analysis_id == a.analysis_id).limit(25)
+        ).all()
+        traits = ds.available_traits(db, a.analysis_id)
+        inferred = detect_organism_from_dataset(
+            filenames=[a.analysis_name, *ds_names],
+            traits=[t for t in [a.trait_name, *traits] if t],
+            num_chromosomes=len(chrom_rows) or None,
+            snp_ids=sample_snps,
+        )
+        if inferred.get("auto_detected") and inferred.get("organism") != "allium_sativum":
+            code = inferred["organism"]
+            return code, inferred.get("organism_label") or scientific_name(code)
+
+    code = raw or "Allium sativum"
+    return code, scientific_name(code)
+
+
+def _resolve_session_trait(db: Session | None, a: Analysis) -> str | None:
+    """Kembalikan nama sifat aktif dari Analysis, AnalysisParameter, atau kolom fenotipe pertama."""
+    if a.trait_name and str(a.trait_name).strip():
+        return str(a.trait_name).strip()
+    if db is not None:
+        param = db.scalar(select(AnalysisParameter).where(AnalysisParameter.analysis_id == a.analysis_id))
+        cfg_trait = (param.parameter_config or {}).get("trait") if param and param.parameter_config else None
+        if cfg_trait and str(cfg_trait).strip():
+            return str(cfg_trait).strip()
+        traits = ds.available_traits(db, a.analysis_id)
+        if traits:
+            return traits[0]
+    return None
+
+
+def _summary(a: Analysis, db: Session | None = None) -> dict:
+    org_code, org_label = _resolve_session_organism(db, a)
+    trait_val = _resolve_session_trait(db, a)
     return {
         "analysis_id": a.analysis_id,
         "analysis_name": a.analysis_name,
         "status": a.status,
-        "organism": a.organism,
+        "organism": org_code,
+        "organism_label": org_label,
         "analysis_time": a.analysis_time,
-        "trait_name": a.trait_name,
+        "trait": trait_val,
+        "trait_name": trait_val,
         "model_name": a.model_name,
         "lambda_gc": a.lambda_gc,
         "significant_count": a.significant_count,
@@ -104,7 +153,71 @@ def list_analyses(user: User = Depends(get_current_user), db: Session = Depends(
     stmt = select(Analysis).order_by(Analysis.analysis_id.desc())
     if user.role != "administrator":
         stmt = stmt.where(Analysis.user_id == user.user_id)
-    return [_summary(a) for a in db.scalars(stmt).all()]
+    rows = db.scalars(stmt).all()
+    if not rows:
+        return []
+
+    aids = [a.analysis_id for a in rows]
+    ds_by_aid: dict[int, list[str]] = {}
+    for aid, fname in db.execute(select(Dataset.analysis_id, Dataset.file_name).where(Dataset.analysis_id.in_(aids))).all():
+        ds_by_aid.setdefault(aid, []).append(fname)
+
+    param_trait_by_aid: dict[int, str] = {}
+    for aid, cfg in db.execute(
+        select(AnalysisParameter.analysis_id, AnalysisParameter.parameter_config).where(AnalysisParameter.analysis_id.in_(aids))
+    ).all():
+        t = (cfg or {}).get("trait") if isinstance(cfg, dict) else None
+        if t:
+            param_trait_by_aid[aid] = str(t).strip()
+
+    chrom_cnt_by_aid: dict[int, int] = dict(
+        db.execute(
+            select(SNP.analysis_id, func.count(func.distinct(SNP.chromosome)))
+            .where(SNP.analysis_id.in_(aids))
+            .group_by(SNP.analysis_id)
+        ).all()
+    )
+    sample_snp_by_aid: dict[int, str | None] = dict(
+        db.execute(
+            select(SNP.analysis_id, func.min(SNP.snp_code))
+            .where(SNP.analysis_id.in_(aids))
+            .group_by(SNP.analysis_id)
+        ).all()
+    )
+
+    out = []
+    for a in rows:
+        aid = a.analysis_id
+        raw_org = (a.organism or "").strip()
+        if raw_org and raw_org.lower() not in ("allium sativum", "allium sativum l.", "allium_sativum"):
+            org_code = raw_org
+        else:
+            inferred = detect_organism_from_dataset(
+                filenames=[a.analysis_name, *ds_by_aid.get(aid, [])],
+                traits=[t for t in [a.trait_name, param_trait_by_aid.get(aid)] if t],
+                num_chromosomes=chrom_cnt_by_aid.get(aid) or None,
+                snp_ids=[sample_snp_by_aid[aid]] if sample_snp_by_aid.get(aid) else None,
+            )
+            org_code = (
+                inferred["organism"]
+                if inferred.get("auto_detected") and inferred.get("organism") != "allium_sativum"
+                else (raw_org or "Allium sativum")
+            )
+        trait_val = (a.trait_name or "").strip() or param_trait_by_aid.get(aid) or None
+        out.append({
+            "analysis_id": aid,
+            "analysis_name": a.analysis_name,
+            "status": a.status,
+            "organism": org_code,
+            "organism_label": scientific_name(org_code),
+            "analysis_time": a.analysis_time,
+            "trait": trait_val,
+            "trait_name": trait_val,
+            "model_name": a.model_name,
+            "lambda_gc": a.lambda_gc,
+            "significant_count": a.significant_count,
+        })
+    return out
 
 
 @router.get("/models", summary="Daftar model uji asosiasi")
@@ -121,7 +234,8 @@ def list_models(db: Session = Depends(get_db)):
 @router.post("", status_code=status.HTTP_201_CREATED, summary="1. Buat sesi analisis")
 def create_analysis(data: AnalysisCreate, user: User = Depends(get_current_user),
                     db: Session = Depends(get_db)):
-    a = Analysis(user_id=user.user_id, analysis_name=data.analysis_name, status=AnalysisStatus.DRAFT)
+    kwargs = {"organism": data.organism.strip()} if data.organism and data.organism.strip() else {}
+    a = Analysis(user_id=user.user_id, analysis_name=data.analysis_name, status=AnalysisStatus.DRAFT, **kwargs)
     db.add(a)
     db.commit()
     db.refresh(a)
@@ -134,25 +248,35 @@ def get_analysis(a: Analysis = Depends(owned_analysis), db: Session = Depends(ge
     datasets = db.scalars(select(Dataset).where(Dataset.analysis_id == a.analysis_id)).all()
     param = db.scalar(select(AnalysisParameter).where(AnalysisParameter.analysis_id == a.analysis_id))
     return {
-        **_summary(a),
+        **_summary(a, db=db),
         "berkas": [{"nama_berkas": d.file_name, "jenis": d.file_type,
                     "sample_count": d.sample_count, "snp_count": d.snp_count,
                     "status_validasi": d.validation_status, "diunggah": d.upload_time}
                    for d in datasets],
         "sifat_tersedia": ds.available_traits(db, a.analysis_id),
+        "phenotype_columns": ds.available_traits(db, a.analysis_id),
         "parameter": param.parameter_config if param else None,
     }
 
 
 @router.patch("/{analysis_id}", summary="Perbarui nama atau atribut sesi analisis")
 def update_analysis(data: AnalysisUpdate, a: Analysis = Depends(owned_analysis), db: Session = Depends(get_db)):
-    nama = data.analysis_name.strip()
-    if not nama:
-        raise HTTPException(422, _detail("Nama sesi tidak boleh kosong."))
-    a.analysis_name = nama
+    if data.analysis_name is None and data.organism is None:
+        raise HTTPException(422, _detail("Tidak ada atribut sesi yang diperbarui."))
+    if data.analysis_name is not None:
+        nama = data.analysis_name.strip()
+        if not nama:
+            raise HTTPException(422, _detail("Nama sesi tidak boleh kosong."))
+        a.analysis_name = nama
+    if data.organism is not None:
+        org = data.organism.strip()
+        if not org:
+            raise HTTPException(422, _detail("Organisme target tidak boleh kosong."))
+        a.organism = org
     db.commit()
     db.refresh(a)
-    return {**_summary(a), "pesan": "Nama sesi diperbarui."}
+    pesan = "Nama sesi diperbarui." if data.organism is None else "Atribut sesi diperbarui."
+    return {**_summary(a), "pesan": pesan}
 
 
 @router.delete("/{analysis_id}", summary="Hapus sesi analisis beserta berkas dan hasilnya (riwayat)")
@@ -183,6 +307,25 @@ def _check_minimum(geno) -> None:
         raise ValidationError(
             "Jumlah sampel terlalu sedikit untuk analisis GWAS.",
             [f"Berkas berisi {geno.n_samples} sampel; minimal {MIN_SAMPLES} sampel."])
+
+
+def _read_vcf_header_preview(path: Path, max_lines: int = 80) -> str:
+    """Ambil baris header VCF (# / ##) secukupnya untuk deteksi referensi spesies."""
+    try:
+        opener = gzip.open if str(path).lower().endswith(".gz") else open
+        header_lines: list[str] = []
+        with opener(path, "rt", encoding="utf-8", errors="replace") as fh:
+            for _ in range(max_lines):
+                line = fh.readline()
+                if not line:
+                    break
+                if line.startswith("#"):
+                    header_lines.append(line.strip())
+                else:
+                    break
+        return "\n".join(header_lines)
+    except OSError:
+        return ""
 
 
 def _upload_warnings(geno, pheno) -> list[str]:
@@ -260,6 +403,18 @@ def upload(
             stem = Path(stem).stem
         a.analysis_name = f"Analisis {stem}"
 
+    vcf_header = _read_vcf_header_preview(g_path) if not plink else ""
+    distinct_chroms = {str(c).strip() for c in (geno.chrom or []) if str(c).strip()}
+    detected_org = detect_organism_from_dataset(
+        filenames=[f for f in [genotipe.filename, fenotipe.filename, bim.filename if bim else None, fam.filename if fam else None] if f],
+        traits=list(pheno.traits.keys()),
+        num_chromosomes=len(distinct_chroms) or None,
+        vcf_header=vcf_header,
+        snp_ids=list(geno.ids[:25]),
+    )
+    a.organism = detected_org["organism"]
+    if not a.trait_name and pheno.trait_names:
+        a.trait_name = pheno.trait_names[0]
     a.status = AnalysisStatus.TERVALIDASI
     db.add(AnalysisLog(analysis_id=a.analysis_id, stage="validasi", status="selesai",
                        message=f"{geno.n_samples} sampel, {geno.n_snps} SNP; Sample ID cocok"))
@@ -273,6 +428,11 @@ def upload(
         "status": a.status,
         **info,
         "kecocokan_sample_id": match,
+        "organism": a.organism,
+        "organism_label": scientific_name(a.organism),
+        "trait": (pheno.trait_names[0] if pheno.trait_names else None),
+        "trait_name": (pheno.trait_names[0] if pheno.trait_names else None),
+        "detected_organism": detected_org,
         "langkah_berikutnya": f"PUT /api/analyses/{a.analysis_id}/parameters",
     }
 
@@ -304,6 +464,8 @@ def set_parameters(data: ParameterIn, a: Analysis = Depends(owned_analysis),
     a.model_id = model.model_id if model else None
     a.model_name = data.model
     a.trait_name = data.trait
+    if data.organism and data.organism.strip():
+        a.organism = data.organism.strip()
 
     config = data.model_dump()
     param = db.scalar(select(AnalysisParameter).where(AnalysisParameter.analysis_id == a.analysis_id))
@@ -413,9 +575,21 @@ def get_status(a: Analysis = Depends(owned_analysis), db: Session = Depends(get_
     mulai = next((log.timestamp for log in logs if log.status == "berjalan"), None)
     akhir = logs[-1].timestamp if logs and a.status in (AnalysisStatus.SELESAI, AnalysisStatus.GAGAL) else None
     tip_pool = TIPS.get(current or "qc")
+    resolved_trait = _resolve_session_trait(db, a)
+    ringkasan_cache = _get_cache(db, a.analysis_id, "ringkasan") or {}
+    qc_summary = dict(ringkasan_cache.get("qc") or {})
+    if not qc_summary:
+        geno_ds = db.scalar(select(Dataset).where(Dataset.analysis_id == a.analysis_id, Dataset.file_type.in_(ds.GENOTYPE_TYPES)))
+        if geno_ds:
+            qc_summary = {"sampel_awal": geno_ds.sample_count, "snp_awal": geno_ds.snp_count}
+    if resolved_trait:
+        qc_summary["trait_name"] = resolved_trait
     return {
         "analysis_id": a.analysis_id,
         "status": a.status,
+        "trait": resolved_trait,
+        "trait_name": resolved_trait,
+        "ringkasan_qc": qc_summary or None,
         "pesan_status": teks,
         "terkunci": a.status in LOCKED,
         "tahap_sekarang": current,
@@ -453,10 +627,19 @@ def get_results(a: Analysis = Depends(owned_analysis), db: Session = Depends(get
     n_sig = len(ringkasan.get("snp_signifikan") or [])
     pesan = (f"Ditemukan {n_sig} SNP signifikan." if n_sig else
              "Tidak ada SNP yang signifikan setelah koreksi. Lihat snp_teratas untuk SNP dengan nilai p terkecil.")
+    org_code, org_label = _resolve_session_organism(db, a)
+    if "chromosome_count" not in ringkasan:
+        chroms = db.scalars(select(SNP.chromosome).where(SNP.analysis_id == a.analysis_id).distinct()).all()
+        if chroms:
+            ringkasan = {**ringkasan, "chromosome_count": len(chroms)}
     return {
         "analysis_id": a.analysis_id,
         "analysis_name": a.analysis_name,
         "status": a.status,
+        "organism": org_code,
+        "organism_label": org_label,
+        "trait": _resolve_session_trait(db, a) or ringkasan.get("trait"),
+        "trait_name": _resolve_session_trait(db, a) or ringkasan.get("trait"),
         "pesan": pesan,
         "parameter": param.parameter_config if param else None,
         **ringkasan,
@@ -533,7 +716,8 @@ def get_annotation(
     if sertakan_teratas:
         snps += [s for s in ringkasan.get("snp_teratas") or [] if s["snp_id"] not in signifikan]
         label = "SNP (signifikan dan teratas)"
-    hasil = annotate_from_gff3(snps, settings.ANNOTATION_GFF3, settings.ANNOTATION_WINDOW_BP, label)
+    org_code, _ = _resolve_session_organism(db, a)
+    hasil = annotate_snps_auto(snps, org_code, settings.ANNOTATION_GFF3, settings.ANNOTATION_WINDOW_BP, label)
     for k in hasil["kandidat"]:
         k["signifikan"] = k["snp_id"] in signifikan
         db_res = db.scalar(select(AssociationResult).where(
@@ -600,7 +784,8 @@ def web_report(
     db: Session = Depends(get_db),
 ):
     _require_done(a)
-    html = report_service.build_report(db, a)
+    org_code, _ = _resolve_session_organism(db, a)
+    html = report_service.build_report(db, a, organism_override=org_code)
     headers = {}
     if unduh:
         headers["Content-Disposition"] = f'attachment; filename="gwasena_analisis_{a.analysis_id}_laporan.html"'

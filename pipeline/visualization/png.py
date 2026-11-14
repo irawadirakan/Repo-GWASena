@@ -27,6 +27,41 @@ def _to_png(fig: Figure) -> bytes:
     return buf.getvalue()
 
 
+def select_lead_snps_for_labels(
+    sig: list[dict],
+    offset: dict,
+    total_span: float,
+    max_labels: int = 5,
+    min_rel_spacing: float = 0.12,
+) -> list[dict]:
+    """Lead SNP Filtering: pilih paling banyak 1 SNP puncak per kromosom,
+    maksimal 5 label teratas secara global, dengan jarak horizontal > 12% lebar kanvas."""
+    if not sig:
+        return []
+
+    best_per_chrom: dict = {}
+    for pt in sig:
+        c = pt.get("chromosome")
+        cur = best_per_chrom.get(c)
+        if cur is None or (pt.get("neglog10p") or 0) > (cur.get("neglog10p") or 0):
+            best_per_chrom[c] = pt
+
+    ranked = sorted(best_per_chrom.values(), key=lambda p: p.get("neglog10p") or 0, reverse=True)
+    selected: list[dict] = []
+    placed_x: list[float] = []
+    min_gap = max(0.0, float(total_span) * min_rel_spacing)
+
+    for pt in ranked:
+        x_pos = float(offset.get(pt.get("chromosome"), 0) + float(pt.get("position") or 0))
+        if any(abs(x_pos - px) <= min_gap for px in placed_x):
+            continue
+        selected.append(pt)
+        placed_x.append(x_pos)
+        if len(selected) >= max_labels:
+            break
+    return selected
+
+
 def manhattan_png(data: dict, judul: str | None = None) -> bytes:
     """data = {"titik": [{snp_id, chromosome, position, neglog10p, signifikan}], "garis_bonferroni": float}"""
     titik = data.get("titik") or []
@@ -48,12 +83,22 @@ def manhattan_png(data: dict, judul: str | None = None) -> bytes:
         ax.scatter([offset[c] + t["position"] for t in pts], [t["neglog10p"] for t in pts],
                    s=10, color=WARNA_KROMOSOM[i % 2], linewidths=0)
     sig = [t for t in titik if t.get("signifikan")]
+    max_y = max([t.get("neglog10p") or 0 for t in titik] + ([float(garis)] if garis is not None else []) + [1.0])
     if sig:
         ax.scatter([offset[t["chromosome"]] + t["position"] for t in sig], [t["neglog10p"] for t in sig],
                    s=26, color=WARNA_SIGNIFIKAN, zorder=3, label="SNP signifikan")
-        for t in sig[:5]:
-            ax.annotate(t["snp_id"], (offset[t["chromosome"]] + t["position"], t["neglog10p"]),
-                        textcoords="offset points", xytext=(4, 4), fontsize=7)
+        lead_snps = select_lead_snps_for_labels(sig, offset, mulai, max_labels=5, min_rel_spacing=0.12)
+        for t in lead_snps:
+            ax.annotate(
+                t["snp_id"],
+                (offset[t["chromosome"]] + t["position"], t["neglog10p"]),
+                textcoords="offset points",
+                xytext=(0, 8),
+                ha="center",
+                va="bottom",
+                fontsize=8,
+                bbox=dict(boxstyle="round,pad=0.15", facecolor="white", alpha=0.85, edgecolor="none"),
+            )
     if garis is not None:
         ax.axhline(garis, color=WARNA_GARIS, linestyle="--", linewidth=0.9,
                    label=f"Ambang Bonferroni (-log10 p = {garis:.2f})")
@@ -62,7 +107,7 @@ def manhattan_png(data: dict, judul: str | None = None) -> bytes:
     ax.set_xticklabels(kromosom, fontsize=8)
     ax.set_xlabel("Chromosome")
     ax.set_ylabel("-log10(p)")
-    ax.set_ylim(bottom=0)
+    ax.set_ylim(bottom=0, top=max_y * 1.15)
     ax.spines[["top", "right"]].set_visible(False)
     ax.set_title(judul or "Manhattan plot", fontsize=11)
     if sig or garis is not None:
