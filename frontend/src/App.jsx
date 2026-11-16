@@ -8,13 +8,16 @@ import LoginPage from './pages/LoginPage.jsx';
 import RegisterPage from './pages/RegisterPage.jsx';
 import DashboardPage from './pages/DashboardPage.jsx';
 import HistoryPage from './pages/HistoryPage.jsx';
+import AdminPage from './pages/AdminPage.jsx';
 import AnalysisWizardPage from './pages/AnalysisWizardPage.jsx';
 import { useAuthStore } from './store/useAuthStore.js';
 import SeamlessVideoBackground from './components/common/SeamlessVideoBackground.jsx';
 
 /**
- * Root Gatekeeper (Logika Hybrid Onboarding & Sesi)
- * Acuan: docs/gwasena-v2/USER_FLOW.md Bagian 2
+ * Root Gatekeeper (Logika Kunjungan Awal vs Pengguna Lama & Sesi Aktif)
+ * - Sesi login aktif (token valid): langsung ke /dashboard
+ * - Pernah login sebelumnya atau menyelesaikan intro: langsung ke /login
+ * - Pengunjung baru pertama kali membuka website: langsung ke /welcome (Landing Page / Intro)
  */
 function RootGatekeeper() {
   const { isAuthenticated, isInitialized } = useAuthStore();
@@ -25,12 +28,15 @@ function RootGatekeeper() {
     return <Navigate to="/dashboard" replace />;
   }
 
-  const introCompleted = localStorage.getItem('gwasena_intro_completed') === 'true';
-  if (!introCompleted) {
-    return <Navigate to="/welcome" replace />;
+  const hasLoggedInBefore =
+    localStorage.getItem('gwasena_has_logged_in') === 'true' ||
+    localStorage.getItem('gwasena_intro_completed') === 'true';
+
+  if (hasLoggedInBefore) {
+    return <Navigate to="/login" replace />;
   }
 
-  return <Navigate to="/login" replace />;
+  return <Navigate to="/welcome" replace />;
 }
 
 export default function App() {
@@ -66,7 +72,9 @@ export default function App() {
         >
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/history" element={<HistoryPage />} />
+          <Route path="/admin" element={<AdminPage />} />
           <Route path="/analyses/:id" element={<AnalysisWizardPage />} />
+          <Route path="/sesi/:id" element={<AnalysisWizardPage />} />
         </Route>
 
         {/* ── Wildcard Fallback ── */}

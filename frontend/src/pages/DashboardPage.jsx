@@ -1,57 +1,109 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Dna,
   PlusCircle,
   History,
-  CheckCircle2,
   ArrowRight,
   Sprout,
   Loader2,
   X,
-  FileCheck,
-  FileQuestion,
-  Sparkles,
-  BookOpen,
-  Activity,
+  Layers,
+  Info,
 } from 'lucide-react';
 import { useAuthStore } from '../store/useAuthStore.js';
 import { useAnalysisStore } from '../store/useAnalysisStore.js';
 import { analysisService } from '../services/analysisService.js';
 import ErrorMessageArea from '../components/common/ErrorMessageArea.jsx';
 
+const DEFAULT_SESSION_NAMES = [
+  'Analisis Bobot Umbi Bawang Putih 2026',
+  'GWAS Penanda Sifat Kuantitatif Agronomi',
+  'Eksplorasi Varian Genomik Allium sativum',
+];
+
 /**
- * DashboardPage (Layar Utama Pengguna - Figma Aligned)
+ * DashboardPage (Layar Utama Peneliti - Figma Aligned with Micro-Interactions)
  * Acuan: 03 — Dashboard (Pengguna Analisis).png & 03 — Dashboard (Pengguna Analisis) (Light).png
  */
 export default function DashboardPage() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
-  const { uploadSummary, currentAnalysis } = useAnalysisStore();
 
   const [meta, setMeta] = useState(null);
-  const [analysesCount, setAnalysesCount] = useState(0);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [analysisName, setAnalysisName] = useState('');
+  const [sessionName, setSessionName] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState(null);
+
+  // ── State Autocomplete Riwayat Nama Sesi ──
+  const [sessionHistory, setSessionHistory] = useState(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const stored = localStorage.getItem('gwasena_session_names_history');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) return parsed.filter(Boolean);
+      }
+    } catch {
+      // ignore
+    }
+    return [];
+  });
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
+  const dropdownRef = useRef(null);
+  const inputContainerRef = useRef(null);
+
+  const openNewSessionModal = () => {
+    setSessionName('');
+    setError(null);
+    setIsDropdownOpen(false);
+    setIsFocused(false);
+    setIsModalOpen(true);
+  };
+
+  // Tutup dropdown saat klik di luar
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (
+        inputContainerRef.current &&
+        !inputContainerRef.current.contains(event.target)
+      ) {
+        setIsDropdownOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  const handleDeleteHistoryItem = (e, itemToDelete) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const updated = sessionHistory.filter((item) => item !== itemToDelete);
+    setSessionHistory(updated);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('gwasena_session_names_history', JSON.stringify(updated));
+    }
+  };
+
+  const handleSelectHistoryItem = (item) => {
+    setSessionName(item);
+    setIsDropdownOpen(false);
+  };
 
   useEffect(() => {
     let isMounted = true;
     async function loadDashboardData() {
       try {
-        const [metaData, listData] = await Promise.all([
-          analysisService.getMeta(),
-          analysisService.listAnalyses().catch(() => []),
-        ]);
-        if (isMounted) {
+        const metaData = await analysisService.getMeta();
+        if (isMounted && metaData) {
           setMeta(metaData);
-          if (Array.isArray(listData)) {
-            setAnalysesCount(listData.length);
-          }
         }
       } catch (err) {
-        console.warn('Gagal memuat metadata:', err);
+        console.error('Gagal memuat data dashboard:', err);
       }
     }
     loadDashboardData();
@@ -61,124 +113,100 @@ export default function DashboardPage() {
   }, []);
 
   const handleCreateAnalysis = async (e) => {
-    e.preventDefault();
-    const finalName = analysisName.trim() || 'Sesi Analisis Baru';
+    if (e && e.preventDefault) e.preventDefault();
+    const trimmed = (sessionName || '').trim();
+    // Penanganan Nama Default & ID Sesi yang Aman
+    const finalSessionName = trimmed || 'Analisis Tanpa Judul';
+
+    if (trimmed) {
+      const updatedHistory = [
+        trimmed,
+        ...sessionHistory.filter((s) => s.toLowerCase() !== trimmed.toLowerCase()),
+      ].slice(0, 10);
+      setSessionHistory(updatedHistory);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('gwasena_session_names_history', JSON.stringify(updatedHistory));
+      }
+    }
 
     setIsSubmitting(true);
     setError(null);
 
     try {
-      const res = await analysisService.createAnalysis(finalName);
+      const createdSession = await analysisService.createAnalysis(finalSessionName);
+      const targetId = createdSession?.analysis_id || createdSession?.id;
+      if (!targetId) {
+        throw new Error('Server tidak mengembalikan analysis_id yang valid.');
+      }
+
+      // Reset wizard state & inisialisasi sesi nyata dari PostgreSQL/backend
+      const { reset, setCurrentAnalysis, setActiveStep } = useAnalysisStore.getState();
+      reset();
+      setCurrentAnalysis({
+        analysis_id: targetId,
+        id: targetId,
+        analysis_name: createdSession?.analysis_name || finalSessionName,
+        status: createdSession?.status || 'draft',
+        organism: createdSession?.organism || 'Allium sativum (Bawang Putih)',
+      });
+      setActiveStep(1);
+
+      if (!trimmed && typeof window !== 'undefined') {
+        localStorage.setItem(`gwasena_auto_name_${targetId}`, 'true');
+      }
+
       setIsModalOpen(false);
-      navigate(`/analyses/${res.analysis_id}`);
+      navigate(`/analyses/${targetId}`);
     } catch (err) {
-      setError(err);
+      console.error('Gagal membuat sesi analisis di server:', err);
+      setError({
+        message: err?.message || err?.pesan || 'Gagal membuat sesi analisis di server.',
+        details: err?.details || err?.rincian || [],
+      });
+    } finally {
       setIsSubmitting(false);
     }
   };
 
-  // TUGAS 5: Spesimen/Dataset dinamis berdasarkan dataset yang diunggah/diolah
-  const isBenchmarkExample =
-    uploadSummary?.simulated ||
-    uploadSummary?.genotipe?.nama_berkas?.toLowerCase()?.includes('bawang') ||
-    uploadSummary?.genotipe?.nama_berkas?.toLowerCase()?.includes('garlic');
+  const org = meta?.organisme;
 
-  const hasUploadedData = Boolean(uploadSummary?.genotipe);
+  // Filter riwayat yang sesuai dengan ketikan input (hanya jika ada riwayat valid)
+  const filteredHistory = sessionHistory.filter((item) =>
+    item && item.toLowerCase().includes((sessionName || '').toLowerCase().trim())
+  );
 
   return (
-    <div className="space-y-8 animate-fade-in pb-12">
-      {/* ── Banner Sambutan Pengguna & Profil Dataset Dinamis ── */}
-      <div className="relative overflow-hidden figma-card p-6 sm:p-8">
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 rounded-full border border-cyan-300 dark:border-[#06B6D4]/30 bg-cyan-50 dark:bg-[#06B6D4]/10 px-3 py-1 text-xs font-semibold text-cyan-900 dark:text-[#06B6D4]">
-              <Sprout className="h-3.5 w-3.5 text-cyan-700 dark:text-[#06B6D4]" />
-              <span>Alur Kerja Analisis Asosiasi Genomik GWASena</span>
-            </div>
-
-            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white font-sans">
-              Selamat datang kembali,{' '}
-              <span className="text-[#5B4DFE] dark:text-[#06B6D4]">{user?.username || 'Pengguna'}</span>!
-            </h1>
-
-            <p className="max-w-2xl font-serif text-base sm:text-lg text-slate-600 dark:text-slate-300 leading-relaxed">
-              Mulai sesi analisis asosiasi genomik baru atau lanjutkan evaluasi hasil riset terdahulu
-              dengan alur kerja terstandarisasi.
-            </p>
+    <>
+      <div className="space-y-8 animate-fade-in pb-12">
+      {/* ── Banner Sambutan Peneliti (Proportional Clean Hero Banner) ── */}
+      <div className="relative overflow-hidden figma-card p-6 sm:p-8 md:p-10">
+        <div className="relative z-10 space-y-3">
+          <div className="inline-flex items-center gap-2 rounded-full border border-cyan-300 dark:border-[#06B6D4]/30 bg-cyan-50 dark:bg-[#06B6D4]/10 px-3 py-1 text-xs font-semibold text-cyan-900 dark:text-[#06B6D4]">
+            <Sprout className="h-3.5 w-3.5 text-cyan-700 dark:text-[#06B6D4]" />
+            <span>Alur Kerja Analisis Asosiasi Genomik GWASena</span>
           </div>
 
-          {/* Quick Dataset / Specimen Badge Dinamis (TUGAS 5) */}
-          <div className="shrink-0 glass-subcard p-4 text-sm space-y-1.5 min-w-[240px] max-w-sm">
-            {hasUploadedData ? (
-              isBenchmarkExample ? (
-                <>
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-400 font-sans uppercase tracking-wider">
-                    <FileCheck className="h-4 w-4" />
-                    <span>Dataset Benchmark (Allium sativum)</span>
-                  </div>
-                  <div className="font-serif text-[#0284C7] dark:text-[#06B6D4] font-bold italic text-base">
-                    Allium sativum L.
-                  </div>
-                  <div className="text-slate-700 dark:text-slate-300 font-semibold font-sans text-xs">
-                    {uploadSummary.genotipe.jumlah_sampel} Sampel · {uploadSummary.genotipe.jumlah_snp} SNP
-                  </div>
-                  <div className="text-xs text-slate-600 dark:text-slate-400 font-medium font-sans truncate">
-                    Berkas: {uploadSummary.genotipe.nama_berkas}
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-blue-700 dark:text-[#06B6D4] font-sans uppercase tracking-wider">
-                    <FileCheck className="h-4 w-4" />
-                    <span>Dataset Aktif</span>
-                  </div>
-                  <div className="font-sans font-bold text-slate-900 dark:text-white text-sm truncate">
-                    {uploadSummary.genotipe.nama_berkas || 'Berkas Genotipe'}
-                  </div>
-                  <div className="text-slate-700 dark:text-slate-300 font-semibold font-sans text-xs">
-                    {uploadSummary.genotipe.format || 'VCF'} · {uploadSummary.genotipe.jumlah_sampel} Sampel · {uploadSummary.genotipe.jumlah_snp} SNP
-                  </div>
-                  <div className="text-xs text-emerald-600 dark:text-emerald-400 font-medium font-sans">
-                    ✓ Validasi ID Sampel 100% Cocok
-                  </div>
-                </>
-              )
-            ) : (
-              <>
-                <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-300 font-sans uppercase tracking-wider">
-                  <Activity className="h-4 w-4 text-[#06B6D4]" />
-                  <span>RINGKASAN AKTIVITAS RISET</span>
-                </div>
-                <div className="text-slate-900 dark:text-white font-bold font-sans text-sm">
-                  {analysesCount > 0 ? `${analysesCount} Sesi Analisis Tersimpan` : 'Ruang Kerja Siap'}
-                </div>
-                <div className="text-xs text-emerald-600 dark:text-emerald-400 font-medium font-sans flex items-center gap-1">
-                  <CheckCircle2 className="h-3.5 w-3.5" />
-                  <span>Ruang kerja aktif & siap untuk analisis baru</span>
-                </div>
-              </>
-            )}
-          </div>
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white font-sans">
+            Selamat datang kembali,{' '}
+            <span className="text-[#5B4DFE] dark:text-[#06B6D4]">{user?.username || 'Peneliti'}</span>!
+          </h1>
+
+          <p className="max-w-3xl font-serif text-base sm:text-lg text-slate-600 dark:text-slate-300 leading-relaxed">
+            Mulai sesi analisis asosiasi genomik baru atau lanjutkan evaluasi hasil riset terdahulu
+            dengan alur kerja terstandarisasi.
+          </p>
         </div>
 
         {/* Subtle decorative glow */}
         <div className="pointer-events-none absolute -right-20 -bottom-20 h-64 w-64 rounded-full bg-[#06B6D4]/10 blur-3xl" />
       </div>
 
-      {/* ── Banner Petunjuk Fungsi Ikon Tanda Tanya (?) ── */}
-      <div className="rounded-2xl border border-cyan-200 dark:border-cyan-500/30 bg-cyan-50/80 dark:bg-cyan-500/10 p-3.5 sm:p-4 text-xs sm:text-sm text-cyan-950 dark:text-cyan-200 flex items-center gap-2.5 font-medium shadow-sm">
-        <span className="text-base sm:text-lg">💡</span>
-        <span>
-          <strong>Panduan Parameter:</strong> Klik atau arahkan kursor ke ikon tanda tanya (?) di pojok setiap kartu untuk membaca penjelasan ilmiah dan fungsi bagian tersebut.
-        </span>
-      </div>
-
       {/* ── Dua Kartu Aksi Utama (High-Separation Glass dengan Micro-Interactions) ── */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Kartu 1: Analisis Baru (Primary CTA Card) */}
         <div
-          onClick={() => setIsModalOpen(true)}
-          className="flex flex-col justify-between figma-card p-6 sm:p-8 hover:-translate-y-1 active:scale-[0.985] group cursor-pointer"
+          onClick={openNewSessionModal}
+          className="flex flex-col justify-between figma-card p-6 sm:p-8 hover:-translate-y-1 hover:border-[#5B4DFE]/40 active:scale-[0.985] group cursor-pointer transition-all duration-200"
         >
           <div>
             <div className="flex items-center justify-between mb-4">
@@ -195,7 +223,7 @@ export default function DashboardPage() {
             </h2>
 
             <p className="mt-2 text-sm text-slate-600 dark:text-slate-300 leading-relaxed font-sans">
-              Unggah berkas VCF/PLINK & fenotipe CSV, saring Quality Control & PCA otomatis, uji model GLM/MLM, hingga visualisasi Manhattan Plot.
+              Unggah berkas VCF/PLINK & fenotipe CSV, jalankan penyaringan QC dan PCA otomatis, uji model GLM/MLM, hingga eksplorasi Manhattan Plot interaktif.
             </p>
           </div>
 
@@ -204,9 +232,9 @@ export default function DashboardPage() {
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
-                setIsModalOpen(true);
+                openNewSessionModal();
               }}
-              className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 py-3 px-4 text-sm font-semibold text-white shadow-sm hover:-translate-y-[1px] hover:shadow-md active:scale-[0.98] transition-all duration-100 font-sans cursor-pointer"
+              className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 py-3 px-4 text-sm font-semibold text-white shadow-sm hover:-translate-y-[1px] hover:shadow-md active:scale-[0.98] transition-all duration-100 font-sans"
             >
               <PlusCircle className="h-4 w-4" />
               <span>+ Inisiasi Sesi Analisis Baru</span>
@@ -217,7 +245,7 @@ export default function DashboardPage() {
         {/* Kartu 2: Riwayat Analisis */}
         <div
           onClick={() => navigate('/history')}
-          className="flex flex-col justify-between figma-card p-6 sm:p-8 hover:-translate-y-1 active:scale-[0.985] group cursor-pointer"
+          className="flex flex-col justify-between figma-card p-6 sm:p-8 hover:-translate-y-1 hover:border-[#0284C7]/40 active:scale-[0.985] group cursor-pointer transition-all duration-200"
         >
           <div>
             <div className="flex items-center justify-between mb-4">
@@ -246,7 +274,7 @@ export default function DashboardPage() {
                 e.stopPropagation();
                 navigate('/history');
               }}
-              className="w-full inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 dark:border-white/10 bg-white/90 dark:bg-slate-800/90 py-3 px-4 text-sm font-semibold text-slate-800 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-700 hover:shadow-sm active:scale-[0.98] transition-all duration-100 font-sans cursor-pointer"
+              className="w-full inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 dark:border-white/10 bg-white/90 dark:bg-slate-800/90 py-3 px-4 text-sm font-semibold text-slate-800 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-700 hover:shadow-sm active:scale-[0.98] transition-all duration-100 font-sans"
             >
               <span>Buka Daftar Riwayat Analisis</span>
               <ArrowRight className="h-4 w-4 transition-transform duration-150 group-hover:translate-x-1.5" />
@@ -255,61 +283,123 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* ── Panduan Singkat Alur Analisis (User-Centric Quick Guide, Menggantikan Kotak Teknis Internal) ── */}
-      <div className="figma-card p-6">
-        <div className="flex items-center gap-2 mb-4">
-          <BookOpen className="h-4 w-4 text-[#06B6D4]" />
-          <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200 font-sans">
-            Alur Kerja Analisis Asosiasi Genomik GWASena
-          </h3>
+      {/* ── ALUR KERJA ANALISIS ASOSIASI GENOMIK GWASENA (Micro-Interactions Halus & Responsif) ── */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Layers className="h-4 w-4 text-[#06B6D4]" />
+            <h2 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200 font-sans">
+              ALUR KERJA ANALISIS ASOSIASI GENOMIK GWASENA
+            </h2>
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="glass-subcard p-4 space-y-1.5">
-            <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-[#06B6D4] text-xs font-bold font-sans">
-              1
-            </span>
-            <div className="font-bold text-slate-900 dark:text-white text-sm font-sans">Unggah & Validasi</div>
-            <p className="text-xs text-slate-600 dark:text-slate-400 font-medium font-sans">
-              Pilih berkas VCF atau PLINK (.bed/.bim/.fam) beserta CSV fenotipe target sifat kuantitatif.
-            </p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+          {/* Kartu 1: 1. Unggah & Validasi */}
+          <div
+            onClick={openNewSessionModal}
+            className="group relative figma-card p-6 flex flex-col justify-between cursor-pointer border border-transparent hover:border-[#06B6D4]/60 dark:hover:border-[#06B6D4]/50 transition-all duration-200 ease-out hover:-translate-y-1.5 hover:scale-[1.01] hover:shadow-[0_16px_36px_-10px_rgba(6,182,212,0.30)] active:scale-[0.99]"
+          >
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-cyan-100 dark:bg-[#06B6D4]/15 text-[#0284C7] dark:text-[#06B6D4] font-mono text-base font-black border border-cyan-300 dark:border-[#06B6D4]/30 shadow-sm transition-all duration-200 group-hover:scale-110 group-hover:bg-[#06B6D4] group-hover:text-white group-hover:shadow-[0_0_16px_rgba(6,182,212,0.6)]">
+                  1
+                </span>
+                <span className="text-[11px] font-bold font-mono uppercase tracking-wider text-cyan-800 dark:text-[#06B6D4] bg-cyan-50 dark:bg-[#06B6D4]/10 px-2.5 py-0.5 rounded-full border border-cyan-200 dark:border-[#06B6D4]/20">
+                  Tahap 1
+                </span>
+              </div>
+              <h3 className="text-base sm:text-lg font-bold font-sans tracking-tight text-slate-900 dark:text-white group-hover:text-[#0284C7] dark:group-hover:text-[#06B6D4] transition-colors">
+                1. Unggah & Validasi
+              </h3>
+              <p className="mt-2 text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed font-sans">
+                Unggah dataset genotipe (VCF / PLINK Biner (.bed + .bim + .fam)) dan matriks fenotipe CSV. Sistem memverifikasi format bialelik dan mencocokkan Sample ID secara otomatis sebelum komputasi.
+              </p>
+            </div>
+            <div className="mt-5 pt-3 border-t border-slate-200/80 dark:border-white/10 flex items-center justify-between text-xs font-semibold text-[#0284C7] dark:text-[#06B6D4]">
+              <span>Mulai Unggah Dataset</span>
+              <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1" />
+            </div>
           </div>
 
-          <div className="glass-subcard p-4 space-y-1.5">
-            <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-indigo-100 dark:bg-[#5B4DFE]/20 text-[#5B4DFE] dark:text-[#818CF8] text-xs font-bold font-sans">
-              2
-            </span>
-            <div className="font-bold text-slate-900 dark:text-white text-sm font-sans">Penyaringan QC & Model</div>
-            <p className="text-xs text-slate-600 dark:text-slate-400 font-medium font-sans">
-              Atur ambang MAF, missingness, kovariat PCA, serta pilih model statistik GLM atau MLM.
-            </p>
+          {/* Kartu 2: 2. Penyaringan QC & Model */}
+          <div
+            onClick={openNewSessionModal}
+            className="group relative figma-card p-6 flex flex-col justify-between cursor-pointer border border-transparent hover:border-[#5B4DFE]/60 dark:hover:border-[#5B4DFE]/50 transition-all duration-200 ease-out hover:-translate-y-1.5 hover:scale-[1.01] hover:shadow-[0_16px_36px_-10px_rgba(91,77,254,0.30)] active:scale-[0.99]"
+          >
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-indigo-100 dark:bg-[#5B4DFE]/15 text-[#5B4DFE] dark:text-[#818CF8] font-mono text-base font-black border border-indigo-200 dark:border-[#5B4DFE]/30 shadow-sm transition-all duration-200 group-hover:scale-110 group-hover:bg-[#5B4DFE] group-hover:text-white group-hover:shadow-[0_0_16px_rgba(91,77,254,0.6)]">
+                  2
+                </span>
+                <span className="text-[11px] font-bold font-mono uppercase tracking-wider text-indigo-800 dark:text-[#A5B4FC] bg-indigo-50 dark:bg-[#5B4DFE]/10 px-2.5 py-0.5 rounded-full border border-indigo-200 dark:border-[#5B4DFE]/20">
+                  Tahap 2 & 3
+                </span>
+              </div>
+              <h3 className="text-base sm:text-lg font-bold font-sans tracking-tight text-slate-900 dark:text-white group-hover:text-[#5B4DFE] dark:group-hover:text-[#A5B4FC] transition-colors">
+                2. Penyaringan QC & Model
+              </h3>
+              <p className="mt-2 text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed font-sans">
+                Konfigurasi parameter MAF, Missingness, HWE, dan Kinship terpandu EDU-HINT, lakukan evaluasi kovariat PCA otomatis, serta pilih model statistik GLM atau MLM.
+              </p>
+            </div>
+            <div className="mt-5 pt-3 border-t border-slate-200/80 dark:border-white/10 flex items-center justify-between text-xs font-semibold text-[#5B4DFE] dark:text-[#A5B4FC]">
+              <span>Panduan Ilmiah [EDU-HINT]</span>
+              <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1" />
+            </div>
           </div>
 
-          <div className="glass-subcard p-4 space-y-1.5">
-            <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 text-xs font-bold font-sans">
-              3
-            </span>
-            <div className="font-bold text-slate-900 dark:text-white text-sm font-sans">Visualisasi & Laporan</div>
-            <p className="text-xs text-slate-600 dark:text-slate-400 font-medium font-sans">
-              Evaluasi Manhattan Plot, QQ-Plot, anotasi kandidat gen, dan unduh laporan riset lengkap.
-            </p>
+          {/* Kartu 3: 3. Visualisasi & Laporan */}
+          <div
+            onClick={() => navigate('/history')}
+            className="group relative figma-card p-6 flex flex-col justify-between cursor-pointer border border-transparent hover:border-emerald-500/60 dark:hover:border-emerald-400/50 transition-all duration-200 ease-out hover:-translate-y-1.5 hover:scale-[1.01] hover:shadow-[0_16px_36px_-10px_rgba(16,185,129,0.30)] active:scale-[0.99]"
+          >
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-100 dark:bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-mono text-base font-black border border-emerald-200 dark:border-emerald-500/30 shadow-sm transition-all duration-200 group-hover:scale-110 group-hover:bg-emerald-500 group-hover:text-white group-hover:shadow-[0_0_16px_rgba(16,185,129,0.6)]">
+                  3
+                </span>
+                <span className="text-[11px] font-bold font-mono uppercase tracking-wider text-emerald-800 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-500/20">
+                  Tahap 4–6
+                </span>
+              </div>
+              <h3 className="text-base sm:text-lg font-bold font-sans tracking-tight text-slate-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                3. Visualisasi & Laporan
+              </h3>
+              <p className="mt-2 text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed font-sans">
+                Analisis Manhattan Plot & QQ Plot interaktif beresolusi tinggi, periksa daftar SNP signifikan, petakan kandidat gen fungsional, dan ekspor dokumen laporan ilmiah A4 PDF.
+              </p>
+            </div>
+            <div className="mt-5 pt-3 border-t border-slate-200/80 dark:border-white/10 flex items-center justify-between text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+              <span>Buka Hasil & Ekspor</span>
+              <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1" />
+            </div>
           </div>
         </div>
       </div>
 
-      {/* ── Modal Dialog Inisiasi Analisis Baru (TUGAS 6: Placeholder Abu-abu & Teks Ringkas) ── */}
+
+      </div>
+
+      {/* ── Modal Dialog Inisiasi Analisis Baru (Posisi Tinggi Bebas Scroll) ── */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="new-session-modal-title"
+          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 pt-16 sm:pt-24 md:pt-28 bg-slate-950/70 backdrop-blur-sm"
+        >
           <div className="w-full max-w-lg figma-card p-6 sm:p-7 shadow-2xl space-y-4 animate-modal-in">
             <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-3.5">
               <div className="flex items-center gap-2">
                 <Dna className="h-5 w-5 text-[#5B4DFE] dark:text-[#06B6D4]" />
-                <h3 className="text-lg font-bold text-slate-900 dark:text-white font-sans tracking-tight">
+                <h3 id="new-session-modal-title" className="text-lg font-bold text-slate-900 dark:text-white font-sans tracking-tight">
                   Inisiasi Sesi Analisis Baru
                 </h3>
               </div>
               <button
                 type="button"
+                aria-label="Tutup modal"
                 onClick={() => setIsModalOpen(false)}
                 className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-700 dark:hover:text-white active:scale-95 transition-all"
               >
@@ -320,24 +410,97 @@ export default function DashboardPage() {
             <ErrorMessageArea error={error} onDismiss={() => setError(null)} />
 
             <form onSubmit={handleCreateAnalysis} className="space-y-4">
-              <div>
+              <div className="rounded-xl border border-sky-200 dark:border-cyan-500/30 bg-sky-50/70 dark:bg-cyan-950/30 p-3 text-xs text-slate-700 dark:text-cyan-200 flex items-center gap-2 font-medium">
+                <Info className="h-4 w-4 shrink-0 text-[#0284C7] dark:text-[#06B6D4]" />
+                <span>Selanjutnya: Unggah berkas genotipe (.vcf / PLINK) dan fenotipe (.csv).</span>
+              </div>
+              {/* Field Nama Sesi */}
+              <div ref={inputContainerRef} className="relative">
                 <label
-                  htmlFor="analysisName"
+                  htmlFor="sessionName"
                   className="block text-xs sm:text-sm font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200 mb-1.5 font-sans"
                 >
                   Nama Sesi Analisis
                 </label>
-                <input
-                  id="analysisName"
-                  type="text"
-                  value={analysisName}
-                  onChange={(e) => setAnalysisName(e.target.value)}
-                  placeholder="Contoh: Sesi Analisis Baru"
-                  className="w-full rounded-xl border border-slate-300 dark:border-white/10 bg-[#F1F4FD] dark:bg-[#0F172E] py-2.5 px-3.5 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:border-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-600 font-medium"
-                />
-                <span className="mt-1 block text-xs text-slate-600 dark:text-slate-400 font-medium font-sans">
-                  Kosongkan bila ingin menggunakan nama default otomatis ("Sesi Analisis Baru").
-                </span>
+                <div className="relative">
+                  <input
+                    id="sessionName"
+                    type="text"
+                    autoComplete="off"
+                    value={sessionName}
+                    onFocus={() => {
+                      setIsFocused(true);
+                      setIsDropdownOpen(true);
+                    }}
+                    onBlur={() => {
+                      setTimeout(() => setIsFocused(false), 200);
+                    }}
+                    onChange={(e) => {
+                      setSessionName(e.target.value);
+                      setIsDropdownOpen(true);
+                    }}
+                    placeholder="Contoh: Analisis Asosiasi Genomik 2026"
+                    className="w-full rounded-xl border border-slate-300 dark:border-white/10 bg-[#F1F4FD] dark:bg-[#0F172E] py-2.5 pl-3.5 pr-10 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:border-[#5B4DFE] focus:outline-none focus:ring-1 focus:ring-[#5B4DFE] font-medium transition-all"
+                  />
+                  {sessionName.trim().length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setSessionName('')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+                      title="Hapus isian nama sesi"
+                      aria-label="Kosongkan nama sesi"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+
+
+                {/* Custom Autocomplete Dropdown Riwayat Nama Sesi (Hanya tampil jika isFocused dan filteredHistory.length > 0) */}
+                {isDropdownOpen && isFocused && filteredHistory.length > 0 && (
+                  <div
+                    ref={dropdownRef}
+                    className="absolute left-0 right-0 top-full mt-1.5 z-50 rounded-2xl border border-slate-200 dark:border-white/10 bg-white/95 dark:bg-[#0F172E]/95 backdrop-blur-xl shadow-xl overflow-hidden animate-dropdown-in max-h-56 overflow-y-auto"
+                  >
+                    <div className="px-3.5 py-2 border-b border-slate-100 dark:border-white/5 flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">
+                      <span className="flex items-center gap-1.5">
+                        <History className="h-3 w-3 text-[#06B6D4]" />
+                        <span>Riwayat Nama Sesi</span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setIsDropdownOpen(false)}
+                        className="text-[10px] font-semibold text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white px-1.5 py-0.5 rounded hover:bg-slate-200 dark:hover:bg-white/10 transition-colors"
+                        title="Tutup riwayat"
+                      >
+                        Tutup
+                      </button>
+                    </div>
+
+                    <div className="py-1">
+                      {filteredHistory.map((item, idx) => (
+                        <div
+                          key={idx}
+                          onClick={() => handleSelectHistoryItem(item)}
+                          className="flex items-center justify-between px-3.5 py-2 hover:bg-slate-100 dark:hover:bg-white/10 cursor-pointer transition-colors group text-xs text-slate-800 dark:text-slate-200"
+                        >
+                          <span className="truncate pr-2 font-medium group-hover:text-blue-600 dark:group-hover:text-[#06B6D4] transition-colors">
+                            {item}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={(e) => handleDeleteHistoryItem(e, item)}
+                            title="Hapus item riwayat ini"
+                            aria-label={`Hapus ${item} dari riwayat`}
+                            className="rounded p-1 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 transition-all opacity-80 group-hover:opacity-100 shrink-0"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-200 dark:border-white/10">
@@ -345,14 +508,14 @@ export default function DashboardPage() {
                   type="button"
                   onClick={() => setIsModalOpen(false)}
                   disabled={isSubmitting}
-                  className="rounded-xl border border-slate-300 dark:border-white/10 bg-slate-100 dark:bg-transparent px-4 py-2 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-white/5 active:scale-[0.98] transition-all font-sans cursor-pointer"
+                  className="rounded-xl border border-slate-300 dark:border-white/10 bg-slate-100 dark:bg-transparent px-4 py-2 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-white/5 active:scale-[0.98] transition-all font-sans"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="inline-flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 px-5 py-2 text-xs font-semibold text-white shadow-sm hover:-translate-y-[1px] hover:shadow-md active:scale-[0.98] disabled:opacity-60 disabled:transform-none transition-all duration-100 font-sans cursor-pointer"
+                  className="inline-flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 px-5 py-2 text-xs font-semibold text-white shadow-sm hover:-translate-y-[1px] hover:shadow-md active:scale-[0.98] disabled:opacity-60 disabled:transform-none transition-all duration-100 font-sans"
                 >
                   {isSubmitting ? (
                     <>
@@ -371,6 +534,6 @@ export default function DashboardPage() {
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }

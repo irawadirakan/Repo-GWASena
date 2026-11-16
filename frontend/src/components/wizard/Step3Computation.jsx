@@ -1,4 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+
+function formatProgressPercent(val) {
+  const num = Number(val) || 0;
+  const rounded = Math.round(num * 10) / 10;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+}
 import {
   Lock,
   Loader2,
@@ -13,12 +19,11 @@ import {
   Dna,
   ArrowRight,
   ArrowLeft,
-  Sparkles,
 } from 'lucide-react';
 import { useAnalysisStore } from '../../store/useAnalysisStore.js';
 import { analysisService } from '../../services/analysisService.js';
 import { TIPS_EDUKATIF } from '../../constants/eduHints.js';
-import { generateBenchmarkResults } from '../../services/mockResults.js';
+import { resolveTargetTraitName } from '../../constants/defaultParams.js';
 import ErrorMessageArea from '../common/ErrorMessageArea.jsx';
 
 /**
@@ -28,35 +33,80 @@ import ErrorMessageArea from '../common/ErrorMessageArea.jsx';
  * Mengunci konfigurasi form, menampilkan progres 4 tahapan diskrit,
  * menyajikan ringkasan QC, serta karusel Tips Edukatif dinamis.
  */
-export default function Step3Computation({ analysisId, onComplete }) {
+export default function Step3Computation({ analysisId, analysis = null, onComplete }) {
   const {
     currentAnalysis,
-    setCurrentAnalysis,
     configParams,
     uploadSummary,
+    results,
     setResults,
-    setIsSimulated,
-    isSimulated,
-    computationStage,
-    isComputing,
     isCompleted: storeCompleted,
-    startSimulation,
     setActiveStep,
+    globalProgress,
+    stageProgress,
+    ensureProgressAnalysis,
+    setGlobalProgress,
+    setStageProgress,
   } = useAnalysisStore();
 
   const [localCompleted, setLocalCompleted] = useState(false);
   const isCompleted = storeCompleted || localCompleted;
 
   // State polling dari backend
-  const [progresPersen, setProgresPersen] = useState(0);
   const [activeStageCode, setActiveStageCode] = useState(null);
   const [backendStages, setBackendStages] = useState([]);
   const [backendStatus, setBackendStatus] = useState(null);
+  const [pesanStatus, setPesanStatus] = useState(null);
+  const [durasiDetik, setDurasiDetik] = useState(null);
   const [ringkasanQc, setRingkasanQc] = useState(null);
+  const [statusTrait, setStatusTrait] = useState(null);
 
   // State galat & pembatalan
   const [isFailed, setIsFailed] = useState(false);
   const [error, setError] = useState(null);
+
+  const latestStagesRef = useRef([]);
+
+  // Pastikan high-water mark progres tersinkron dengan analysisId aktif (tidak regress saat remount)
+  useEffect(() => {
+    if (analysisId) {
+      ensureProgressAnalysis(analysisId);
+    }
+  }, [analysisId, ensureProgressAnalysis]);
+
+  // Interpolasi progres asimptotik monotonik (+0.2% setiap 2 detik, mentok <= 92% & di bawah batas tahap berikutnya)
+  useEffect(() => {
+    if (isCompleted || isFailed) return;
+    const interval = setInterval(() => {
+      const stages = latestStagesRef.current || [];
+      const storeState = useAnalysisStore.getState();
+      const stagePctMap = storeState.stageProgress || {};
+
+      let doneCount = 0;
+      let hasRunning = false;
+      for (const s of stages) {
+        const curStagePct = Number(stagePctMap[s.id]) || 0;
+        if (s.status === 'selesai' || curStagePct >= 100) {
+          doneCount += 1;
+        } else if (s.status === 'berjalan') {
+          hasRunning = true;
+          const nextStagePct = Math.min(92, Math.round((Math.max(45, curStagePct) + 0.2) * 10) / 10);
+          setStageProgress(s.id, nextStagePct, 92);
+        }
+      }
+
+      if (hasRunning) {
+        const nextMilestone = (doneCount + 1) * 25;
+        const globalCeiling = Math.min(92, Math.max(0, nextMilestone - 0.8));
+        const curGlobal = Number(storeState.globalProgress) || 0;
+        if (curGlobal < globalCeiling) {
+          const nextGlobal = Math.min(globalCeiling, Math.round((curGlobal + 0.2) * 10) / 10);
+          setGlobalProgress(nextGlobal, globalCeiling);
+        }
+      }
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [isCompleted, isFailed, setGlobalProgress, setStageProgress]);
 
   // Carousel & Countdown State untuk Tips Edukatif (6 detik)
   const [tipIndex, setTipIndex] = useState(0);
@@ -91,16 +141,9 @@ export default function Step3Computation({ analysisId, onComplete }) {
     setCountdown(6);
   };
 
-  // Jalankan simulasi otomatis jika dalam mode simulasi dan belum selesai
+  // Polling backend status setiap 3 detik (100% alur API nyata tanpa fallback simulasi)
   useEffect(() => {
-    if (isSimulated && !isComputing && !storeCompleted && !isFailed) {
-      startSimulation();
-    }
-  }, [isSimulated, isComputing, storeCompleted, isFailed, startSimulation]);
-
-  // Polling backend status setiap 3 detik hanya jika BUKAN mode simulasi
-  useEffect(() => {
-    if (isSimulated || isFailed) return;
+    if (!analysisId || isFailed) return;
 
     let timer;
     let isMounted = true;
@@ -110,10 +153,15 @@ export default function Step3Computation({ analysisId, onComplete }) {
         const res = await analysisService.getStatus(analysisId);
         if (!isMounted) return;
 
+        const statusLower = String(res?.status || '').toLowerCase();
         setBackendStatus(res?.status);
+        if (res?.pesan_status) setPesanStatus(res.pesan_status);
+        if (typeof res?.durasi_detik === 'number') setDurasiDetik(res.durasi_detik);
 
         if (typeof res?.progres_persen === 'number') {
-          setProgresPersen(res.progres_persen);
+          const isCompleteResp =
+            statusLower === 'selesai' || statusLower === 'completed' || statusLower === 'success';
+          setGlobalProgress(res.progres_persen, isCompleteResp ? 100 : 99);
         }
         if (res?.tahap_sekarang) {
           setActiveStageCode(res.tahap_sekarang);
@@ -121,16 +169,24 @@ export default function Step3Computation({ analysisId, onComplete }) {
         if (Array.isArray(res?.tahap)) {
           setBackendStages(res.tahap);
         }
+        if (res?.trait_name || res?.trait) setStatusTrait(res.trait_name || res.trait);
         if (res?.ringkasan_qc) {
           setRingkasanQc(res.ringkasan_qc);
         }
 
-        // Poin #4: Tangani res.status === "gagal" & Hentikan Polling
-        if (res?.status === 'gagal' || res?.status === 'failed') {
+        // Tangani status gagal -> hentikan polling & buka kunci navigasi untuk perbaikan parameter
+        if (statusLower === 'gagal' || statusLower === 'failed') {
           if (timer) clearTimeout(timer);
           setIsFailed(true);
+          useAnalysisStore.setState((s) => ({
+            isComputing: false,
+            isCompleted: false,
+            isFailed: true,
+            currentAnalysis: s.currentAnalysis ? { ...s.currentAnalysis, status: 'gagal' } : s.currentAnalysis,
+          }));
           const errMsg =
             res.galat?.pesan ||
+            res.pesan_status ||
             res.message ||
             res.error ||
             'Analisis pipeline GWAS gagal dieksekusi oleh backend.';
@@ -145,48 +201,57 @@ export default function Step3Computation({ analysisId, onComplete }) {
             message: errMsg,
             details: errDetails,
           });
-          return; // Hentikan polling seketika
+          return;
         }
 
-        // Cek status selesai
-        if (res?.status === 'selesai') {
-          setProgresPersen(100);
-          setLocalCompleted(true);
+        // Cek status selesai -> kunci 100% seluruh tahapan & muat hasil nyata dari backend
+        if (statusLower === 'selesai' || statusLower === 'completed' || statusLower === 'success') {
+          setGlobalProgress(100, 100);
+          [1, 2, 3, 4].forEach((sid) => setStageProgress(sid, 100, 100));
           try {
             const resultsData = await analysisService.getFullAnalysisResults(analysisId);
+            if (!isMounted) return;
             setResults(resultsData);
-            setIsSimulated(false);
+            setLocalCompleted(true);
+            useAnalysisStore.setState((s) => ({
+              isComputing: false,
+              isCompleted: true,
+              isFailed: false,
+              currentAnalysis: s.currentAnalysis ? { ...s.currentAnalysis, status: 'selesai' } : s.currentAnalysis,
+            }));
             if (resultsData?.raw_backend_results?.qc || resultsData?.qc || resultsData?.ringkasan_qc) {
               setRingkasanQc(resultsData.raw_backend_results?.qc || resultsData.qc || resultsData.ringkasan_qc);
             }
           } catch (rErr) {
-            console.warn('Gagal memuat data hasil lengkap dari backend, beralih ke benchmark lokal:', rErr);
-            const fallback = generateBenchmarkResults(configParams, uploadSummary);
-            setResults(fallback);
+            if (!isMounted) return;
+            setIsFailed(true);
+            useAnalysisStore.setState((s) => ({
+              isComputing: false,
+              isCompleted: false,
+              isFailed: true,
+              currentAnalysis: s.currentAnalysis ? { ...s.currentAnalysis, status: 'gagal' } : s.currentAnalysis,
+            }));
+            setError({
+              message: rErr?.message || rErr?.pesan || 'Komputasi selesai, namun gagal memuat hasil dari server.',
+              details: rErr?.details || rErr?.rincian || [],
+            });
           }
           return;
         }
       } catch (err) {
         if (!isMounted) return;
-        const isNetworkError = !err.status || err.status === 0 || err.code === 'ERR_NETWORK';
-        const is501 = err.status === 501;
-
-        if (isNetworkError || is501) {
-          // Hanya beralih ke simulasi jika benar-benar Network Error atau HTTP 501
-          console.warn('Backend tidak merespons (Network / 501), beralih ke mock simulation:', err);
-          startSimulation();
-          return;
-        } else {
-          // Error 4xx / 500 dari backend: HENTIKAN POLLING & TAMPILKAN GALAT!
-          console.error('Galat saat polling status analisis (HTTP ' + err.status + '):', err);
-          if (timer) clearTimeout(timer);
-          setIsFailed(true);
-          setError({
-            message: err.message || err.pesan || 'Gagal memantau status komputasi dari server.',
-            details: err.details || err.rincian || [],
-          });
-          return;
-        }
+        console.error('Galat saat polling status analisis:', err);
+        if (timer) clearTimeout(timer);
+        setIsFailed(true);
+        useAnalysisStore.setState({
+          isComputing: false,
+          isFailed: true,
+        });
+        setError({
+          message: err?.message || err?.pesan || 'Gagal memantau status komputasi dari server.',
+          details: err?.details || err?.rincian || [],
+        });
+        return;
       }
 
       if (!isCompleted && !isFailed) {
@@ -200,44 +265,22 @@ export default function Step3Computation({ analysisId, onComplete }) {
       isMounted = false;
       if (timer) clearTimeout(timer);
     };
-  }, [analysisId, isCompleted, isFailed, isSimulated, startSimulation, configParams, uploadSummary, setResults]);
+  }, [analysisId, isCompleted, isFailed, setResults]);
+
+  const effectiveAnalysis = analysis || currentAnalysis;
+  const resolvedTraitName = resolveTargetTraitName({
+    analysis: {
+      ...(effectiveAnalysis || {}),
+      ...(statusTrait ? { trait_name: statusTrait } : {}),
+    },
+    configParams,
+    uploadSummary,
+    results,
+    qcSummary: ringkasanQc,
+  });
 
   // Helper memetakan status 4 kartu tahapan visual di UI
   const getDisplayStages = () => {
-    if (isSimulated) {
-      const stageNum = computationStage || 1;
-      return [
-        {
-          id: 1,
-          title: 'Quality Control (Penyaringan Sampel & SNP)',
-          desc: 'Memvalidasi tingkat missingness, MAF, kepatuhan HWE, dan estimasi kekerabatan genomik.',
-          status: isCompleted || stageNum > 1 ? 'selesai' : stageNum === 1 ? 'berjalan' : 'menunggu',
-          message: stageNum > 1 ? 'Penyaringan data genotipe & fenotipe selesai.' : 'Memfilter MAF, missingness, & relatedness...',
-        },
-        {
-          id: 2,
-          title: 'Analisis Struktur Populasi (PCA Otomatis)',
-          desc: 'Menghitung dekomposisi kovariat PC1–PC3 untuk mengoreksi stratifikasi struktur populasi.',
-          status: isCompleted || stageNum > 2 ? 'selesai' : stageNum === 2 ? 'berjalan' : 'menunggu',
-          message: stageNum > 2 ? 'Dekomposisi 3 PC selesai dihitung.' : stageNum === 2 ? 'Menghitung matriks kovariansi PC1–PC3...' : null,
-        },
-        {
-          id: 3,
-          title: 'Uji Asosiasi Statistik & Koreksi',
-          desc: `Mengeksekusi model ${configParams.model || 'MLM'} terhadap sifat ${configParams.trait || 'target'} dengan koreksi Bonferroni & FDR.`,
-          status: isCompleted || stageNum > 3 ? 'selesai' : stageNum === 3 ? 'berjalan' : 'menunggu',
-          message: stageNum > 3 ? 'Uji asosiasi genomik selesai.' : stageNum === 3 ? 'Menghitung nilai p-value dan estimasi efek beta...' : null,
-        },
-        {
-          id: 4,
-          title: 'Anotasi Kandidat Gen & Visualisasi',
-          desc: 'Memetakan SNP signifikan ke genom referensi kandidat gen dan menyusun plot Manhattan & QQ.',
-          status: isCompleted ? 'selesai' : stageNum === 4 ? 'berjalan' : 'menunggu',
-          message: isCompleted ? 'Hasil visualisasi dan tabel asosiasi siap.' : stageNum === 4 ? 'Menyiapkan anotasi gen & visualisasi...' : null,
-        },
-      ];
-    }
-
     // Pemetaan fleksibel dari Array res.tahap backend
     const stageMap = {};
     if (Array.isArray(backendStages)) {
@@ -250,7 +293,7 @@ export default function Step3Computation({ analysisId, onComplete }) {
 
     // 1. QC
     const qcStage = stageMap['qc'] || stageMap['quality_control'];
-    const qcStatus = qcStage?.status || (isCompleted ? 'selesai' : (backendStatus === 'antre' ? 'menunggu' : 'berjalan'));
+    const qcStatus = qcStage?.status || (isCompleted ? 'selesai' : (String(backendStatus || '').toLowerCase() === 'berjalan' ? 'berjalan' : 'menunggu'));
     const qcMsg = qcStage?.pesan || null;
 
     // 2. PCA
@@ -259,7 +302,7 @@ export default function Step3Computation({ analysisId, onComplete }) {
     const pcaMsg = pcaStage?.pesan || null;
 
     // 3. Uji Asosiasi & Koreksi
-    const asoStage = stageMap['asosiasi'] || stageMap['association'];
+    const asoStage = stageMap['asosiasi'] || stageMap['association'] || stageMap['gwas'];
     const korStage = stageMap['koreksi'] || stageMap['correction'];
     let asoStatus = 'menunggu';
     let asoMsg = null;
@@ -304,6 +347,7 @@ export default function Step3Computation({ analysisId, onComplete }) {
         desc: 'Memvalidasi tingkat missingness, MAF, kepatuhan HWE, dan estimasi kekerabatan genomik.',
         status: qcStatus,
         message: qcMsg,
+        rawPercent: qcStage?.progres_persen ?? qcStage?.progress,
       },
       {
         id: 2,
@@ -311,68 +355,91 @@ export default function Step3Computation({ analysisId, onComplete }) {
         desc: 'Menghitung dekomposisi kovariat PC1–PC3 untuk mengoreksi stratifikasi struktur populasi.',
         status: pcaStatus,
         message: pcaMsg,
+        rawPercent: pcaStage?.progres_persen ?? pcaStage?.progress,
       },
       {
         id: 3,
         title: 'Uji Asosiasi Statistik & Koreksi',
-        desc: `Mengeksekusi model ${configParams.model || 'MLM'} terhadap sifat ${configParams.trait || 'target'} dengan koreksi Bonferroni & FDR.`,
+        desc: `Mengeksekusi model ${configParams.model || 'MLM'} terhadap sifat ${resolvedTraitName !== '—' ? resolvedTraitName : 'target'} dengan koreksi Bonferroni & FDR.`,
         status: asoStatus,
         message: asoMsg,
+        rawPercent: korStage?.progres_persen ?? korStage?.progress ?? asoStage?.progres_persen ?? asoStage?.progress,
       },
       {
         id: 4,
-        title: 'Anotasi Kandidat Gen & Visualisasi',
+        title: 'Anotasi Kandidat Gen (GFF3 / Ensembl)',
         desc: 'Memetakan SNP signifikan ke genom referensi kandidat gen dan menyusun plot Manhattan & QQ.',
         status: anoStatus,
         message: anoMsg,
+        rawPercent: anoStage?.progres_persen ?? anoStage?.progress,
       },
     ];
   };
 
   const displayStages = getDisplayStages();
+  latestStagesRef.current = displayStages;
 
-  // Hitung persentase progres bar
-  const displayPercent = isCompleted
-    ? 100
-    : isSimulated
-    ? Math.min(100, (computationStage || 1) * 25)
-    : progresPersen;
+  // Sinkronisasi monotonik status tahapan & global progress ke Zustand (Math.max guard)
+  const stageSignature = displayStages.map((s) => `${s.id}:${s.status}:${s.rawPercent ?? ''}`).join('|');
+  useEffect(() => {
+    if (isCompleted) {
+      setGlobalProgress(100, 100);
+      [1, 2, 3, 4].forEach((sid) => setStageProgress(sid, 100, 100));
+      return;
+    }
+    for (const stg of displayStages) {
+      if (stg.status === 'selesai') {
+        setStageProgress(stg.id, 100, 100);
+      } else if (stg.status === 'berjalan') {
+        const incoming = typeof stg.rawPercent === 'number' ? Math.max(45, stg.rawPercent) : 45;
+        setStageProgress(stg.id, incoming, 92);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stageSignature, isCompleted, setGlobalProgress, setStageProgress]);
 
-  // Hitung data ringkasan QC dinamis
+  // Hitung persentase progres global (dijamin monotonik & terkunci 100% saat selesai)
+  const displayPercent = isCompleted ? 100 : Math.min(99, Number(globalProgress) || 0);
+  const formattedDisplayPercent = formatProgressPercent(displayPercent);
+
+  // Hitung data ringkasan QC dinamis dari respons backend/unggah
   const isQcDone = isCompleted || displayStages[0].status === 'selesai';
-  const samplesPassed = ringkasanQc?.sampel_lolos ?? ringkasanQc?.n_samples ?? (isQcDone ? 38 : 40);
-  const samplesTotal = ringkasanQc?.total_sampel ?? ringkasanQc?.sampel_total ?? uploadSummary?.genotipe?.jumlah_sampel ?? 40;
+  const rawSamplesTotal =
+    ringkasanQc?.sampel_awal ??
+    ringkasanQc?.sampel_total ??
+    ringkasanQc?.total_sampel ??
+    uploadSummary?.genotipe?.jumlah_sampel ??
+    null;
+  const rawSamplesPassed = ringkasanQc?.sampel_lolos ?? ringkasanQc?.n_samples ?? rawSamplesTotal;
+  const samplesPassed = rawSamplesPassed ?? '—';
+  const samplesTotal = rawSamplesTotal ?? '—';
   const samplesFiltered =
-    ringkasanQc?.sampel_disaring ?? (samplesTotal - samplesPassed > 0 ? samplesTotal - samplesPassed : 0);
+    typeof ringkasanQc?.sampel_disaring === 'number'
+      ? ringkasanQc.sampel_disaring
+      : rawSamplesTotal != null && rawSamplesPassed != null && rawSamplesTotal - rawSamplesPassed > 0
+      ? rawSamplesTotal - rawSamplesPassed
+      : 0;
 
-  const snpsPassed = ringkasanQc?.snp_lolos ?? ringkasanQc?.n_snps ?? (isQcDone ? 482 : 500);
-  const snpsTotal = ringkasanQc?.total_snp ?? uploadSummary?.genotipe?.jumlah_snp ?? 500;
-  const snpsFiltered = ringkasanQc?.snp_disaring ?? (snpsTotal - snpsPassed > 0 ? snpsTotal - snpsPassed : 0);
+  const rawSnpsTotal =
+    ringkasanQc?.snp_awal ??
+    ringkasanQc?.snp_total ??
+    ringkasanQc?.total_snp ??
+    uploadSummary?.genotipe?.jumlah_snp ??
+    null;
+  const rawSnpsPassed = ringkasanQc?.snp_lolos ?? ringkasanQc?.n_snps ?? rawSnpsTotal;
+  const snpsPassed = rawSnpsPassed ?? '—';
+  const snpsTotal = rawSnpsTotal ?? '—';
+  const snpsFiltered =
+    typeof ringkasanQc?.snp_disaring === 'number'
+      ? ringkasanQc.snp_disaring
+      : rawSnpsTotal != null && rawSnpsPassed != null && rawSnpsTotal - rawSnpsPassed > 0
+      ? rawSnpsTotal - rawSnpsPassed
+      : 0;
 
   const currentTip = TIPS_EDUKATIF[tipIndex];
 
-  // Diagnosa galat komputasi spesifik
-  const errText = `${error?.message || ''} ${JSON.stringify(error?.details || [])}`.toLowerCase();
-  const initialSamples = uploadSummary?.genotipe?.jumlah_sampel || ringkasanQc?.total_sampel || ringkasanQc?.sampel_total || 0;
-  const isInitialUnder10 = initialSamples > 0 && initialSamples < 10;
-  const isQcFilterTooStrict =
-    !isInitialUnder10 &&
-    (errText.includes('sampel') ||
-      errText.includes('sample') ||
-      errText.includes('qc') ||
-      errText.includes('filter') ||
-      errText.includes('kurang dari 10') ||
-      errText.includes('minimal 10') ||
-      (ringkasanQc?.sampel_lolos != null && ringkasanQc.sampel_lolos < 10));
-
   return (
     <div className="space-y-8 animate-fade-in">
-      {/* ── Banner Mode Simulasi (Poin #2) ── */}
-      {isSimulated && (
-        <div className="rounded-2xl border-2 border-amber-500 bg-amber-400/20 text-amber-950 dark:text-amber-200 p-4 text-center font-bold text-sm sm:text-base shadow-lg animate-pulse flex items-center justify-center gap-2">
-          <span>⚠️ MODE SIMULASI — Bukan hasil analisis asli (Backend tidak terhubung)</span>
-        </div>
-      )}
 
       {/* ── Banner Status Terkunci ── */}
       {!isFailed && (
@@ -398,107 +465,84 @@ export default function Step3Computation({ analysisId, onComplete }) {
         </div>
       )}
 
-      {/* ── Area Pesan Kesalahan / Status Gagal (Poin #4) ── */}
-      {isFailed && (
-        <div className="rounded-3xl border border-rose-300 dark:border-rose-500/40 bg-rose-50/90 dark:bg-rose-500/10 p-6 space-y-4 shadow-xl animate-fade-in backdrop-blur-md">
-          <div className="flex items-center gap-2.5 text-rose-700 dark:text-rose-400">
-            <XCircle className="h-6 w-6 shrink-0" />
-            <h3 className="text-base font-bold font-sans">
-              Komputasi Pipeline GWAS Gagal Dijalankan
-            </h3>
-          </div>
+      {/* ─── Area Pesan Kesalahan / Status Gagal (Evaluasi Tester Poin 18) ─── */}
+      {isFailed && (() => {
+        const errText = typeof error === 'string' ? error : (error?.message || error?.pesan || '');
+        const isQcTooStrict = /qc|sampel|sedikit|filter|maf|geno|mind|hwe|kinship/i.test(errText);
+        const isFileCorrupted = /format|berkas|file|vcf|csv|kolom|parse|bialel/i.test(errText);
 
-          {/* Kotak Diagnosa Spesifik (Tester Evaluation Item 2) */}
-          {isQcFilterTooStrict ? (
-            <div className="rounded-2xl border border-amber-300 dark:border-amber-500/40 bg-amber-50 dark:bg-amber-500/15 p-4 space-y-2">
-              <div className="flex items-center gap-2 text-amber-800 dark:text-amber-300 font-bold text-sm">
-                <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
-                <span>Sumber Masalah: Pengaturan Filter Quality Control (QC) Terlalu Ketat</span>
-              </div>
-              <p className="text-xs sm:text-[13px] text-slate-700 dark:text-slate-300 leading-relaxed font-medium">
-                Penyaringan Quality Control menyebabkan jumlah sampel yang lolos menjadi kurang dari batas minimum (10 sampel), sementara berkas awal Anda memiliki {initialSamples} sampel.
-                Silakan <strong>longgarkan nilai Missingness Sampel (mind)</strong> (misalnya ke 0.20 atau lebih tinggi) atau <strong>nonaktifkan filter kekerabatan KING</strong> jika populasi tanaman Anda memiliki banyak aksesi berkerabat/klonal.
-              </p>
+        return (
+          <div className="rounded-3xl border border-rose-300 dark:border-rose-500/40 bg-rose-50/90 dark:bg-rose-500/10 p-6 space-y-4 shadow-xl animate-fade-in backdrop-blur-md">
+            <div className="flex items-center gap-2.5 text-rose-700 dark:text-rose-400">
+              <XCircle className="h-6 w-6 shrink-0" />
+              <h3 className="text-base font-bold font-sans">
+                Komputasi Pipeline GWAS Gagal Dijalankan
+              </h3>
             </div>
-          ) : isInitialUnder10 ? (
-            <div className="rounded-2xl border border-amber-300 dark:border-amber-500/40 bg-amber-50 dark:bg-amber-500/15 p-4 space-y-2">
-              <div className="flex items-center gap-2 text-amber-800 dark:text-amber-300 font-bold text-sm">
-                <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
-                <span>Sumber Masalah: Berkas Awal Memiliki Kurang dari 10 Sampel</span>
+
+            <ErrorMessageArea error={error} type="error" />
+
+            {/* Rekomendasi Tindakan Spesifik Berdasarkan Jenis Galat (Evaluasi Tester Poin 18) */}
+            <div className="rounded-2xl p-4 border bg-white/80 dark:bg-[#070C1D]/80 border-rose-200 dark:border-rose-500/20 text-xs sm:text-sm font-sans space-y-2">
+              <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
+                <span>Rekomendasi Tindakan Korektif Ilmiah:</span>
               </div>
-              <p className="text-xs sm:text-[13px] text-slate-700 dark:text-slate-300 leading-relaxed font-medium">
-                Berkas genotipe atau fenotipe yang diunggah hanya memiliki {initialSamples} sampel. Analisis asosiasi genomik membutuhkan minimal 10 sampel berpasangan untuk inferensi statistik yang bermakna.
-              </p>
+              {isQcTooStrict ? (
+                <p className="text-rose-900 dark:text-rose-200 leading-relaxed font-medium">
+                  <strong>Masalah disebabkan oleh ambang filter Quality Control yang terlalu ketat.</strong> Sampel atau varian SNP tersaring habis sebelum uji statistik dimulai. Disarankan menekan tombol <strong>"Kembali ke Konfigurasi QC & Model"</strong> untuk melonggarkan ambang missingness atau MAF.
+                </p>
+              ) : isFileCorrupted ? (
+                <p className="text-rose-900 dark:text-rose-200 leading-relaxed font-medium">
+                  <strong>Masalah disebabkan oleh format atau integritas berkas data yang tidak valid.</strong> Pastikan berkas VCF memuat varian bialelik dan tabel CSV fenotipe memiliki Sample ID yang 100% cocok. Disarankan menekan tombol <strong>"Kembali ke Unggah & Validasi"</strong>.
+                </p>
+              ) : (
+                <p className="text-slate-700 dark:text-slate-300 leading-relaxed font-medium">
+                  Masalah dapat disebabkan oleh ambang filter Quality Control yang terlalu ketat atau ketidakcocokan format berkas. Silakan gunakan tombol navigasi di bawah untuk menyesuaikan parameter atau memeriksa kembali berkas input Anda.
+                </p>
+              )}
             </div>
-          ) : null}
 
-          <ErrorMessageArea error={error} type="error" />
+            <div className="flex flex-wrap items-center gap-3 pt-3 border-t border-rose-200 dark:border-rose-500/20">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsFailed(false);
+                  setError(null);
+                  setActiveStep(2);
+                }}
+                className={`inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-xs font-bold transition-all active:scale-95 cursor-pointer shadow-md ${
+                  isQcTooStrict
+                    ? 'bg-[#5B4DFE] hover:bg-[#4F46E5] text-white ring-2 ring-[#5B4DFE]/40'
+                    : 'bg-[#5B4DFE] hover:bg-[#4F46E5] text-white'
+                }`}
+              >
+                <ArrowLeft className="h-4 w-4" />
+                <span>Kembali ke Konfigurasi QC & Model (Langkah 2)</span>
+              </button>
 
-          <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-            Silakan periksa kembali berkas yang diunggah atau sesuaikan parameter filter Quality Control agar tidak menyaring seluruh data sampel/SNP.
-          </p>
-
-          <div className="flex flex-wrap items-center gap-3 pt-3 border-t border-rose-200 dark:border-rose-500/20">
-            {isInitialUnder10 ? (
-              <>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsFailed(false);
-                    setError(null);
-                    setActiveStep(1);
-                  }}
-                  className="inline-flex items-center gap-2 rounded-xl bg-[#5B4DFE] hover:bg-[#4F46E5] px-5 py-2.5 text-xs font-bold text-white shadow-md shadow-[#5B4DFE]/30 transition-all active:scale-95 cursor-pointer"
-                >
-                  <ArrowLeft className="h-4 w-4" />
-                  <span>← Kembali ke Unggah &amp; Validasi (Disarankan)</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsFailed(false);
-                    setError(null);
-                    setActiveStep(2);
-                  }}
-                  className="inline-flex items-center gap-2 rounded-xl border border-slate-300 dark:border-white/10 bg-white dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 px-5 py-2.5 text-xs font-semibold text-slate-800 dark:text-slate-200 transition-all active:scale-95 cursor-pointer"
-                >
-                  <ArrowLeft className="h-4 w-4" />
-                  <span>Kembali ke Konfigurasi QC &amp; Model</span>
-                </button>
-              </>
-            ) : (
-              <>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsFailed(false);
-                    setError(null);
-                    setActiveStep(2);
-                  }}
-                  className="inline-flex items-center gap-2 rounded-xl bg-[#5B4DFE] hover:bg-[#4F46E5] px-5 py-2.5 text-xs font-bold text-white shadow-md shadow-[#5B4DFE]/30 transition-all active:scale-95 cursor-pointer"
-                >
-                  <ArrowLeft className="h-4 w-4" />
-                  <span>← Kembali ke Konfigurasi QC &amp; Model (Disarankan)</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsFailed(false);
-                    setError(null);
-                    setActiveStep(1);
-                  }}
-                  className="inline-flex items-center gap-2 rounded-xl border border-slate-300 dark:border-white/10 bg-white dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 px-5 py-2.5 text-xs font-semibold text-slate-800 dark:text-slate-200 transition-all active:scale-95 cursor-pointer"
-                >
-                  <ArrowLeft className="h-4 w-4" />
-                  <span>Kembali ke Unggah &amp; Validasi</span>
-                </button>
-              </>
-            )}
+              <button
+                type="button"
+                onClick={() => {
+                  setIsFailed(false);
+                  setError(null);
+                  setActiveStep(1);
+                }}
+                className={`inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-xs font-semibold transition-all active:scale-95 cursor-pointer shadow-xs ${
+                  isFileCorrupted
+                    ? 'bg-[#0284C7] hover:bg-[#0369A1] text-white font-bold ring-2 ring-[#0284C7]/40'
+                    : 'border border-slate-300 dark:border-white/10 bg-white dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 text-slate-800 dark:text-slate-200'
+                }`}
+              >
+                <ArrowLeft className="h-4 w-4" />
+                <span>Kembali ke Unggah & Validasi (Langkah 1)</span>
+              </button>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
-      {/* ── Progress Bar Utama (Poin #3) ── */}
+      {/* ─── Progress Bar Utama (Poin #3) ── */}
       <div className="rounded-2xl glass-subcard p-4 sm:p-5 space-y-2.5">
         <div className="flex items-center justify-between text-xs">
           <div className="flex items-center gap-2">
@@ -519,19 +563,36 @@ export default function Step3Computation({ analysisId, onComplete }) {
               </span>
             )}
           </div>
-          <span className="font-mono font-bold text-sm text-[#5B4DFE] dark:text-[#06B6D4] tabular-nums">
-            {displayPercent}%
-          </span>
+          <div className="flex items-center gap-3 font-mono text-xs sm:text-sm">
+            {durasiDetik !== null && (
+              <span className="text-slate-600 dark:text-slate-300 font-semibold">
+                Durasi: {Number(durasiDetik).toFixed(1)}s
+              </span>
+            )}
+            <span
+              data-testid="global-progress-percent"
+              className="font-bold text-[#5B4DFE] dark:text-[#06B6D4] tabular-nums"
+            >
+              {formattedDisplayPercent}%
+            </span>
+          </div>
         </div>
+
+        {pesanStatus && (
+          <div className="text-xs text-slate-700 dark:text-slate-300 font-medium">
+            <span>{pesanStatus}</span>
+          </div>
+        )}
 
         <div className="w-full h-3 rounded-full bg-slate-200 dark:bg-white/10 overflow-hidden p-0.5">
           <div
+            data-testid="global-progress-bar"
             className={`h-full rounded-full transition-all duration-500 ${
               isFailed
                 ? 'bg-rose-500'
                 : isCompleted
                 ? 'bg-emerald-500'
-                : 'bg-gradient-to-r from-[#5B4DFE] to-[#06B6D4]'
+                : 'bg-gradient-to-r from-[#5B4DFE] to-[#06B6D4] animate-pulse'
             }`}
             style={{ width: `${Math.max(3, Math.min(100, displayPercent))}%` }}
           />
@@ -545,20 +606,27 @@ export default function Step3Computation({ analysisId, onComplete }) {
           <div className="flex items-center justify-between">
             <h4 className="text-xs font-sans font-bold uppercase tracking-wider text-slate-700 dark:text-slate-400 flex items-center gap-2">
               <Dna className="h-4 w-4 text-[#06B6D4]" />
-              <span>Tahapan Eksekusi Diskrit</span>
+              <span>Tahapan Eksekusi</span>
             </h4>
             <span className="text-xs font-mono font-semibold text-[#5B4DFE] dark:text-[#06B6D4]">
               {isCompleted
                 ? '4 / 4 Tahap Selesai'
-                : `${displayStages.filter((s) => s.status === 'selesai').length} / 4 Tahap Selesai`}
+                : `${displayStages.filter((s) => s.status === 'selesai' || (stageProgress?.[s.id] || 0) >= 100).length} / 4 Tahap Selesai`}
             </span>
           </div>
 
           <div className="space-y-3">
             {displayStages.map((stage) => {
-              const isDone = stage.status === 'selesai';
-              const isRunning = stage.status === 'berjalan';
-              const isFail = stage.status === 'gagal';
+              const persistedPct = Number(stageProgress?.[stage.id]) || 0;
+              const isDone = isCompleted || stage.status === 'selesai' || persistedPct >= 100;
+              const isFail = !isDone && stage.status === 'gagal';
+              const isRunning = !isDone && !isFail && stage.status === 'berjalan';
+              const stagePercent = isDone
+                ? 100
+                : isRunning
+                ? Math.max(45, Math.min(92, persistedPct))
+                : persistedPct;
+              const formattedStagePercent = formatProgressPercent(stagePercent);
 
               return (
                 <div
@@ -608,12 +676,26 @@ export default function Step3Computation({ analysisId, onComplete }) {
                       >
                         {stage.title}
                       </p>
-                      <span className="text-xs font-mono capitalize">
-                        {isDone && <span className="text-emerald-600 dark:text-emerald-400 font-bold">Selesai</span>}
-                        {isRunning && <span className="text-[#0284C7] dark:text-[#06B6D4] font-bold">Berjalan...</span>}
-                        {isFail && <span className="text-rose-600 dark:text-rose-400 font-bold">Gagal</span>}
-                        {!isDone && !isRunning && !isFail && <span className="text-slate-500 font-semibold">Menunggu</span>}
-                      </span>
+                      <div className="flex items-center gap-2 text-xs font-mono">
+                        <span className="capitalize">
+                          {isDone && <span className="text-emerald-600 dark:text-emerald-400 font-bold">Selesai</span>}
+                          {isRunning && <span className="text-[#0284C7] dark:text-[#06B6D4] font-bold">Berjalan...</span>}
+                          {isFail && <span className="text-rose-600 dark:text-rose-400 font-bold">Gagal</span>}
+                          {!isDone && !isRunning && !isFail && <span className="text-slate-500 font-semibold">Menunggu</span>}
+                        </span>
+                        <span
+                          data-testid={`stage-percent-${stage.id}`}
+                          className={`font-bold tabular-nums px-1.5 py-0.5 rounded-md border ${
+                            isDone
+                              ? 'text-emerald-700 dark:text-emerald-300 bg-emerald-100/80 dark:bg-emerald-500/15 border-emerald-300/60 dark:border-emerald-500/30'
+                              : isRunning
+                              ? 'text-cyan-700 dark:text-cyan-300 bg-cyan-100/80 dark:bg-cyan-500/15 border-cyan-300/60 dark:border-cyan-500/30'
+                              : 'text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700'
+                          }`}
+                        >
+                          {formattedStagePercent}%
+                        </span>
+                      </div>
                     </div>
 
                     <p className="text-xs sm:text-sm text-slate-700 dark:text-slate-300 leading-relaxed font-medium">
@@ -625,6 +707,33 @@ export default function Step3Computation({ analysisId, onComplete }) {
                         {stage.message}
                       </p>
                     )}
+
+                    {/* Progress bar per tahap eksekusi */}
+                    <div
+                      role="progressbar"
+                      aria-label={`Progres ${stage.title}`}
+                      aria-valuenow={stagePercent}
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      className="h-1.5 w-full rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden mt-2"
+                    >
+                      <div
+                        className={`h-full rounded-full ${
+                          isDone
+                            ? 'bg-emerald-500 w-full transition-all duration-300'
+                            : isRunning
+                            ? 'bg-cyan-500 animate-pulse transition-all duration-300'
+                            : isFail
+                            ? stagePercent > 0
+                              ? 'bg-rose-500 transition-all duration-300'
+                              : 'bg-rose-500 w-0'
+                            : stagePercent > 0
+                            ? 'bg-cyan-500/70 transition-all duration-300'
+                            : 'bg-slate-300 dark:bg-slate-600 w-0'
+                        }`}
+                        style={{ width: `${stagePercent}%` }}
+                      />
+                    </div>
                   </div>
                 </div>
               );
@@ -639,7 +748,7 @@ export default function Step3Computation({ analysisId, onComplete }) {
                 onClick={onComplete}
                 className="w-full figma-btn-primary py-3.5 text-sm sm:text-base cursor-pointer"
               >
-                <span>Lihat Hasil Analisis & Visualisasi Plot</span>
+                <span>Lihat Hasil Analisis & Visualisasi Plot (Langkah 4)</span>
                 <ArrowRight className="h-4 w-4" />
               </button>
             </div>
@@ -700,10 +809,13 @@ export default function Step3Computation({ analysisId, onComplete }) {
               </div>
             </div>
 
-            <div className="rounded-xl glass-subcard p-3 text-xs sm:text-sm text-slate-800 dark:text-slate-200 flex items-center justify-between font-semibold">
-              <span className="font-sans">Sifat fenotipe target:</span>
-              <span className="font-mono font-bold text-[#0284C7] dark:text-[#06B6D4]">
-                {configParams.trait || uploadSummary?.fenotipe?.sifat_tersedia?.[0] || 'trait_target'}
+            <div className="rounded-xl glass-subcard p-3 flex items-center justify-between text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-300">
+              <span>Sifat fenotipe target:</span>
+              <span
+                data-testid="qc-target-trait-value"
+                className="font-semibold text-slate-900 dark:text-white bg-slate-100 dark:bg-slate-800/60 px-2.5 py-0.5 rounded-md border border-slate-200 dark:border-slate-700 font-mono"
+              >
+                {resolvedTraitName}
               </span>
             </div>
           </div>
@@ -724,13 +836,30 @@ export default function Step3Computation({ analysisId, onComplete }) {
                 </span>
               </div>
               <div className="flex items-center gap-2">
+                {/* Badge Countdown Waktu */}
                 <span className="px-2.5 py-0.5 rounded-full text-xs font-mono bg-cyan-100/90 dark:bg-[#06B6D4]/20 text-cyan-900 dark:text-cyan-300 border border-cyan-300/60 dark:border-[#06B6D4]/30 flex items-center gap-1.5 shadow-sm font-bold">
                   <span className={`h-1.5 w-1.5 rounded-full ${isHovered ? 'bg-amber-500' : 'bg-cyan-500 animate-pulse'}`} />
                   {isHovered ? 'DIJEDA' : `${countdown}s`}
                 </span>
-                <span className="font-mono text-xs font-bold text-slate-700 dark:text-slate-200 bg-white dark:bg-white/10 px-2.5 py-0.5 rounded-lg border border-slate-200 dark:border-white/10 shadow-xs">
-                  Tips Edukatif {tipIndex + 1} / {TIPS_EDUKATIF.length}
-                </span>
+                {/* Tombol Panah Navigasi */}
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={handlePrevTip}
+                    className="rounded-lg border border-slate-300 dark:border-white/10 bg-white/90 dark:bg-white/5 p-1 hover:bg-slate-200 dark:hover:bg-white/10 active:scale-90 text-slate-800 dark:text-slate-200 transition-all duration-100 shadow-sm"
+                    title="Sebelumnya (Reset 6s)"
+                  >
+                    <ChevronLeft className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleNextTip}
+                    className="rounded-lg border border-slate-300 dark:border-white/10 bg-white/90 dark:bg-white/5 p-1 hover:bg-slate-200 dark:hover:bg-white/10 active:scale-90 text-slate-800 dark:text-slate-200 transition-all duration-100 shadow-sm"
+                    title="Berikutnya (Reset 6s)"
+                  >
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -746,37 +875,11 @@ export default function Step3Computation({ analysisId, onComplete }) {
             </div>
 
             {/* Konten Tips Berotasi dengan Efek Transisi Fade-In */}
-            <div key={tipIndex} className="min-h-[92px] space-y-1.5 animate-fade-in">
+            <div key={tipIndex} className="min-h-[80px] space-y-1.5 animate-fade-in pt-1">
               <h6 className="text-sm font-sans font-bold text-slate-900 dark:text-white">{currentTip?.judul}</h6>
               <p className="text-xs sm:text-sm font-serif leading-relaxed text-slate-800 dark:text-slate-200 italic">
                 &ldquo;{currentTip?.teks}&rdquo;
               </p>
-            </div>
-
-            {/* Kontrol Navigasi Manual & Teks Hitung Mundur */}
-            <div className="flex items-center justify-between pt-2 border-t border-slate-200 dark:border-white/10 text-xs">
-              <span className="text-slate-700 dark:text-slate-300 text-xs font-sans flex items-center gap-1.5 font-semibold">
-                <span className={`h-2 w-2 rounded-full ${isHovered ? 'bg-amber-500' : 'bg-cyan-500 animate-pulse'}`} />
-                {isHovered ? 'Rotasi dijeda (kursor diarahkan)' : `Berotasi otomatis dalam ${countdown}s`}
-              </span>
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={handlePrevTip}
-                  className="rounded-lg border border-slate-300 dark:border-white/10 bg-white/90 dark:bg-white/5 p-1.5 hover:bg-slate-200 dark:hover:bg-white/10 active:scale-90 text-slate-800 dark:text-slate-200 transition-all duration-100 shadow-sm"
-                  title="Sebelumnya (Reset 6s)"
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={handleNextTip}
-                  className="rounded-lg border border-slate-300 dark:border-white/10 bg-white/90 dark:bg-white/5 p-1.5 hover:bg-slate-200 dark:hover:bg-white/10 active:scale-90 text-slate-800 dark:text-slate-200 transition-all duration-100 shadow-sm"
-                  title="Berikutnya (Reset 6s)"
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </button>
-              </div>
             </div>
           </div>
         </div>

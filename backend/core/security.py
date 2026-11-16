@@ -48,6 +48,10 @@ def create_token(user_id: int, role: str) -> str:
     return f"{body}.{_sign(body)}"
 
 
+# Alias fungsi create_access_token untuk standar OAuth2
+create_access_token = create_token
+
+
 def decode_token(token: str) -> dict | None:
     try:
         body, signature = token.split(".")

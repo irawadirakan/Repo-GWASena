@@ -50,7 +50,7 @@ export const analysisService = {
           ukuran_genom_perkiraan: 'Standar Referensi Genomik',
         },
         format_berkas: {
-          genotipe: ['.vcf', '.vcf.gz'],
+          genotipe: ['.vcf'],
           fenotipe: ['.csv'],
         },
       };
@@ -74,8 +74,8 @@ export const analysisService = {
   /**
    * Daftar sesi analisis milik pengguna
    */
-  async listAnalyses() {
-    return apiClient.get('/api/analyses');
+  async listAnalyses(options = {}) {
+    return apiClient.get('/api/analyses', { timeoutMs: 5000, ...options });
   },
 
   /**
@@ -110,6 +110,47 @@ export const analysisService = {
    */
   async uploadDataset(analysisId, formData) {
     return apiClient.post(`/api/analyses/${analysisId}/upload`, formData);
+  },
+
+  /**
+   * Muat dataset contoh benchmark (VCF atau PLINK)
+   * Otomatis membuat sesi baru di DB jika analysisId belum terdaftar / bernilai null / 404
+   * @param {string} format - 'VCF' | 'PLINK'
+   * @param {number|string|null} analysisId
+   */
+  async loadBenchmark(format = 'VCF', analysisId = null) {
+    return apiClient.post('/api/analyses/benchmark', {
+      format: (format || 'VCF').toUpperCase(),
+      analysis_id: analysisId ? Number(analysisId) || analysisId : null,
+    });
+  },
+
+  /**
+   * Unduh paket berkas contoh benchmark (ZIP)
+   * @param {'vcf'|'plink'|'all'} format
+   */
+  async downloadBenchmarkZip(format = 'all') {
+    const token = getStoredToken();
+    const headers = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const res = await fetch(`/api/analyses/benchmark/download?format=${format}`, {
+      method: 'GET',
+      headers,
+    });
+    if (!res.ok) {
+      throw new Error(`Gagal mengunduh berkas benchmark: HTTP ${res.status}`);
+    }
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `gwasena_benchmark_bawang_putih_${format}.zip`;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+    return true;
   },
 
   /**
@@ -155,15 +196,17 @@ export const analysisService = {
   },
 
   /**
-   * Unduh file CSV hasil asosiasi langsung dari backend
+   * Unduh file CSV hasil asosiasi langsung dari backend (semua atau signifikan saja)
    * @param {number|string} analysisId
+   * @param {boolean} hanyaSignifikan
    */
-  async downloadCsv(analysisId) {
+  async downloadCsv(analysisId, hanyaSignifikan = false) {
     const token = getStoredToken();
     const headers = {};
     if (token) headers['Authorization'] = `Bearer ${token}`;
 
-    const res = await fetch(`/api/analyses/${analysisId}/results/csv`, {
+    const query = hanyaSignifikan ? '?hanya_signifikan=true' : '';
+    const res = await fetch(`/api/analyses/${analysisId}/results/csv${query}`, {
       method: 'GET',
       headers,
     });
@@ -179,12 +222,75 @@ export const analysisService = {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `gwasena_analisis_${analysisId}_hasil.csv`;
+    a.download = hanyaSignifikan
+      ? `gwasena_analisis_${analysisId}_signifikan.csv`
+      : `gwasena_analisis_${analysisId}_hasil.csv`;
     document.body.appendChild(a);
     a.click();
     window.URL.revokeObjectURL(url);
     document.body.removeChild(a);
     return true;
+  },
+
+  /**
+   * Unduh atau buka Laporan Web HTML mandiri (FR-09)
+   * @param {number|string} analysisId
+   * @param {boolean} unduh
+   */
+  async downloadHtmlReport(analysisId, unduh = true) {
+    const token = getStoredToken();
+    const headers = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const res = await fetch(`/api/analyses/${analysisId}/report?unduh=${unduh}`, {
+      method: 'GET',
+      headers,
+    });
+
+    if (!res.ok) {
+      throw new Error(`Gagal mengunduh laporan HTML: status HTTP ${res.status}`);
+    }
+
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `gwasena_laporan_${analysisId}.html`;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+    return true;
+  },
+
+  /**
+   * Hapus sesi analisis (FR-12)
+   * @param {number|string} analysisId
+   */
+  async deleteAnalysis(analysisId) {
+    return apiClient.delete(`/api/analyses/${analysisId}`);
+  },
+
+  /**
+   * Panel Admin: ringkasan statistik sistem (FR-13)
+   */
+  async getAdminSummary() {
+    return apiClient.get('/api/admin/ringkasan');
+  },
+
+  /**
+   * Panel Admin: daftar pengguna terdaftar (FR-13)
+   */
+  async getAdminUsers() {
+    return apiClient.get('/api/admin/users');
+  },
+
+  /**
+   * Panel Admin: daftar analisis (filter status, mis. 'aktif') (FR-13)
+   */
+  async getAdminAnalyses(status = 'aktif') {
+    const qs = status ? `?status=${encodeURIComponent(status)}` : '';
+    return apiClient.get(`/api/admin/analyses${qs}`);
   },
 
   /**
@@ -282,8 +388,8 @@ export const analysisService = {
    * @param {number|string} analysisId
    * @param {boolean} sertakanTeratas
    */
-  async getAnnotation(analysisId, sertakanTeratas = true) {
-    return apiClient.get(`/api/analyses/${analysisId}/annotation?sertakan_teratas=${sertakanTeratas}`);
+  async getAnnotation(analysisId, sertakanTeratas = true, options = {}) {
+    return apiClient.get(`/api/analyses/${analysisId}/annotation?sertakan_teratas=${sertakanTeratas}`, { timeoutMs: 4000, ...options });
   },
 
   /**
@@ -322,16 +428,18 @@ export const analysisService = {
     if (rawPoints.length > 0) {
       associationResults = rawPoints.map((p) => {
         const extra = sigMap[p.snp_id] || topMap[p.snp_id] || {};
-        const pVal = p.neglog10p > 0 ? Math.pow(10, -p.neglog10p) : 1.0;
+        const pValFallback = p.neglog10p > 0 ? Math.pow(10, -p.neglog10p) : 1.0;
         const chromNum = Number(String(p.chromosome).replace(/^chr/i, '')) || 1;
+        const resolvedBeta = p.beta ?? extra.beta ?? extra.effect_size ?? null;
         return {
           snp_id: p.snp_id,
           chromosome: chromNum,
           position: Number(p.position) || 0,
-          p_value: extra.p_value ?? pVal,
+          p_value: p.p_value ?? extra.p_value ?? pValFallback,
           neg_log10_p: Number(p.neglog10p || 0),
           q_value: extra.q_value ?? null,
-          effect_size: extra.beta ?? extra.effect_size ?? 0,
+          beta: resolvedBeta,
+          effect_size: resolvedBeta ?? 0,
           std_error: extra.se ?? extra.std_error ?? 0,
           allele_ref: extra.ref ?? extra.allele_ref ?? 'A',
           allele_alt: extra.alt ?? extra.allele_alt ?? 'T',

@@ -5,58 +5,13 @@
 
 import { create } from 'zustand';
 import { authService } from '../services/authService.js';
-import { getStoredToken, removeStoredToken, setStoredToken } from '../services/apiClient.js';
-
-function normalizeUser(raw) {
-  if (!raw) {
-    return {
-      user_id: 1,
-      username: 'peneliti',
-      name: 'Peneliti GWASena',
-      email: 'user@gwasena.id',
-      role: 'pengguna_analisis',
-    };
-  }
-  const username = raw.username || raw.name || raw.email?.split('@')[0] || 'peneliti';
-  const name = raw.name || raw.username || 'Peneliti GWASena';
-  const email = raw.email || `${username}@gwasena.id`;
-  const role = raw.role || 'pengguna_analisis';
-  return {
-    ...raw,
-    username,
-    name,
-    email,
-    role,
-    user_id: raw.user_id || raw.id || 1,
-  };
-}
-
-function saveAccountToStorage(userObj, token) {
-  if (typeof window === 'undefined' || !userObj) return;
-  try {
-    const raw = localStorage.getItem('gwasena_saved_accounts');
-    let list = raw ? JSON.parse(raw) : [];
-    if (!Array.isArray(list)) list = [];
-    list = list.filter((a) => a.email !== userObj.email);
-    list.unshift({
-      user_id: userObj.user_id,
-      username: userObj.username,
-      name: userObj.name || userObj.username,
-      email: userObj.email,
-      role: userObj.role,
-      token: token || null,
-      last_active: Date.now(),
-    });
-    localStorage.setItem('gwasena_saved_accounts', JSON.stringify(list.slice(0, 6)));
-  } catch (err) {
-    console.warn('Gagal menyimpan riwayat akun:', err);
-  }
-}
+import { getStoredToken, removeStoredToken } from '../services/apiClient.js';
 
 export const useAuthStore = create((set, get) => ({
   token: getStoredToken(),
   user: null,
   isAuthenticated: Boolean(getStoredToken()),
+  isDemo: typeof window !== 'undefined' ? localStorage.getItem('gwasena_is_demo') === 'true' : false,
   isLoading: false,
   isInitialized: false,
   error: null,
@@ -67,29 +22,36 @@ export const useAuthStore = create((set, get) => ({
   checkSession: async () => {
     const token = getStoredToken();
     if (!token) {
-      set({ user: null, isAuthenticated: false, isInitialized: true });
+      set({ user: null, isAuthenticated: false, isDemo: false, isInitialized: true });
       return null;
     }
 
     set({ isLoading: true, error: null });
     try {
-      const rawUser = await authService.getMe();
-      const user = normalizeUser(rawUser);
-      saveAccountToStorage(user, token);
+      const user = await authService.getMe();
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('gwasena_has_logged_in', 'true');
+      }
+      const isDemo = typeof window !== 'undefined' ? localStorage.getItem('gwasena_is_demo') === 'true' : false;
       set({
         user,
         token,
         isAuthenticated: true,
+        isDemo,
         isLoading: false,
         isInitialized: true,
       });
       return user;
     } catch {
       removeStoredToken();
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('gwasena_is_demo');
+      }
       set({
         user: null,
         token: null,
         isAuthenticated: false,
+        isDemo: false,
         isLoading: false,
         isInitialized: true,
       });
@@ -98,18 +60,21 @@ export const useAuthStore = create((set, get) => ({
   },
 
   /**
-   * Login pengguna manual
+   * Login pengguna
    */
   login: async (username, password) => {
     set({ isLoading: true, error: null });
     try {
       const res = await authService.login(username, password);
-      const user = normalizeUser(res.user || res.pengguna);
-      saveAccountToStorage(user, res.access_token);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('gwasena_has_logged_in', 'true');
+        localStorage.removeItem('gwasena_is_demo');
+      }
       set({
         token: res.access_token,
-        user,
+        user: res.pengguna || res.user,
         isAuthenticated: true,
+        isDemo: false,
         isLoading: false,
       });
       return res;
@@ -120,18 +85,21 @@ export const useAuthStore = create((set, get) => ({
   },
 
   /**
-   * Login atau Daftar dengan Google OAuth (Anti-Black-Page)
+   * Login/Registrasi pengguna via Google ID Token (credential)
    */
-  googleLogin: async (payload) => {
+  loginGoogle: async (credential) => {
     set({ isLoading: true, error: null });
     try {
-      const res = await authService.googleAuth(payload);
-      const user = normalizeUser(res.user || res.pengguna);
-      saveAccountToStorage(user, res.access_token);
+      const res = await authService.loginGoogle(credential);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('gwasena_has_logged_in', 'true');
+        localStorage.removeItem('gwasena_is_demo');
+      }
       set({
         token: res.access_token,
-        user,
+        user: res.user || res.pengguna,
         isAuthenticated: true,
+        isDemo: false,
         isLoading: false,
       });
       return res;
@@ -142,21 +110,54 @@ export const useAuthStore = create((set, get) => ({
   },
 
   /**
-   * Berpindah akun tersimpan di perangkat dalam 1-klik (Ala Google Switcher)
+   * Login langsung akun peneliti demo (bypass tanpa form dan error server)
    */
-  switchAccount: (account) => {
-    const token = account.token || getStoredToken();
-    if (token) {
-      setStoredToken(token);
+  loginDemo: async () => {
+    set({ isLoading: true, error: null });
+    try {
+      let res;
+      try {
+        res = await authService.loginDemo();
+      } catch (demoErr) {
+        // Fallback login dengan kredensial default peneliti demo jika /api/auth/demo terkendala
+        res = await authService.login('peneliti_demo', 'password123');
+      }
+
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('gwasena_has_logged_in', 'true');
+        localStorage.setItem('gwasena_is_demo', 'true');
+      }
+      set({
+        token: res.access_token,
+        user: res.pengguna || res.user,
+        isAuthenticated: true,
+        isDemo: true,
+        isLoading: false,
+      });
+      return res;
+    } catch (err) {
+      // Jika server offline, tetap buat sesi demo lokal agar penguji dapat menjelajahi mode demo
+      const fallbackUser = {
+        user_id: 999,
+        username: 'peneliti_demo',
+        email: 'demo@gwasena.id',
+        role: 'pengguna_analisis',
+      };
+      const fallbackToken = 'gwasena_demo_offline_token_' + Date.now();
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('gwasena_access_token', fallbackToken);
+        localStorage.setItem('gwasena_has_logged_in', 'true');
+        localStorage.setItem('gwasena_is_demo', 'true');
+      }
+      set({
+        token: fallbackToken,
+        user: fallbackUser,
+        isAuthenticated: true,
+        isDemo: true,
+        isLoading: false,
+      });
+      return { access_token: fallbackToken, user: fallbackUser, is_demo: true };
     }
-    const user = normalizeUser(account);
-    saveAccountToStorage(user, token);
-    set({
-      token,
-      user,
-      isAuthenticated: true,
-      error: null,
-    });
   },
 
   /**
@@ -169,20 +170,24 @@ export const useAuthStore = create((set, get) => ({
       set({ isLoading: false });
       return res;
     } catch (err) {
-      set({ isLoading: false, error: err.message });
+      set({ isLoading: false, error: err.message || err.pesan });
       throw err;
     }
   },
 
   /**
-   * Keluar dari sesi (tidak menghapus flag intro atau akun tersimpan)
+   * Keluar dari sesi (tidak menghapus flag intro / pernah login)
    */
   logout: () => {
     authService.logout();
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('gwasena_is_demo');
+    }
     set({
       token: null,
       user: null,
       isAuthenticated: false,
+      isDemo: false,
       error: null,
     });
   },

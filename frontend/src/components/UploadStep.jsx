@@ -5,16 +5,16 @@ export default function UploadStep({ onNext }) {
   const [phenotypeFile, setPhenotypeFile] = useState(null);
   const [errorMsg, setErrorMsg] = useState("");
 
-  // Validasi format genotipe (.vcf, .vcf.gz, atau biner PLINK: .bed, .bim, .fam)
+  // Validasi format genotipe (.vcf atau biner PLINK: .bed, .bim, .fam)
   const handleGenotypeChange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    const allowed = [".vcf", ".gz", ".bed", ".bim", ".fam"];
+    const allowed = [".vcf", ".bed", ".bim", ".fam"];
     const isValid = allowed.some((ext) => file.name.toLowerCase().endsWith(ext));
 
     if (!isValid) {
-      setErrorMsg("Format berkas genotipe harus .vcf, .vcf.gz, atau format PLINK (.bed/.bim/.fam)!");
+      setErrorMsg("Format berkas genotipe harus .vcf atau format PLINK (.bed/.bim/.fam)!");
       setGenotypeFile(null);
     } else {
       setErrorMsg("");

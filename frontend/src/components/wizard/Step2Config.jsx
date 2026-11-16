@@ -10,9 +10,18 @@ import {
   Loader2,
   AlertTriangle,
   Play,
-  Sparkles,
+  HelpCircle,
 } from 'lucide-react';
-import { DEFAULT_ANALYSIS_CONFIG, QC_PARAM_RANGES } from '../../constants/defaultParams.js';
+import {
+  DEFAULT_ANALYSIS_CONFIG,
+  QC_PARAM_RANGES,
+  ORGANISM_GROUPS,
+  ANIMAL_ORGANISM_OPTIONS,
+  PLANT_ORGANISM_OPTIONS,
+  normalizeOrganismCode,
+  getOrganismMeta,
+  resolveTargetTraitName,
+} from '../../constants/defaultParams.js';
 import EduHintTooltip from '../common/EduHintTooltip.jsx';
 import ErrorMessageArea from '../common/ErrorMessageArea.jsx';
 import { analysisService } from '../../services/analysisService.js';
@@ -31,22 +40,38 @@ export default function Step2Config({
   const {
     configParams,
     setConfigParams,
-    setIsSimulated,
-    startSimulation,
     runAnalysis,
+    isComputing,
+    currentAnalysis,
   } = useAnalysisStore();
 
+  const isLockedDuringCompute =
+    isComputing ||
+    ['antre', 'berjalan', 'pending', 'running'].includes(
+      String(currentAnalysis?.status || '').toLowerCase()
+    );
+
+  const initialResolvedTrait = resolveTargetTraitName({
+    analysis: currentAnalysis,
+    configParams,
+    qcSummary: availableTraits.length > 0 ? { trait: availableTraits[0] } : null,
+  });
   const [trait, setTrait] = useState(
-    configParams.trait || (availableTraits.length > 0 ? availableTraits[0] : 'bobot_umbi_g')
+    initialResolvedTrait && initialResolvedTrait !== '—'
+      ? initialResolvedTrait
+      : availableTraits.length > 0
+      ? availableTraits[0]
+      : 'bobot_umbi_g'
   );
 
   // Sinkronkan trait jika availableTraits dimuat dari backend
   useEffect(() => {
     if (availableTraits.length > 0 && (!trait || !availableTraits.includes(trait))) {
-      setTrait(availableTraits[0]);
+      const nextTrait = availableTraits[0];
+      setTrait(nextTrait);
+      setConfigParams({ trait: nextTrait });
     }
-  }, [availableTraits, trait]);
-
+  }, [availableTraits, trait, setConfigParams]);
   const [mind, setMind] = useState(configParams.qc?.mind ?? 0.10);
   const [geno, setGeno] = useState(configParams.qc?.geno ?? 0.10);
   const [maf, setMaf] = useState(configParams.qc?.maf ?? 0.05);
@@ -70,18 +95,10 @@ export default function Step2Config({
   // Model & Koreksi
   const [model, setModel] = useState(configParams.model || 'MLM');
   const [koreksi, setKoreksi] = useState(configParams.koreksi || ['bonferroni', 'fdr']);
-  // TUGAS 7: Default alpha = 0.05
-  const [alpha, setAlpha] = useState(configParams.alpha != null ? Number(configParams.alpha).toFixed(2) : '0.05');
-
-  const handleAlphaStep = (delta) => {
-    const cur = parseFloat(alpha) || 0.05;
-    const next = Math.max(0.01, Math.min(0.20, parseFloat((cur + delta).toFixed(2))));
-    setAlpha(next.toFixed(2));
-  };
+  const [alpha, setAlpha] = useState(configParams.alpha ?? 0.05);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState(null);
-  const [backendNotice501, setBackendNotice501] = useState(null);
 
   // Toggle metode koreksi (bisa multi-select)
   const handleToggleKoreksi = (method) => {
@@ -93,118 +110,284 @@ export default function Step2Config({
     }
   };
 
-  const handleStartAnalysis = async (e, forceSimulation = false) => {
+  const selectedSession = useAnalysisStore((s) => s.currentAnalysis);
+  const selectedConfig = useAnalysisStore((s) => s.configParams);
+  const uploadSummary = useAnalysisStore((s) => s.uploadSummary);
+  const updateConfigParams = useAnalysisStore((s) => s.setConfigParams);
+  const updateSessionData = useAnalysisStore((s) => s.setCurrentAnalysis);
+
+  const detectedInfo =
+    uploadSummary?.detected_organism ||
+    selectedSession?.detected_organism ||
+    selectedConfig?.detectedOrganism ||
+    null;
+  const detectedCode = normalizeOrganismCode(
+    detectedInfo?.organism || selectedSession?.organism || DEFAULT_ANALYSIS_CONFIG.organism
+  );
+
+  const initialOrg = normalizeOrganismCode(
+    selectedConfig?.organism ||
+      selectedSession?.organism ||
+      detectedCode ||
+      DEFAULT_ANALYSIS_CONFIG.organism
+  );
+  const [organism, setOrganism] = useState(initialOrg);
+  const [speciesMode, setSpeciesMode] = useState(() =>
+    getOrganismMeta(initialOrg).isCustom ? 'kustom' : 'auto'
+  );
+  const [customSpeciesInput, setCustomSpeciesInput] = useState(() => {
+    const meta = getOrganismMeta(initialOrg);
+    return meta.isCustom ? initialOrg : '';
+  });
+
+  useEffect(() => {
+    const rawOrg = selectedConfig?.organism || selectedSession?.organism;
+    if (rawOrg) {
+      const norm = normalizeOrganismCode(rawOrg);
+      setOrganism(norm);
+      if (getOrganismMeta(norm).isCustom && speciesMode !== 'kustom') {
+        setSpeciesMode('kustom');
+        setCustomSpeciesInput(rawOrg);
+      }
+    }
+  }, [selectedConfig?.organism, selectedSession?.organism]);
+
+  const organismMeta = getOrganismMeta(organism);
+  const isAutoDetectedMatch = Boolean(
+    (detectedInfo?.auto_detected || uploadSummary?.detected_organism?.auto_detected) &&
+      normalizeOrganismCode(organism) === detectedCode
+  );
+
+  const handleOrganismChange = (nextVal) => {
+    const normalized = normalizeOrganismCode(nextVal);
+    setOrganism(normalized);
+    updateConfigParams({ organism: normalized });
+    if (selectedSession) {
+      updateSessionData({ ...selectedSession, organism: normalized }, { preserveStep: true });
+    }
+  };
+
+  const handleSpeciesModeChange = (mode) => {
+    setSpeciesMode(mode);
+    if (mode === 'auto') {
+      handleOrganismChange(detectedCode);
+      return;
+    }
+    if (mode === 'hewan') {
+      const isAnimal = ANIMAL_ORGANISM_OPTIONS.some((o) => o.value === organism);
+      if (!isAnimal) handleOrganismChange(ANIMAL_ORGANISM_OPTIONS[0].value);
+      return;
+    }
+    if (mode === 'tanaman') {
+      const isPlant = PLANT_ORGANISM_OPTIONS.some((o) => o.value === organism);
+      if (!isPlant) {
+        handleOrganismChange(
+          detectedInfo?.kingdom === 'tanaman' ? detectedCode : PLANT_ORGANISM_OPTIONS[0].value
+        );
+      }
+      return;
+    }
+    if (mode === 'kustom' && customSpeciesInput.trim()) {
+      handleOrganismChange(customSpeciesInput);
+    }
+  };
+
+  const handleStartAnalysis = async (e) => {
     if (e) e.preventDefault();
+    if (isLockedDuringCompute) return;
     setError(null);
-    setBackendNotice501(null);
+    if (speciesMode === 'kustom' && !customSpeciesInput.trim()) {
+      setError('Mohon ketik nama ilmiah spesies target terlebih dahulu (contoh: Felis catus atau Solanum lycopersicum).');
+      return;
+    }
     setIsSubmitting(true);
 
-    const parsedAlpha = parseFloat(alpha);
-    const validAlpha = isNaN(parsedAlpha) || parsedAlpha <= 0 ? 0.05 : parsedAlpha;
-
     const payload = {
+      organism,
       trait,
       qc: {
-        mind: parseFloat(mind) || 0.10,
-        geno: parseFloat(geno) || 0.10,
-        maf: parseFloat(maf) || 0.05,
+        mind: parseFloat(mind),
+        geno: parseFloat(geno),
+        maf: parseFloat(maf),
         hwe: isHweActive && hwe ? (typeof hwe === 'string' ? parseFloat(hwe) : hwe) : null,
         king_cutoff: isKingActive && kingCutoff != null ? parseFloat(kingCutoff) : null,
       },
       n_pc: 3,
       model,
       koreksi,
-      alpha: validAlpha,
+      alpha: parseFloat(alpha) || 0.05,
     };
 
     setConfigParams(payload);
 
     try {
-      if (forceSimulation) {
-        setIsSubmitting(false);
-        startSimulation();
-        onRunSuccess?.({ simulated: true });
-        return;
-      }
-
-      // Eksekusi pipeline melalui store
       const res = await runAnalysis(analysisId, payload);
       setIsSubmitting(false);
       onRunSuccess?.(res);
     } catch (err) {
       setIsSubmitting(false);
-      const isNetworkError = !err.status || err.status === 0 || err.code === 'ERR_NETWORK';
-      const is501 = err.status === 501;
-
-      if (isNetworkError || is501) {
-        console.warn('Backend tidak tersedia (Network / 501), menjalankan mock simulation otomatis:', err);
-        startSimulation();
-        onRunSuccess?.({ simulated: true });
-      } else {
-        console.error('Konfigurasi ditolak backend (HTTP ' + err.status + '):', err);
-        setError({
-          message: err.message || err.pesan || 'Terjadi kesalahan saat memproses parameter analisis.',
-          details: err.details || err.rincian || [],
-        });
-      }
+      console.error('Eksekusi parameter ditolak atau gagal menghubungi server:', err);
+      setError({
+        message: err?.message || err?.pesan || 'Terjadi kesalahan saat memproses parameter analisis.',
+        details: err?.details || err?.rincian || [],
+      });
     }
   };
 
   return (
     <div className="space-y-8 animate-fade-in">
-      {/* ── Header Tahap (TUGAS 9: Tanpa Kata "Langkah X:") ── */}
+      {/* ── Header Langkah ── */}
       <div className="border-b border-slate-200 dark:border-white/10 pb-4">
         <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">
-          Konfigurasi Parameter Quality Control & Model Asosiasi
+          2. Konfigurasi Parameter Quality Control & Model Asosiasi
         </h2>
         <p className="mt-1 text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
           Tentukan sifat agronomi yang diuji, sesuaikan filter penyaringan data varian genomik, serta pilih model asosiasi (GLM atau MLM).
         </p>
       </div>
 
-      {/* ── Banner Petunjuk Fungsi Ikon Tanda Tanya (?) ── */}
-      <div className="rounded-2xl border border-cyan-200 dark:border-cyan-500/30 bg-cyan-50/80 dark:bg-cyan-500/10 p-3.5 sm:p-4 text-xs sm:text-sm text-cyan-950 dark:text-cyan-200 flex items-center gap-2.5 font-medium shadow-sm">
-        <span className="text-base sm:text-lg">💡</span>
-        <span>
-          <strong>Panduan Parameter:</strong> Klik atau arahkan kursor ke ikon tanda tanya (?) di pojok setiap kartu untuk membaca penjelasan ilmiah dan fungsi bagian tersebut.
-        </span>
+      {/* ── Banner Panduan Parameter [EDU-HINT] (Hanya Tampil di Langkah 2) ── */}
+      <div className="flex items-center gap-3 rounded-2xl border border-cyan-300 dark:border-cyan-500/30 bg-cyan-50/90 dark:bg-cyan-950/30 p-3.5 sm:p-4 text-xs sm:text-sm text-cyan-950 dark:text-cyan-200 backdrop-blur-md shadow-sm">
+        <span className="text-lg shrink-0">💡</span>
+        <p className="font-sans leading-relaxed">
+          <strong className="font-bold">Panduan Parameter:</strong> Klik atau arahkan kursor ke ikon tanda tanya (?) di pojok setiap kartu untuk membaca penjelasan ilmiah dan fungsi bagian tersebut.
+        </p>
       </div>
 
       <ErrorMessageArea error={error} onDismiss={() => setError(null)} />
 
-      {/* Banner 501 Transparan & Opsi Simulasi UI */}
-      {backendNotice501 && (
-        <div className="rounded-3xl border border-amber-300 dark:border-amber-500/40 bg-amber-50 dark:bg-amber-500/10 p-5 sm:p-6 backdrop-blur-md animate-fade-in space-y-3">
-          <div className="flex items-start gap-3">
-            <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-            <div className="space-y-1">
-              <h4 className="text-sm font-bold text-slate-900 dark:text-white">
-                Pemberitahuan Transparansi Pipeline (HTTP 501)
-              </h4>
-              <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
-                {backendNotice501}
+      <form onSubmit={handleStartAnalysis} noValidate className="space-y-8">
+        {/* ── Bagian 0: Pemilihan Organisme Target Riset (Dual-Kingdom & Kustom) ── */}
+        <div className="figma-card p-6 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
+            <div>
+              <h3 className="text-lg font-extrabold text-slate-900 dark:text-white flex items-center gap-2 font-sans">
+                <Dna className="h-4 w-4 text-[#0284C7] dark:text-[#06B6D4]" />
+                <span>Organisme Target Riset</span>
+              </h3>
+              <p className="text-xs sm:text-[13px] font-sans text-slate-700 dark:text-slate-300 mt-1 font-medium">
+                Pilih spesies hewan atau tanaman untuk pemetaan gen kandidat otomatis via Ensembl REST API atau referensi GFF3 Lokal.
               </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {isAutoDetectedMatch && (
+                <span
+                  data-testid="auto-detected-organism-badge"
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-bold text-emerald-700 dark:text-emerald-300"
+                >
+                  <span>✓ Terdeteksi otomatis dari berkas dataset Anda</span>
+                </span>
+              )}
+              <span
+                data-testid="config-annotation-source-pill"
+                className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-bold ${
+                  organismMeta.source === 'ensembl'
+                    ? 'border-cyan-500/30 bg-cyan-500/10 text-cyan-700 dark:text-cyan-300'
+                    : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                }`}
+              >
+                {organismMeta.source === 'ensembl'
+                  ? `Ensembl REST API (${organism})`
+                  : 'GFF3 Referensi Lokal'}
+              </span>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3 pt-3 border-t border-amber-200 dark:border-amber-500/20">
-            <button
-              type="button"
-              onClick={(e) => handleStartAnalysis(e, true)}
-              className="inline-flex items-center gap-2 rounded-xl bg-amber-400 hover:bg-amber-300 px-4 py-2 text-xs font-bold text-slate-950 shadow-md transition-all active:scale-[0.99]"
-            >
-              <Sparkles className="h-4 w-4" />
-              <span>Buka Pratinjau Alur Komputasi & Visualisasi UI</span>
-            </button>
-            <span className="text-xs sm:text-[13px] text-slate-700 dark:text-slate-300 font-medium">
-              (Menampilkan antarmuka komputasi & hasil dengan penanda simulasi yang jelas)
-            </span>
+          {/* Filter Mode Pemilihan Spesies */}
+          <div role="tablist" aria-label="Kategori Organisme Target" className="flex flex-wrap gap-2">
+            {[
+              { id: 'auto', label: 'Otomatis (Sesuai Dataset)' },
+              { id: 'hewan', label: 'Hewan' },
+              { id: 'tanaman', label: 'Tanaman' },
+              { id: 'kustom', label: 'Spesies Lainnya (Ketik Nama Ilmiah)' },
+            ].map((tab) => {
+              const active = speciesMode === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  disabled={isLockedDuringCompute}
+                  onClick={() => handleSpeciesModeChange(tab.id)}
+                  className={`rounded-xl px-3.5 py-2 text-xs font-sans font-bold border transition-all cursor-pointer disabled:opacity-60 ${
+                    active
+                      ? 'bg-[#0284C7] dark:bg-[#06B6D4] text-white dark:text-slate-950 border-transparent shadow-sm'
+                      : 'bg-white/70 dark:bg-slate-900/60 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-white/15 hover:border-[#06B6D4]'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              );
+            })}
           </div>
-        </div>
-      )}
 
-      {/* TUGAS 7: noValidate pada form untuk menghilangkan error step browser bawaan */}
-      <form onSubmit={(e) => handleStartAnalysis(e, false)} noValidate className="space-y-8">
+          {speciesMode === 'kustom' ? (
+            <div className="max-w-lg space-y-1.5">
+              <label
+                htmlFor="custom-organism-input"
+                className="block text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300"
+              >
+                Ketik Nama Ilmiah atau Kode Spesies Ensembl
+              </label>
+              <input
+                id="custom-organism-input"
+                type="text"
+                aria-label="Ketik Nama Ilmiah Spesies"
+                placeholder="Contoh: Felis catus atau Solanum tuberosum"
+                value={customSpeciesInput}
+                disabled={isLockedDuringCompute}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setCustomSpeciesInput(val);
+                  if (val.trim()) {
+                    handleOrganismChange(val);
+                  }
+                }}
+                className="w-full rounded-2xl border border-slate-300 dark:border-white/20 bg-white dark:bg-slate-900/90 px-4 py-3 text-sm font-sans font-bold text-slate-900 dark:text-white focus:outline-none focus:border-[#06B6D4] focus:ring-2 focus:ring-[#06B6D4]/20 shadow-sm disabled:opacity-60"
+              />
+              <p className="text-[11px] font-medium text-slate-600 dark:text-slate-300">
+                Kode Ensembl aktif:{' '}
+                <code className="font-mono font-bold text-[#0284C7] dark:text-[#06B6D4]">{organism}</code>{' '}
+                (mendukung seluruh spesies hewan &amp; tanaman di Ensembl REST API).
+              </p>
+            </div>
+          ) : (
+            <div className="max-w-md space-y-1.5">
+              <label
+                htmlFor="organism-target-select"
+                className="block text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300"
+              >
+                Spesies Organisme Target
+              </label>
+              <select
+                id="organism-target-select"
+                aria-label="Organisme Target Riset"
+                value={organism}
+                onChange={(e) => handleOrganismChange(e.target.value)}
+                disabled={isLockedDuringCompute}
+                className="w-full rounded-2xl border border-slate-300 dark:border-white/20 bg-white dark:bg-slate-900/90 px-4 py-3 text-sm font-sans font-bold text-slate-900 dark:text-white focus:outline-none focus:border-[#06B6D4] focus:ring-2 focus:ring-[#06B6D4]/20 shadow-sm disabled:opacity-60"
+              >
+                {speciesMode === 'auto'
+                  ? ORGANISM_GROUPS.map((group) => (
+                      <optgroup key={group.groupLabel} label={group.groupLabel}>
+                        {group.options.map((opt) => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ))
+                  : (speciesMode === 'hewan' ? ANIMAL_ORGANISM_OPTIONS : PLANT_ORGANISM_OPTIONS).map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+              </select>
+            </div>
+          )}
+        </div>
+
         {/* ── Bagian A: Pemilihan Sifat Fenotipe (Trait) ── */}
         <div className="figma-card p-6 space-y-4">
           <div className="flex items-center justify-between">
@@ -220,13 +403,13 @@ export default function Step2Config({
           </div>
 
           <p className="text-xs text-slate-600 dark:text-slate-300 font-sans">
-            Pilih satu karakter agronomi kuantitatif dari berkas CSV yang telah divalidasi:
+            Pilih satu sifat fenotipe target dari berkas CSV yang telah divalidasi:
           </p>
 
           <div className="max-w-md">
             <select
               value={trait}
-              onChange={(e) => setTrait(e.target.value)}
+              onChange={(e) => { setTrait(e.target.value); setConfigParams({ trait: e.target.value }); }}
               className="w-full rounded-xl border border-slate-300 dark:border-white/10 bg-[#F1F4FD] dark:bg-[#0F172E] py-2.5 px-3.5 text-sm font-mono font-medium text-slate-900 dark:text-white focus:border-[#5B4DFE] focus:outline-none focus:ring-1 focus:ring-[#5B4DFE] cursor-pointer"
             >
               {availableTraits.length > 0 ? (
@@ -261,7 +444,7 @@ export default function Step2Config({
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* 1. Missingness per Sampel (mind) */}
+            {/* 1. Missingness per Sampel (mind) - Evaluasi Tester Poin 12 */}
             <div className="space-y-2 glass-subcard p-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
@@ -271,26 +454,26 @@ export default function Step2Config({
                   <EduHintTooltip hintKey="mind" />
                 </div>
                 <span className="font-mono text-xs font-bold text-[#5B4DFE] dark:text-[#06B6D4] tabular-nums">
-                  {mind}
+                  {Number(mind).toFixed(2)}
                 </span>
               </div>
               <input
                 id="mind"
                 type="range"
-                min={0}
-                max={0.50}
-                step={0.01}
+                min="0.00"
+                max="0.50"
+                step="0.01"
                 value={mind}
                 onChange={(e) => setMind(e.target.value)}
                 className="w-full accent-[#5B4DFE] dark:accent-[#06B6D4] cursor-pointer"
               />
-              <div className="flex items-center justify-between text-xs text-slate-600 dark:text-slate-400 font-sans font-medium">
+              <div className="flex items-center justify-between text-[11px] font-sans font-medium text-slate-700 dark:text-slate-300">
                 <span>Rentang nilai: 0.00 – 0.50</span>
                 <span>Default: 0.10 (&gt;10% sampel hilang disaring)</span>
               </div>
             </div>
 
-            {/* 2. Missingness per SNP (geno) */}
+            {/* 2. Missingness per SNP (geno) - Evaluasi Tester Poin 12 */}
             <div className="space-y-2 glass-subcard p-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
@@ -300,26 +483,26 @@ export default function Step2Config({
                   <EduHintTooltip hintKey="geno" />
                 </div>
                 <span className="font-mono text-sm font-bold text-[#0284C7] dark:text-[#06B6D4] tabular-nums">
-                  {geno}
+                  {Number(geno).toFixed(2)}
                 </span>
               </div>
               <input
                 id="geno"
                 type="range"
-                min={0}
-                max={0.50}
-                step={0.01}
+                min="0.00"
+                max="0.50"
+                step="0.01"
                 value={geno}
                 onChange={(e) => setGeno(e.target.value)}
                 className="w-full accent-[#0284C7] dark:accent-[#06B6D4] cursor-pointer"
               />
-              <div className="flex items-center justify-between text-xs text-slate-600 dark:text-slate-400 font-sans font-medium">
+              <div className="flex items-center justify-between text-[11px] font-sans font-medium text-slate-700 dark:text-slate-300">
                 <span>Rentang nilai: 0.00 – 0.50</span>
                 <span>Default: 0.10 (&gt;10% SNP hilang disaring)</span>
               </div>
             </div>
 
-            {/* 3. Minor Allele Frequency (maf) */}
+            {/* 3. Minor Allele Frequency (maf) - Evaluasi Tester Poin 12 */}
             <div className="space-y-2 glass-subcard p-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
@@ -329,22 +512,22 @@ export default function Step2Config({
                   <EduHintTooltip hintKey="maf" />
                 </div>
                 <span className="font-mono text-sm font-bold text-[#0284C7] dark:text-[#06B6D4] tabular-nums">
-                  {maf}
+                  {Number(maf).toFixed(2)}
                 </span>
               </div>
               <input
                 id="maf"
                 type="range"
-                min={0.01}
-                max={0.50}
-                step={0.01}
+                min="0.01"
+                max="0.50"
+                step="0.01"
                 value={maf}
                 onChange={(e) => setMaf(e.target.value)}
                 className="w-full accent-[#0284C7] dark:accent-[#06B6D4] cursor-pointer"
               />
-              <div className="flex items-center justify-between text-xs text-slate-600 dark:text-slate-400 font-sans font-medium">
+              <div className="flex items-center justify-between text-[11px] font-sans font-medium text-slate-700 dark:text-slate-300">
                 <span>Rentang nilai: 0.01 – 0.50</span>
-                <span>Default: 0.05 (saring alel langka &lt;5%)</span>
+                <span>Default: 0.05 (saring alel &lt;5%)</span>
               </div>
             </div>
 
@@ -388,20 +571,20 @@ export default function Step2Config({
                 id="king"
                 type="range"
                 disabled={!isKingActive}
-                min={0.05}
-                max={0.50}
-                step={0.001}
+                min={QC_PARAM_RANGES.king_cutoff.min}
+                max={QC_PARAM_RANGES.king_cutoff.max}
+                step={QC_PARAM_RANGES.king_cutoff.step}
                 value={kingCutoff ?? 0.177}
                 onChange={(e) => setKingCutoff(e.target.value)}
                 className={`w-full accent-[#0284C7] dark:accent-[#06B6D4] ${isKingActive ? 'cursor-pointer' : 'cursor-not-allowed opacity-40'}`}
               />
-              <div className="flex items-center justify-between text-xs text-slate-600 dark:text-slate-400 font-sans font-medium">
+              <div className="flex items-center justify-between text-[11px] font-sans font-medium text-slate-700 dark:text-slate-300">
                 <span>Rentang nilai: 0.05 – 0.50</span>
-                <span>{isKingActive ? 'Rekomendasi: 0.177' : 'Nonaktif untuk klonal'}</span>
+                <span>Rekomendasi: 0.177 (Nonaktif secara bawaan)</span>
               </div>
             </div>
 
-            {/* 5. Hardy-Weinberg Equilibrium (hwe) */}
+            {/* 5. Hardy-Weinberg Equilibrium (hwe) - Input khusus dengan catatan agronomi */}
             <div className={`md:col-span-2 space-y-3 glass-subcard p-4 transition-all duration-200 ${!isHweActive ? 'opacity-85' : ''}`}>
               <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-2">
                 <label className="flex items-center gap-2 cursor-pointer select-none">
@@ -428,7 +611,7 @@ export default function Step2Config({
                     Ambang Batas HWE p-value (hwe)
                   </span>
                   <span className="text-xs sm:text-[13px] text-slate-700 dark:text-slate-300 font-medium font-sans">
-                    {isHweActive ? 'Nilai valid: > 0 hingga < 1 (Rekomendasi: 1e-6)' : 'Nonaktif secara bawaan untuk tanaman klonal'}
+                    {isHweActive ? 'Rekomendasi nilai awal: 1e-6' : 'Nonaktif secara default. Aktifkan untuk populasi kawin acak (seperti hewan/ternak), dan nonaktifkan untuk varietas klonal/penyerbuk sendiri (tanaman).'}
                   </span>
                 </div>
                 {isHweActive ? (
@@ -450,7 +633,7 @@ export default function Step2Config({
               <div className="rounded-xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 p-3.5 text-xs sm:text-sm text-slate-800 dark:text-slate-200 leading-relaxed flex items-start gap-2.5 font-medium">
                 <Info className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
                 <span className="leading-relaxed">
-                  <strong>Catatan Ambang HWE & Kinship:</strong> Opsional (Nonaktif secara bawaan — direkomendasikan tetap nonaktif untuk populasi klonal, vegetatif, atau struktur silang spesifik). Jika diaktifkan pada populasi alami/kawin acak, sesuaikan ambang agar varian biologis penting tidak tereliminasi.
+                  <strong>Catatan Penggunaan Filter HWE & Kinship:</strong> Filter ini bersifat opsional. Aktifkan HWE terutama pada analisis populasi hewan atau organisme dengan perkawinan acak. Untuk tanaman galur inbred, klonal, atau silang dalam, disarankan tetap menonaktifkan filter ini guna mencegah hilangnya varian sejati.
                 </span>
               </div>
             </div>
@@ -474,10 +657,8 @@ export default function Step2Config({
             </span>
           </div>
 
-          <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed font-sans">
-            Principal Component Analysis (PCA) dijalankan secara otomatis setelah tahap QC untuk
-            menghasilkan <strong>3 komponen utama (PC1–PC3)</strong> sebagai kovariat struktur populasi.
-            Tahap ini <strong>tidak dapat dilewati</strong> demi mencegah temuan asosiasi positif palsu akibat stratifikasi geografis aksesi.
+          <p className="text-xs sm:text-[13px] text-slate-700 dark:text-slate-300 leading-relaxed font-sans font-medium">
+            Principal Component Analysis (PCA) dihitung secara deterministik menggunakan dekomposisi nilai singular (SVD / PLINK 2 <code>--pca 3</code>) setelah tahap LD Pruning otomatis dan penyaringan QC untuk menghasilkan <strong>3 komponen utama (PC1–PC3)</strong> sebagai kovariat struktur populasi. Tahap ini <strong>tidak dapat dilewati</strong> demi mencegah temuan asosiasi positif palsu (<em>spurious associations</em>) akibat stratifikasi geografis.
           </p>
         </div>
 
@@ -495,75 +676,89 @@ export default function Step2Config({
             <span className="text-xs text-slate-500 dark:text-slate-400 font-sans">Pilih Salah Satu Model</span>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Model 1: GLM */}
+          <div role="radiogroup" aria-label="Pilih model uji asosiasi" className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Model 1: GLM (Single Mutually Exclusive Choice, BR-03) */}
             <div
-              onClick={() => setModel('GLM')}
-              className={`glass-subcard p-5 cursor-pointer transition-all duration-150 active:scale-[0.985] flex flex-col justify-between ${
+              role="radio"
+              aria-checked={model === 'GLM'}
+              tabIndex={0}
+              onClick={() => !isLockedDuringCompute && setModel('GLM')}
+              onKeyDown={(e) => {
+                if ((e.key === 'Enter' || e.key === ' ') && !isLockedDuringCompute) {
+                  e.preventDefault();
+                  setModel('GLM');
+                }
+              }}
+              className={`glass-subcard p-6 cursor-pointer transition-all duration-200 active:scale-[0.985] rounded-3xl ${
                 model === 'GLM'
-                  ? 'border-[#5B4DFE] dark:border-[#5B4DFE] ring-2 ring-[#5B4DFE]/40 bg-indigo-50/80 dark:bg-[#5B4DFE]/15'
+                  ? 'border-[#5B4DFE] dark:border-[#5B4DFE] ring-2 ring-[#5B4DFE]/40 bg-indigo-50/80 dark:bg-[#5B4DFE]/15 shadow-md'
                   : 'hover:border-slate-400 hover:-translate-y-[1px]'
               }`}
             >
-              <div>
-                <div className="relative text-center pb-3 border-b border-slate-200 dark:border-white/10 mb-3">
-                  <div className="absolute right-0 top-0">
-                    <EduHintTooltip hintKey="glm" />
-                  </div>
-                  <h4 className="text-xl font-extrabold text-slate-900 dark:text-white font-sans tracking-tight">GLM</h4>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 font-sans font-medium mt-0.5">(General Linear Model)</p>
+              <div className="relative text-center pb-3 border-b border-slate-200/80 dark:border-white/10 mb-3.5">
+                <div className="absolute right-0 top-0">
+                  <EduHintTooltip hintKey="glm" />
                 </div>
-                <p className="text-xs sm:text-[13px] text-slate-700 dark:text-slate-300 leading-relaxed font-sans font-medium">
-                  Menguji asosiasi genetik menggunakan kovariat struktur populasi (PCA) sebagai efek tetap. Komputasi cepat dan ideal untuk populasi tanpa struktur kekerabatan kompleks.
+                <h4 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white font-sans">
+                  GLM
+                </h4>
+                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 font-sans mt-0.5">
+                  (General Linear Model)
                 </p>
               </div>
-
-              {model === 'GLM' && (
-                <div className="mt-4 pt-3 border-t border-emerald-200 dark:border-emerald-500/20 flex items-center gap-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-400 animate-fade-down">
-                  <CheckCircle2 className="h-4 w-4 shrink-0 stroke-[2.5] animate-pop-in" />
-                  <span>✓ Kovariat struktur populasi (PC1–PC3) disertakan secara otomatis</span>
-                </div>
-              )}
+              <div className="space-y-2 text-xs sm:text-[13px] text-slate-700 dark:text-slate-300 leading-relaxed font-sans font-medium">
+                <p>Menguji asosiasi antara SNP dan sifat fenotipe dengan menggunakan kovariat struktur populasi (PC1–PC3) sebagai efek tetap.</p>
+                <p className="text-emerald-600 dark:text-emerald-400 font-medium text-xs sm:text-sm mt-2">
+                  Komputasi lebih cepat dan sesuai untuk populasi dengan tingkat kekerabatan rendah.
+                </p>
+              </div>
             </div>
 
-            {/* Model 2: MLM (Rekomendasi Struktur Populasi Kompleks) */}
+            {/* Model 2: MLM (Single Mutually Exclusive Choice, BR-03) */}
             <div
-              onClick={() => setModel('MLM')}
-              className={`glass-subcard p-5 cursor-pointer transition-all duration-150 active:scale-[0.985] flex flex-col justify-between ${
+              role="radio"
+              aria-checked={model === 'MLM'}
+              tabIndex={0}
+              onClick={() => !isLockedDuringCompute && setModel('MLM')}
+              onKeyDown={(e) => {
+                if ((e.key === 'Enter' || e.key === ' ') && !isLockedDuringCompute) {
+                  e.preventDefault();
+                  setModel('MLM');
+                }
+              }}
+              className={`glass-subcard p-6 cursor-pointer transition-all duration-200 active:scale-[0.985] rounded-3xl ${
                 model === 'MLM'
-                  ? 'border-cyan-600 dark:border-[#06B6D4] ring-2 ring-cyan-500/40 bg-cyan-50/80 dark:bg-[#06B6D4]/15'
+                  ? 'border-cyan-600 dark:border-[#06B6D4] ring-2 ring-cyan-500/40 bg-cyan-50/80 dark:bg-[#06B6D4]/15 shadow-md'
                   : 'hover:border-slate-400 hover:-translate-y-[1px]'
               }`}
             >
-              <div>
-                <div className="relative text-center pb-3 border-b border-slate-200 dark:border-white/10 mb-3">
-                  <div className="absolute left-0 top-0">
-                    <span className="rounded-full bg-cyan-100 dark:bg-[#06B6D4]/20 border border-cyan-300 dark:border-[#06B6D4]/30 px-2.5 py-0.5 text-[10px] sm:text-[11px] font-bold text-cyan-900 dark:text-[#06B6D4] font-sans">
-                      Direkomendasikan
-                    </span>
-                  </div>
-                  <div className="absolute right-0 top-0">
-                    <EduHintTooltip hintKey="mlm" />
-                  </div>
-                  <h4 className="text-xl font-extrabold text-slate-900 dark:text-white font-sans tracking-tight">MLM</h4>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 font-sans font-medium mt-0.5">(Mixed Linear Model)</p>
+              <div className="relative text-center pb-3 border-b border-slate-200/80 dark:border-white/10 mb-3.5">
+                <div className="absolute left-0 top-0">
+                  <span className="rounded-full bg-cyan-100 dark:bg-[#06B6D4]/20 border border-cyan-300 dark:border-[#06B6D4]/30 px-2.5 py-0.5 text-[11px] font-bold text-cyan-900 dark:text-[#06B6D4] font-sans">
+                    Direkomendasikan
+                  </span>
                 </div>
-                <p className="text-xs sm:text-[13px] text-slate-700 dark:text-slate-300 leading-relaxed font-sans font-medium">
-                  Menggabungkan kovariat PCA (efek tetap) dan matriks kekerabatan genetik / Kinship (efek acak). Sangat direkomendasikan untuk populasi berkerabat atau klonal guna menekan temuan positif palsu.
+                <div className="absolute right-0 top-0">
+                  <EduHintTooltip hintKey="mlm" />
+                </div>
+                <h4 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white font-sans">
+                  MLM
+                </h4>
+                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 font-sans mt-0.5">
+                  (Mixed Linear Model)
                 </p>
               </div>
-
-              {model === 'MLM' && (
-                <div className="mt-4 pt-3 border-t border-emerald-200 dark:border-emerald-500/20 flex items-center gap-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-400 animate-fade-down">
-                  <CheckCircle2 className="h-4 w-4 shrink-0 stroke-[2.5] animate-pop-in" />
-                  <span>✓ Kovariat PCA (PC1–PC3) &amp; Matriks Kinship disertakan secara otomatis</span>
-                </div>
-              )}
+              <div className="space-y-2 text-xs sm:text-[13px] text-slate-700 dark:text-slate-300 leading-relaxed font-sans font-medium">
+                <p>Menguji asosiasi antara SNP dan sifat fenotipe dengan menggabungkan kovariat struktur populasi (PC1–PC3) sebagai efek tetap dan matriks kekerabatan genetik (Kinship) sebagai efek acak.</p>
+                <p className="text-emerald-600 dark:text-emerald-400 font-medium text-xs sm:text-sm mt-2">
+                  Lebih sesuai untuk populasi dengan struktur kekerabatan atau hubungan genetik yang kompleks.
+                </p>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* ── Bagian E: Koreksi Multiple Testing & Alpha (TUGAS 7) ── */}
+        {/* ─── Bagian E: Koreksi Multiple Testing & Alpha ── */}
         <div className="figma-card p-6 space-y-4">
           <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-3">
             <div className="flex items-center gap-2.5">
@@ -574,9 +769,7 @@ export default function Step2Config({
                 Koreksi Multiple Testing & Ambang Signifikansi
               </h3>
             </div>
-            <span className="text-xs font-bold text-[#5B4DFE] dark:text-[#06B6D4] font-sans">
-              Pilih Salah Satu atau Keduanya
-            </span>
+            <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 font-sans">Pilih Salah Satu atau Keduanya</span>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -614,84 +807,87 @@ export default function Step2Config({
               </div>
             </label>
 
-            {/* Input Alpha dengan Kontrol Kustom & Tombol Panah Atas/Bawah */}
-            <div className="glass-subcard p-4 space-y-2">
-              <label htmlFor="alpha" className="block text-sm font-bold text-slate-900 dark:text-white font-sans">
-                Ambang Alpha Signifikansi
-              </label>
+            {/* Ambang Alpha Signifikansi dengan Edu-Hint & Interactive Chips */}
+            <div className="flex-1 min-w-[260px] p-4 rounded-2xl bg-white/70 dark:bg-slate-900/50 border border-slate-200/90 dark:border-slate-800/90 shadow-sm flex flex-col justify-between backdrop-blur-md">
+              <div>
+                {/* Header Label + Ikon EDU-HINT (?) */}
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-1.5">
+                    <label htmlFor="alpha" className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100 font-sans">
+                      Ambang Alpha Signifikansi
+                    </label>
+                    {/* Tombol Edu-Hint Interaktif (Draggable Floating Panel) */}
+                    <EduHintTooltip hintKey="alpha" />
+                  </div>
+                  <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 font-mono">
+                    α = {isNaN(Number(alpha)) ? '0.05' : Number(alpha).toFixed(2)}
+                  </span>
+                </div>
 
-              <div className="relative flex items-center">
-                <input
-                  id="alpha"
-                  type="text"
-                  inputMode="decimal"
-                  value={alpha}
-                  onChange={(e) => {
-                    const val = e.target.value.replace(/,/g, '.');
-                    setAlpha(val);
-                  }}
-                  className="w-full font-mono text-sm font-bold text-slate-900 dark:text-[#06B6D4] bg-white dark:bg-[#121B38] rounded-xl border border-slate-300 dark:border-white/10 py-2 pl-3 pr-10 focus:outline-none focus:border-[#0284C7]"
-                />
-                <div className="absolute right-1.5 flex flex-col gap-0.5">
+                {/* Kotak Input Angka */}
+                <div className="relative mb-3">
+                  <input
+                    id="alpha"
+                    type="number"
+                    step="any"
+                    min="0.0001"
+                    max="0.20"
+                    value={alpha}
+                    onChange={(e) => {
+                      const raw = e.target.value.replace(',', '.');
+                      setAlpha(raw);
+                    }}
+                    className="w-full px-3.5 py-2 text-sm sm:text-base font-bold text-center rounded-xl bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white shadow-inner focus:outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 transition-all font-mono"
+                  />
+                </div>
+
+                {/* Tombol Kapsul Preset Interaktif Berwarna Jelas (Clickable Chips) */}
+                <div className="flex flex-wrap gap-1.5 mb-2.5">
+                  {/* 1. Ketat (Nuansa Biru / Indigo) */}
                   <button
                     type="button"
-                    onClick={() => handleAlphaStep(0.01)}
-                    className="h-3.5 w-6 flex items-center justify-center rounded bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/20 text-[9px] text-slate-700 dark:text-slate-200 select-none cursor-pointer"
-                    title="Tambah 0.01"
+                    onClick={() => setAlpha('0.01')}
+                    className={`px-2.5 py-1 text-xs rounded-lg font-bold border transition-all duration-150 active:scale-95 cursor-pointer ${
+                      Number(alpha) === 0.01
+                        ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-500/30 ring-2 ring-blue-400/40'
+                        : 'bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200/80 dark:bg-blue-950/40 dark:hover:bg-blue-900/50 dark:text-blue-300 dark:border-blue-800/60'
+                    }`}
                   >
-                    ▲
+                    0.01 (Ketat)
                   </button>
+
+                  {/* 2. Standar — Default (Nuansa Cyan / Teal) */}
                   <button
                     type="button"
-                    onClick={() => handleAlphaStep(-0.01)}
-                    className="h-3.5 w-6 flex items-center justify-center rounded bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/20 text-[9px] text-slate-700 dark:text-slate-200 select-none cursor-pointer"
-                    title="Kurangi 0.01"
+                    onClick={() => setAlpha('0.05')}
+                    className={`px-2.5 py-1 text-xs rounded-lg font-bold border transition-all duration-150 active:scale-95 cursor-pointer ${
+                      Number(alpha) === 0.05
+                        ? 'bg-teal-600 text-white border-teal-600 shadow-md shadow-teal-500/30 ring-2 ring-teal-400/40'
+                        : 'bg-teal-50 hover:bg-teal-100 text-teal-700 border-teal-200/80 dark:bg-teal-950/40 dark:hover:bg-teal-900/50 dark:text-teal-300 dark:border-teal-800/60'
+                    }`}
                   >
-                    ▼
+                    0.05 (Standar — Default)
+                  </button>
+
+                  {/* 3. Eksploratori (Nuansa Amber / Oranye / Violet) */}
+                  <button
+                    type="button"
+                    onClick={() => setAlpha('0.10')}
+                    className={`px-2.5 py-1 text-xs rounded-lg font-bold border transition-all duration-150 active:scale-95 cursor-pointer ${
+                      Number(alpha) === 0.1 || alpha === '0.10'
+                        ? 'bg-amber-600 text-white border-amber-600 shadow-md shadow-amber-500/30 ring-2 ring-amber-400/40'
+                        : 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-200/80 dark:bg-amber-950/40 dark:hover:bg-amber-900/50 dark:text-amber-300 dark:border-amber-800/60'
+                    }`}
+                  >
+                    0.10 (Eksploratori)
                   </button>
                 </div>
               </div>
 
-              {/* Tombol Kapsul Pilihan Cepat (Preset Chips) */}
-              <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                <button
-                  type="button"
-                  onClick={() => setAlpha('0.01')}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                    Number(alpha) === 0.01
-                      ? 'bg-[#5B4DFE] text-white shadow-sm font-bold'
-                      : 'bg-slate-100 dark:bg-white/5 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-white/10'
-                  }`}
-                >
-                  0.01 (Ketat)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setAlpha('0.05')}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                    Number(alpha) === 0.05
-                      ? 'bg-[#0284C7] dark:bg-[#06B6D4] text-white dark:text-slate-950 shadow-sm font-bold'
-                      : 'bg-slate-100 dark:bg-white/5 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-white/10'
-                  }`}
-                >
-                  0.05 (Standar — Default)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setAlpha('0.10')}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                    Number(alpha) === 0.10
-                      ? 'bg-[#5B4DFE] text-white shadow-sm font-bold'
-                      : 'bg-slate-100 dark:bg-white/5 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-white/10'
-                  }`}
-                >
-                  0.10 (Eksploratori)
-                </button>
-              </div>
-
-              <span className="text-xs text-slate-600 dark:text-slate-400 block font-sans font-medium">
-                Rentang valid: 0.0001 – 0.20 | Format desimal bertitik (contoh: 0.10)
-              </span>
+              {/* Keterangan Rentang Nilai Valid */}
+              <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                Nilai valid: 0.0001 – 0.20 (Rekomendasi standar: 0.05)
+              </p>
             </div>
           </div>
         </div>
@@ -700,8 +896,9 @@ export default function Step2Config({
         <div className="flex items-center justify-between pt-4 border-t border-slate-200 dark:border-white/10">
           <button
             type="button"
+            disabled={isSubmitting || isLockedDuringCompute}
             onClick={onPrev}
-            className="figma-btn-secondary cursor-pointer"
+            className="figma-btn-secondary disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <ArrowLeft className="h-4 w-4" />
             <span>Kembali ke Unggah Berkas</span>
@@ -709,8 +906,8 @@ export default function Step2Config({
 
           <button
             type="submit"
-            disabled={isSubmitting}
-            className="figma-btn-primary cursor-pointer"
+            disabled={isSubmitting || isLockedDuringCompute}
+            className="figma-btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isSubmitting ? (
               <>

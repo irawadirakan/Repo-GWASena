@@ -7,7 +7,7 @@ import { memo } from 'react';
 function DnaBackdrop({ children, showDna = false, showVignette = false, className = '' }) {
   return (
     <div
-      className={`relative z-10 min-h-screen w-full overflow-hidden bg-transparent ${className}`}
+      className={`relative z-10 min-h-screen w-full overflow-x-clip bg-transparent ${className}`}
     >
       {/* ── Background Glow & DNA Graphics (Only shown when showDna is true) ── */}
       {showDna && (

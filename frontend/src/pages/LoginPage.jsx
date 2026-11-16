@@ -3,17 +3,15 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Eye, EyeOff, Lock, User, ArrowRight, CheckCircle2, Loader2, Sparkles } from 'lucide-react';
 import { useAuthStore } from '../store/useAuthStore.js';
 import ErrorMessageArea from '../components/common/ErrorMessageArea.jsx';
-import GoogleAuthModal, { GoogleIcon } from '../components/common/GoogleAuthModal.jsx';
 
 /**
  * LoginPage (Autentikasi Pengguna - Figma Aligned)
  * Acuan: 01 — Login.png, 01 — Login (Light).png, 01b — Login_ Kredensial Salah.png
- * Fitur: Masuk dengan Akun Biasa, Akun Google OAuth E2E, dan Akun Demo Cepat.
  */
 export default function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { login, googleLogin, isLoading } = useAuthStore();
+  const { login, loginDemo, loginGoogle, isLoading } = useAuthStore();
 
   // Ambil state pendaftaran jika pengguna baru dialihkan dari registrasi
   const registeredSuccess = location.state?.registered;
@@ -24,28 +22,59 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState(null);
-  const [isGoogleModalOpen, setIsGoogleModalOpen] = useState(false);
 
-  // Inisialisasi Google Identity Services jika VITE_GOOGLE_CLIENT_ID tersedia
-  useEffect(() => {
-    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-    if (clientId && window.google?.accounts?.id) {
-      window.google.accounts.id.initialize({
-        client_id: clientId,
-        callback: async (response) => {
-          if (response?.credential) {
-            try {
-              await googleLogin({ credential: response.credential });
-              const destination = location.state?.from?.pathname || '/dashboard';
-              navigate(destination, { replace: true });
-            } catch (err) {
-              setError(err);
-            }
-          }
-        },
-      });
+  const handleGoogleCredentialResponse = async (response) => {
+    if (!response?.credential) return;
+    try {
+      setError(null);
+      await loginGoogle(response.credential);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('gwasena_has_logged_in', 'true');
+        localStorage.removeItem('gwasena_is_demo');
+      }
+      const destination = location.state?.from?.pathname || '/dashboard';
+      navigate(destination, { replace: true });
+    } catch (err) {
+      setError(err);
     }
-  }, [googleLogin, location.state, navigate]);
+  };
+
+  useEffect(() => {
+    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || '716278421982-m52k4f9lojkmpr22hg861skfj6pqktkd.apps.googleusercontent.com';
+
+    const initializeGoogle = () => {
+      if (window.google?.accounts?.id) {
+        window.google.accounts.id.initialize({
+          client_id: clientId,
+          callback: handleGoogleCredentialResponse,
+        });
+
+        const btnEl = document.getElementById('google-auth-button');
+        if (btnEl) {
+          btnEl.innerHTML = '';
+          window.google.accounts.id.renderButton(btnEl, {
+            theme: document.documentElement.classList.contains('dark') ? 'filled_black' : 'outline',
+            size: 'large',
+            shape: 'pill',
+            width: 320,
+            text: 'continue_with',
+          });
+        }
+      }
+    };
+
+    if (window.google?.accounts?.id) {
+      initializeGoogle();
+    } else {
+      const timer = setInterval(() => {
+        if (window.google?.accounts?.id) {
+          clearInterval(timer);
+          initializeGoogle();
+        }
+      }, 100);
+      return () => clearInterval(timer);
+    }
+  }, [navigate, loginGoogle, location]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -59,18 +88,18 @@ export default function LoginPage() {
     try {
       await login(username.trim(), password);
 
+      // Tandai bahwa pengguna sudah pernah login di peramban ini
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('gwasena_has_logged_in', 'true');
+      }
+
       // Arahkan ke rute awal jika sebelumnya dialihkan oleh ProtectedRoute
       const destination = location.state?.from?.pathname || '/dashboard';
       navigate(destination, { replace: true });
     } catch (err) {
+      // Tangani galat kredensial salah (401) atau galat lainnya
       setError(err);
     }
-  };
-
-  const handleGoogleSuccess = () => {
-    setIsGoogleModalOpen(false);
-    const destination = location.state?.from?.pathname || '/dashboard';
-    navigate(destination, { replace: true });
   };
 
   return (
@@ -79,10 +108,10 @@ export default function LoginPage() {
         {/* Header Form */}
         <div className="text-center mb-6">
           <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white font-sans">
-            Masuk ke Akun
+            Masuk ke GWASena
           </h1>
           <p className="mt-1.5 font-serif text-sm text-slate-600 dark:text-slate-300">
-            Masukkan kredensial akun Anda untuk melanjutkan analisis
+            Masukkan kredensial akun Anda untuk mengakses platform analisis.
           </p>
         </div>
 
@@ -96,28 +125,6 @@ export default function LoginPage() {
 
         {/* Kotak Pesan Galat Figma Message Banner */}
         <ErrorMessageArea error={error} onDismiss={() => setError(null)} className="mb-4" />
-
-        {/* Tombol Utama: Masuk dengan Google */}
-        <div className="mb-4">
-          <button
-            type="button"
-            disabled={isLoading}
-            onClick={() => setIsGoogleModalOpen(true)}
-            className="w-full flex items-center justify-center gap-3 py-2.5 px-4 rounded-xl border border-slate-300 dark:border-white/15 bg-white dark:bg-[#162142] hover:bg-slate-50 dark:hover:bg-[#1E2C58] text-slate-800 dark:text-white font-semibold text-sm shadow-sm hover:shadow transition-all active:scale-[0.985] cursor-pointer"
-          >
-            <GoogleIcon className="h-5 w-5" />
-            <span>Masuk dengan Google</span>
-          </button>
-        </div>
-
-        {/* Pemisah Garis 'atau' */}
-        <div className="relative flex py-1 items-center mb-4">
-          <div className="flex-grow border-t border-slate-200 dark:border-white/10"></div>
-          <span className="flex-shrink mx-3 text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 font-bold">
-            atau dengan email
-          </span>
-          <div className="flex-grow border-t border-slate-200 dark:border-white/10"></div>
-        </div>
 
         {/* Form Login */}
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -141,7 +148,7 @@ export default function LoginPage() {
                 required
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="Contoh: user@email.com atau username"
+                placeholder="peneliti atau email@apps.ipb.ac.id"
                 className="w-full rounded-xl border border-slate-300 dark:border-white/10 bg-[#F1F4FD] dark:bg-[#0F172E] py-2.5 pl-10 pr-3 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:border-[#5B4DFE] focus:outline-none focus:ring-1 focus:ring-[#5B4DFE] transition-all font-medium"
               />
             </div>
@@ -207,35 +214,51 @@ export default function LoginPage() {
               </>
             ) : (
               <>
-                <span>Masuk ke Akun</span>
+                <span>Masuk ke Dashboard</span>
                 <ArrowRight className="h-4 w-4" />
               </>
             )}
           </button>
 
+          {/* Opsi Google Sign-In Resmi */}
+          <div className="my-4">
+            <div className="relative flex py-2 items-center">
+              <div className="flex-grow border-t border-slate-200 dark:border-slate-700"></div>
+              <span className="flex-shrink mx-4 text-xs font-medium text-slate-400">atau</span>
+              <div className="flex-grow border-t border-slate-200 dark:border-slate-700"></div>
+            </div>
+            <div id="google-auth-button" className="flex justify-center min-h-[44px]"></div>
+          </div>
+
           {/* Opsi Akses Demo Instan */}
           <div className="relative flex py-1 items-center">
             <div className="flex-grow border-t border-slate-200 dark:border-white/10"></div>
             <span className="flex-shrink mx-2 text-xs uppercase tracking-wider text-slate-600 dark:text-slate-300 font-bold">
-              atau mode pengujian
+              Ingin coba GWASena?
             </span>
             <div className="flex-grow border-t border-slate-200 dark:border-white/10"></div>
           </div>
 
           <button
             type="button"
+            disabled={isLoading}
             onClick={async () => {
+              setError(null);
               try {
-                await login('user_demo', 'password123');
-                navigate('/dashboard');
+                await loginDemo();
+                if (typeof window !== 'undefined') {
+                  localStorage.setItem('gwasena_has_logged_in', 'true');
+                  localStorage.setItem('gwasena_is_demo', 'true');
+                }
+                navigate('/dashboard', { replace: true });
               } catch (e) {
-                console.error(e);
+                setError(e);
               }
             }}
             className="w-full figma-btn-secondary py-2.5 text-xs sm:text-sm font-bold cursor-pointer"
           >
             <Sparkles className="h-4 w-4 text-[#0284C7] dark:text-[#06B6D4]" />
-            <span>Masuk Cepat (Akun Demo)</span>
+            <span>Jelajahi Mode Demo (Akun Peneliti)</span>
           </button>
         </form>
 
@@ -261,13 +284,6 @@ export default function LoginPage() {
           </div>
         </div>
       </div>
-
-      {/* Modal Masuk Akun Google Interaktif (Anti-Black-Page) */}
-      <GoogleAuthModal
-        isOpen={isGoogleModalOpen}
-        onClose={() => setIsGoogleModalOpen(false)}
-        onSuccess={handleGoogleSuccess}
-      />
     </div>
   );
 }

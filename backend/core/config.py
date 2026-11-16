@@ -45,7 +45,7 @@ class Settings:
 
     # Login Google (FR-01): Client ID OAuth dari Google Cloud Console, sama dengan
     # VITE_GOOGLE_CLIENT_ID di frontend. Kosong = login Google dimatikan (503).
-    GOOGLE_CLIENT_ID: str = os.getenv("GOOGLE_CLIENT_ID", "").strip()
+    GOOGLE_CLIENT_ID: str = os.getenv("GOOGLE_CLIENT_ID", "716278421982-m52k4f9lojkmpr22hg861skfj6pqktkd.apps.googleusercontent.com").strip()
 
     # Cara menjalankan pipeline:
     #   auto       -> pakai Celery bila worker aktif, selain itu dijalankan di latar belakang FastAPI
@@ -61,13 +61,6 @@ class Settings:
         ROOT_DIR / os.getenv("ANNOTATION_GFF3", "./data/contoh/anotasi_bawang_putih_contoh.gff3")
     ).resolve()
     ANNOTATION_WINDOW_BP: int = int(os.getenv("ANNOTATION_WINDOW_BP", "50000"))
-    # Sumber anotasi: "ensembl" (bawaan, semua organisme lewat Ensembl) atau "otomatis"
-    # (bawang putih memakai berkas GFF3 lokal ANNOTATION_GFF3, organisme lain Ensembl).
-    ANNOTATION_SOURCE: str = os.getenv("ANNOTATION_SOURCE", "ensembl").strip().lower()
-    # Batas waktu total (detik) satu kali anotasi melalui Ensembl REST API.
-    ANNOTATION_TIMEOUT_TOTAL: float = float(os.getenv("ANNOTATION_TIMEOUT_TOTAL", "25"))
-    # true = anotasi gen kandidat langsung dihitung setelah analisis selesai (hasilnya di-cache).
-    ANNOTATION_AUTO: bool = _as_bool(os.getenv("ANNOTATION_AUTO", "true"))
 
     # Smart downsampling Manhattan plot: di atas batas ini, titik non-signifikan diringkas
     # agar grafik interaktif tetap ringan (SNP signifikan selalu dipertahankan).

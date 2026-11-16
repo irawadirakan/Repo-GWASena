@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { analysisService } from '../services/analysisService.js';
 import { useAnalysisStore } from '../store/useAnalysisStore.js';
-import { ANALYSIS_STATUSES } from '../constants/defaultParams.js';
+import { ANALYSIS_STATUSES, getOrganismMeta, resolveTargetTraitName } from '../constants/defaultParams.js';
 import WizardStepper from '../components/wizard/WizardStepper.jsx';
 import Step1Upload from '../components/wizard/Step1Upload.jsx';
 import Step2Config from '../components/wizard/Step2Config.jsx';
@@ -17,6 +17,7 @@ import Step5Annotation from '../components/wizard/Step5Annotation.jsx';
 import Step6Export from '../components/wizard/Step6Export.jsx';
 import AccessDeniedState from '../components/common/AccessDeniedState.jsx';
 import ErrorMessageArea from '../components/common/ErrorMessageArea.jsx';
+import ErrorBoundary from '../components/common/ErrorBoundary.jsx';
 
 /**
  * AnalysisWizardPage - Kontainer Orkestrasi Sesi Analisis GWAS (Figma Aligned)
@@ -33,17 +34,32 @@ export default function AnalysisWizardPage() {
     setCurrentAnalysis,
     uploadSummary,
     setUploadSummary,
-    isSimulated,
+    configParams,
   } = useAnalysisStore();
 
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isAccessDenied, setIsAccessDenied] = useState(false);
 
+  // Proteksi null-safety terhadap rute tidak valid / undefined
+  useEffect(() => {
+    if (!id || id === 'undefined' || id === 'null') {
+      console.warn('ID sesi tidak valid, mengalihkan ke dashboard...');
+      navigate('/dashboard', { replace: true });
+    }
+  }, [id, navigate]);
+
   async function loadAnalysis() {
-    // Jangan tindih state lokal jika sedang dalam proses simulasi komputasi aktif
-    if (useAnalysisStore.getState().isSimulated && useAnalysisStore.getState().isComputing) {
+    if (!id || id === 'undefined' || id === 'null') {
+      setIsLoading(false);
       return;
+    }
+
+    const store = useAnalysisStore.getState();
+    const prevId = store.currentAnalysis?.analysis_id || store.currentAnalysis?.id;
+    const summaryId = store.uploadSummary?.analysis_id;
+    if ((prevId && String(prevId) !== String(id)) || (summaryId && String(summaryId) !== String(id))) {
+      store.reset();
     }
 
     setIsLoading(true);
@@ -52,23 +68,21 @@ export default function AnalysisWizardPage() {
 
     try {
       const data = await analysisService.getAnalysisDetail(id);
-      setCurrentAnalysis(data);
+      if (data) {
+        setCurrentAnalysis(data);
 
-      // Jika analisis sudah selesai, otomatis muat hasil lengkap dan plot asli dari backend
-      if (data.status === 'selesai') {
-        try {
-          const fullResults = await analysisService.getFullAnalysisResults(id);
-          useAnalysisStore.getState().setResults(fullResults);
-          useAnalysisStore.getState().setIsSimulated(false);
-        } catch (rErr) {
-          console.warn('Gagal memuat hasil asosiasi sesi selesai:', rErr);
+        if (String(data.status || '').toLowerCase() === 'selesai') {
+          try {
+            const fullResults = await analysisService.getFullAnalysisResults(id);
+            useAnalysisStore.getState().setResults(fullResults);
+          } catch (rErr) {
+            setError(rErr);
+          }
         }
       }
     } catch (err) {
-      if (err.status === 403) {
+      if (err?.status === 403) {
         setIsAccessDenied(true);
-      } else if (isSimulated || useAnalysisStore.getState().isSimulated) {
-        console.warn('Backend tidak tersedia dalam mode simulasi, mempertahankan sesi lokal:', err);
       } else {
         setError(err);
       }
@@ -77,8 +91,24 @@ export default function AnalysisWizardPage() {
     }
   }
 
+  async function refreshAnalysisQuiet(targetId = id) {
+    if (!targetId || targetId === 'undefined' || targetId === 'null') return;
+    try {
+      const data = await analysisService.getAnalysisDetail(targetId);
+      if (data) {
+        setCurrentAnalysis(data, { preserveStep: true });
+        if (String(data.status || '').toLowerCase() === 'selesai') {
+          const fullResults = await analysisService.getFullAnalysisResults(targetId);
+          useAnalysisStore.getState().setResults(fullResults);
+        }
+      }
+    } catch (err) {
+      setError(err);
+    }
+  }
+
   useEffect(() => {
-    if (id) {
+    if (id && id !== 'undefined' && id !== 'null') {
       loadAnalysis();
     }
   }, [id]);
@@ -96,36 +126,48 @@ export default function AnalysisWizardPage() {
     );
   }
 
-  const statusKey = currentAnalysis?.status?.toLowerCase() || 'draft';
+  if (!currentAnalysis && error) {
+    return (
+      <div className="space-y-4 py-8">
+        <Link
+          to="/dashboard"
+          className="inline-flex items-center gap-1.5 text-sm font-bold text-slate-700 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white transition-colors"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          <span>Kembali ke Dashboard</span>
+        </Link>
+        <ErrorMessageArea error={error} />
+      </div>
+    );
+  }
+
+  const safeSession = currentAnalysis || {
+    analysis_id: id,
+    id: id,
+    analysis_name: `Analisis GWAS #${id || ''}`,
+    status: 'draft',
+    organism: 'Allium sativum (Bawang Putih)',
+  };
+
+  const statusKey = safeSession?.status?.toLowerCase() || 'draft';
   const statusConfig = ANALYSIS_STATUSES[statusKey] || ANALYSIS_STATUSES.draft;
+  const resolvedSessionTrait = resolveTargetTraitName({
+    analysis: safeSession,
+    configParams,
+    uploadSummary,
+  });
+  const enrichedSession =
+    resolvedSessionTrait && resolvedSessionTrait !== '—'
+      ? { ...safeSession, trait_name: resolvedSessionTrait, trait: resolvedSessionTrait }
+      : safeSession;
   const availableTraits =
     uploadSummary?.fenotipe?.daftar_sifat ||
     uploadSummary?.fenotipe?.sifat_tersedia ||
-    currentAnalysis?.sifat_tersedia ||
+    safeSession?.sifat_tersedia ||
     [];
-
-  // TUGAS 5: Ringkasan data aktual dinamis di pojok kanan atas
-  const isBenchmark =
-    uploadSummary?.simulated ||
-    uploadSummary?.genotipe?.nama_berkas?.toLowerCase()?.includes('bawang') ||
-    uploadSummary?.genotipe?.nama_berkas?.toLowerCase()?.includes('garlic');
-
-  const datasetBadgeText = uploadSummary?.genotipe
-    ? isBenchmark
-      ? `Dataset Benchmark (Allium sativum) · ${uploadSummary.genotipe.jumlah_sampel || 40} Sampel`
-      : `${uploadSummary.genotipe.format?.split(' ')[0] || 'VCF'} · ${uploadSummary.genotipe.jumlah_sampel} Sampel · ${uploadSummary.genotipe.jumlah_snp} SNP`
-    : currentAnalysis?.status === 'selesai'
-    ? 'Dataset Selesai Diproses'
-    : 'Menunggu Unggah Data';
 
   return (
     <div className="space-y-6 pb-16 animate-fade-in">
-      {/* ── Banner Mode Simulasi (Poin #2) ── */}
-      {isSimulated && (
-        <div className="rounded-2xl border-2 border-amber-500 bg-amber-400/20 text-amber-950 dark:text-amber-200 p-4 text-center font-bold text-sm sm:text-base shadow-lg animate-pulse flex items-center justify-center gap-2">
-          <span>⚠️ MODE SIMULASI — Bukan hasil analisis asli (Backend tidak terhubung)</span>
-        </div>
-      )}
 
       {/* ── Top Session Bar ── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-white/10 pb-4">
@@ -144,7 +186,7 @@ export default function AnalysisWizardPage() {
 
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
-              {currentAnalysis?.analysis_name || `Analisis GWAS #${id}`}
+              {safeSession?.analysis_name || `Analisis GWAS #${id}`}
             </h1>
 
             {/* Badge Status */}
@@ -158,20 +200,18 @@ export default function AnalysisWizardPage() {
               {statusConfig.label}
             </span>
 
-            {/* Simulation Badge if active */}
-            {isSimulated && (
-              <span className="rounded-full bg-amber-100 dark:bg-amber-500/20 border border-amber-300 dark:border-amber-500/40 px-2.5 py-0.5 text-xs font-bold text-amber-900 dark:text-amber-300">
-                Simulasi UI Aktif
-              </span>
-            )}
+
           </div>
         </div>
 
-        {/* TUGAS 5: Badge Dinamis Sesuai Dataset Aktual */}
         <div className="flex items-center gap-2 self-start sm:self-auto">
-          <div className="glass-subcard px-4 py-2 text-xs sm:text-sm flex items-center gap-2 text-slate-800 dark:text-slate-100 font-bold shadow-sm">
-            <Dna className="h-4 w-4 text-[#0284C7] dark:text-[#06B6D4] shrink-0" />
-            <span className="font-sans">{datasetBadgeText}</span>
+          <div className="glass-subcard px-4 py-2 text-sm flex items-center gap-2 text-slate-800 dark:text-slate-100 font-bold shadow-sm">
+            <Dna className="h-4 w-4 text-[#0284C7] dark:text-[#06B6D4]" />
+            <span>
+              {safeSession?.organism
+                ? getOrganismMeta(safeSession.organism).label
+                : 'Genomic Association Suite'}
+            </span>
           </div>
         </div>
       </div>
@@ -182,22 +222,20 @@ export default function AnalysisWizardPage() {
       <WizardStepper
         activeStep={activeStep}
         onStepClick={(stepNum) => setActiveStep(stepNum)}
-        status={currentAnalysis?.status}
+        status={safeSession?.status}
       />
 
-      {/* ── Konten Langkah Aktif (3-Layer High Separation Glass) ── */}
-      <div
-        key={activeStep}
-        className="figma-card p-6 sm:p-8 animate-step-transition"
-      >
+      {/* ── Konten Langkah Aktif dengan Proteksi Error Boundary Lokal ── */}
+      <ErrorBoundary key={activeStep}>
+        <div
+          className="figma-card p-6 sm:p-8 animate-step-transition"
+        >
         {activeStep === 1 && (
           <Step1Upload
             analysisId={id}
             onUploadSuccess={(res) => {
               setUploadSummary(res);
-              if (!res?.simulated && !isSimulated && !useAnalysisStore.getState().isSimulated) {
-                loadAnalysis(); // Muat ulang data sesi dari backend jika bukan mode simulasi/offline
-              }
+              refreshAnalysisQuiet(res?.analysis_id || id);
             }}
             onNext={() => setActiveStep(2)}
           />
@@ -208,11 +246,9 @@ export default function AnalysisWizardPage() {
             analysisId={id}
             availableTraits={availableTraits}
             onPrev={() => setActiveStep(1)}
-            onRunSuccess={(res) => {
+            onRunSuccess={() => {
               setActiveStep(3);
-              if (!res?.simulated && !isSimulated && !useAnalysisStore.getState().isSimulated) {
-                loadAnalysis();
-              }
+              refreshAnalysisQuiet(id);
             }}
           />
         )}
@@ -220,11 +256,10 @@ export default function AnalysisWizardPage() {
         {activeStep === 3 && (
           <Step3Computation
             analysisId={id}
+            analysis={enrichedSession}
             onComplete={() => {
               setActiveStep(4);
-              if (!isSimulated && !useAnalysisStore.getState().isSimulated) {
-                loadAnalysis();
-              }
+              refreshAnalysisQuiet(id);
             }}
           />
         )}
@@ -232,6 +267,7 @@ export default function AnalysisWizardPage() {
         {activeStep === 4 && (
           <Step4Results
             analysisId={id}
+            analysis={enrichedSession}
             onNavigateStep={(stepNum) => setActiveStep(stepNum)}
           />
         )}
@@ -246,11 +282,12 @@ export default function AnalysisWizardPage() {
         {activeStep === 6 && (
           <Step6Export
             analysisId={id}
-            analysis={currentAnalysis}
+            analysis={enrichedSession}
             onNavigateStep={(stepNum) => setActiveStep(stepNum)}
           />
         )}
-      </div>
+        </div>
+      </ErrorBoundary>
     </div>
   );
 }

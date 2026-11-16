@@ -22,12 +22,12 @@ export const EDU_HINTS = {
   hwe: {
     label: 'Hardy-Weinberg Equilibrium (hwe)',
     defaultValue: '1e-6',
-    hint: 'Menguji penyimpangan frekuensi genotipe dari keseimbangan populasi. Pada populasi klonal, vegetatif, atau hasil seleksi buatan, penyimpangan HWE alami lumrah terjadi sehingga filter ini disarankan nonaktif atau menggunakan ambang longgar (1e-6).',
+    hint: 'Menguji penyimpangan frekuensi genotipe dari kesetimbangan Hardy-Weinberg. Aktifkan filter ini terutama pada analisis populasi hewan atau organisme kawin acak, dan nonaktifkan untuk tanaman galur inbred, penyerbuk sendiri, atau klonal guna mencegah hilangnya varian sejati.',
   },
   king_cutoff: {
     label: 'Relatedness / Kinship Cutoff (king_cutoff)',
     defaultValue: 0.177,
-    hint: 'Batas koefisien kekerabatan antar-sampel (0.177 setara hubungan derajat pertama / klon dekat). Membantu mengidentifikasi duplikasi klon pada koleksi plasma nutfah.',
+    hint: 'Batas koefisien kekerabatan antar-sampel (0.177 setara hubungan kekerabatan derajat pertama / individu berkerabat sangat dekat). Membantu mengidentifikasi duplikasi sampel maupun kekerabatan dekat pada populasi hewan ternak maupun koleksi plasma nutfah tanaman.',
   },
   pca: {
     label: 'PCA Otomatis (n_pc = 3)',
@@ -40,7 +40,7 @@ export const EDU_HINTS = {
   },
   mlm: {
     label: 'MLM (Mixed Linear Model)',
-    hint: 'Menggabungkan kovariat PCA (efek tetap) dan matriks kekerabatan genetik / Kinship secara otomatis (efek acak). Sangat direkomendasikan untuk populasi dengan struktur kekerabatan kompleks atau klonal guna menekan positif palsu.',
+    hint: 'Menggabungkan kovariat PCA (efek tetap) dan matriks kekerabatan genetik / Kinship secara otomatis (efek acak). Sangat direkomendasikan untuk populasi hewan maupun tanaman dengan struktur kekerabatan atau silsilah kompleks guna menekan positif palsu.',
   },
   bonferroni: {
     label: 'Koreksi Bonferroni',
@@ -50,84 +50,90 @@ export const EDU_HINTS = {
     label: 'FDR (False Discovery Rate - Benjamini-Hochberg)',
     hint: 'Mengontrol proporsi temuan positif palsu (q-value). Lebih sensitif dan adaptif dibanding Bonferroni untuk sifat agronomi kuantitatif yang dipengaruhi banyak gen (poligenik).',
   },
+  alpha: {
+    label: 'Ambang Alpha Signifikansi (α)',
+    defaultValue: 0.05,
+    hint: 'Tingkat signifikansi statistik (Type I Error Rate) yang menentukan batas penolakan hipotesis nol. Nilai default 0.05 lazim digunakan. Nilai 0.01 lebih ketat untuk menekan temuan positif palsu, sedangkan 0.10 bersifat eksploratori untuk mendeteksi sinyal asosiasi yang lebih lemah pada sifat poligenik kompleks.',
+  },
 };
 
 export const TIPS_EDUKATIF = [
   {
     id: 1,
-    judul: 'Skala Genomik & Kerapatan Penanda',
-    teks: 'Analisis GWAS mengintegrasikan ribuan hingga jutaan varian SNP untuk memetakan arsitektur genetik sifat kuantitatif secara presisi pada aksesi tanaman.',
+    judul: 'Konsep Utama Genome-Wide Association Study (GWAS)',
+    teks: 'GWAS menguji korelasi statistik antara ratusan ribu penanda SNP di seluruh genom dengan keragaman sifat fenotipe target untuk menemukan lokus sifat kuantitatif (QTL).',
   },
   {
     id: 2,
-    judul: 'Missingness Sampel (mind)',
-    teks: 'Ambang batas mind menyaring sampel yang memiliki banyak genotipe kosong agar tidak menimbulkan distorsi pada inferensi alel populasi.',
+    judul: 'Minor Allele Frequency (MAF)',
+    teks: 'Ambang batas MAF (umumnya 0.05) menyaring varian alel yang sangat langka. Alel berfrekuensi rendah rentan terhadap kesalahan sekuensing dan menurunkan kekuatan statistik pengujian.',
   },
   {
     id: 3,
-    judul: 'Missingness SNP (geno)',
-    teks: 'Filter geno membuang penanda SNP yang gagal terbaca pada sebagian besar sampel demi menjaga keandalan statistik pengujian asosiasi.',
+    judul: 'Pengendalian Missingness (mind & geno)',
+    teks: 'Penyaringan missingness memastikan integritas matriks data. Sampel dan penanda SNP dengan proporsi data hilang lebih dari 10% disaring agar imputasi genotipe tidak terdistorsi.',
   },
   {
     id: 4,
-    judul: 'Minor Allele Frequency (maf)',
-    teks: 'SNP dengan MAF di bawah 0.05 disaring karena alel yang terlalu langka memiliki kekuatan statistik rendah dan rentan positif palsu.',
+    judul: 'Kesetimbangan Hardy-Weinberg (HWE)',
+    teks: 'Deviasi ekstrem dari HWE pada populasi kawin acak (hewan/ternak) sering mencerminkan galat genotyping. Sebaliknya, pada varietas tanaman galur inbred, penyerbuk sendiri, atau klonal, filter ini disarankan tetap nonaktif guna mencegah hilangnya varian sejati.',
   },
   {
     id: 5,
-    judul: 'Keseimbangan Hardy-Weinberg (HWE)',
-    teks: 'Pada plasma nutfah klonal atau silang khusus, penyimpangan HWE lumrah terjadi sehingga filter ini dianjurkan dinonaktifkan atau dilonggarkan.',
+    judul: 'Koefisien Kekerabatan KING (kinship)',
+    teks: 'Algoritma KING mengestimasi hubungan kekerabatan antar-sampel secara tangguh tanpa mengasumsikan frekuensi alel homogen, mencegah bias akibat duplikasi sampel atau kekerabatan dekat pada populasi hewan maupun tanaman.',
   },
   {
     id: 6,
-    judul: 'Koefisien Kekerabatan KING',
-    teks: 'Filter KING mendeteksi dan menyaring individu duplikat atau kembar klon agar struktur kekerabatan ekstrem tidak mendistorsi analisis asosiasi.',
+    judul: 'Stratifikasi Populasi & Kovariat PCA',
+    teks: 'PCA mengekstraksi variasi genetik geografis terbesar ke dalam komponen utama (PC1–PC3). Memasukkan PC sebagai kovariat mencegah temuan asosiasi positif palsu (spurious associations).',
   },
   {
     id: 7,
-    judul: 'Pentingnya Koreksi PCA',
-    teks: 'Dekomposisi PCA PC1–PC3 menyerap stratifikasi geografis aksesi sehingga mencegah korelasi semu antara asal daerah dan sifat fenotipe agronomi.',
+    judul: 'Karakteristik Model GLM',
+    teks: 'General Linear Model (GLM) mengoreksi struktur populasi menggunakan kovariat tetap (PC1–PC3). Model ini efisien secara komputasi dan cocok untuk populasi terstruktur sederhana.',
   },
   {
     id: 8,
-    judul: 'Kelebihan Model GLM',
-    teks: 'Model Linier Umum mengoreksi struktur populasi sebagai kovariat tetap dengan komputasi cepat, ideal untuk populasi tanpa kekerabatan klonal kompleks.',
+    judul: 'Keunggulan Model Campuran (MLM)',
+    teks: 'Mixed Linear Model (MLM / Q+K) mengintegrasikan matriks kekerabatan kinship sebagai efek acak di samping efek tetap PCA, mengontrol latar belakang genetik kompleks dengan sangat kuat.',
   },
   {
     id: 9,
-    judul: 'Keunggulan Model MLM',
-    teks: 'Model Linier Campuran memadukan kovariat PCA dan matriks kinship untuk menekan angka positif palsu pada populasi berkerabat dekat.',
+    judul: 'Peran Efek Tetap vs Efek Acak',
+    teks: 'Dalam MLM, efek tetap mengestimasi koefisien regresi alel SNP dan kovariat utama, sedangkan efek acak memodelkan kovarians politeknik yang tidak teramati di antara semua individu.',
   },
   {
     id: 10,
-    judul: 'Koreksi Ketat Bonferroni',
-    teks: 'Mengendalikan family-wise error rate secara ketat dengan membagi alpha terhadap total SNP, efektif menemukan lokus utama berefek besar.',
+    judul: 'Evaluasi Inflasi Genomik (Lambda GC)',
+    teks: 'Faktor inflasi genomik (λ GC) ideal bernilai mendekati 1.00 (toleransi ≤ 1.05). Nilai λ > 1.10 menandakan adanya bias stratifikasi yang belum terkoreksi secara sempurna oleh model.',
   },
   {
     id: 11,
-    judul: 'Sensitivitas Koreksi FDR',
-    teks: 'False Discovery Rate Benjamini-Hochberg lebih adaptif untuk mendeteksi banyak varian poligenik yang masing-masing berkontribusi kecil pada fenotipe.',
+    judul: 'Anatomi & Sumbu Manhattan Plot',
+    teks: 'Sumbu X menampilkan posisi fisik SNP sepanjang kromosom, sementara sumbu Y adalah -log10(p-value). Puncak sinyal pencakar langit mengindikasikan lokus dengan bukti asosiasi terkuat.',
   },
   {
     id: 12,
-    judul: 'Membaca Manhattan Plot',
-    teks: 'Sumbu Y menampilkan minus log10 p-value; semakin menjulang titik di atas garis batas, semakin kuat bukti signifikansi asosiasi lokus.',
+    judul: 'Validasi Model via Quantile-Quantile (QQ) Plot',
+    teks: 'QQ Plot membandingkan distribusi p-value empiris terhadap distribusi teoretis seragam (null hypothesis). Penyimpangan tajam di ujung kanan menandakan sinyal asosiasi sejati.',
   },
   {
     id: 13,
-    judul: 'Evaluasi Deviasi QQ Plot',
-    teks: 'Keselarasan titik terhadap garis diagonal menunjukkan pengendalian bias populasi yang baik, dengan lonjakan di ujung atas menandakan asosiasi sejati.',
+    judul: 'Ambang Ketat Koreksi Bonferroni',
+    teks: 'Koreksi Bonferroni (alpha / total SNP) mengendalikan Family-Wise Error Rate (FWER) secara sangat ketat. Cocok untuk memastikan penanda SNP yang dilaporkan benar-benar lolos uji ketat.',
   },
   {
     id: 14,
-    judul: 'Radius Pemetaan Gen Kandidat',
-    teks: 'SNP signifikan dipetakan ke gen terdekat dalam radius window 50.000 pasang basa untuk mengidentifikasi fungsi biologis terkait fenotipe.',
+    judul: 'Adaptabilitas False Discovery Rate (FDR)',
+    teks: 'Metode Benjamini-Hochberg (FDR) mengontrol proporsi penemuan positif palsu (q-value). Sangat ideal untuk mendeteksi penanda pada sifat agronomi yang dipengaruhi banyak lokus minor (poligenik).',
   },
   {
     id: 15,
-    judul: 'Anotasi Gen Non-Blocking',
-    teks: 'Proses anotasi genomik referensi berjalan secara asinkron tanpa memblokir unduhan hasil statistik asosiasi atau visualisasi plot utama Anda.',
+    judul: 'Linkage Disequilibrium & Anotasi Gen GFF3',
+    teks: 'SNP penanda tidak selalu merupakan mutasi kausal langsung, melainkan berada dalam ketidakseimbangan pautan (LD) dengan kandidat gen fungsional di sekitarnya dalam jendela ±50 kb.',
   },
 ];
 
-export const EDU_TIPS = TIPS_EDUKATIF;
+// Alias untuk kompatibilitas penuh (Evaluasi Tester Poin 17)
+export const EDUCATIONAL_TIPS = TIPS_EDUKATIF;

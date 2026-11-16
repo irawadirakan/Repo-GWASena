@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import {
   BarChart3,
   Search,
@@ -14,35 +14,39 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { useAnalysisStore } from '../../store/useAnalysisStore.js';
+import { buildManhattanInterpretation, detectOrganismClientSide, formatScientificBinomial, resolveTargetTraitName } from '../../constants/defaultParams.js';
 import { analysisService } from '../../services/analysisService.js';
 import ManhattanPlot from '../charts/ManhattanPlot.jsx';
 import QQPlot from '../charts/QQPlot.jsx';
-import { generateBenchmarkResults } from '../../services/mockResults.js';
+import ErrorMessageArea from '../common/ErrorMessageArea.jsx';
 
 /**
  * Langkah 4: Hasil Uji Asosiasi & Visualisasi Plot Interaktif (Figma Aligned)
  * Acuan: 07 — Hasil & Visualisasi.png & 07b — Hasil_ Titik SNP Terpilih.png
  */
-export default function Step4Results({ analysisId, onNavigateStep }) {
-  const { results, setResults, configParams, uploadSummary, isSimulated } = useAnalysisStore();
+export default function Step4Results({ analysisId, analysis = null, onNavigateStep }) {
+  const { results, setResults, configParams, uploadSummary, currentAnalysis } = useAnalysisStore();
   const [isLoadingBackend, setIsLoadingBackend] = useState(false);
   const [fetchError, setFetchError] = useState(null);
 
   useEffect(() => {
     let isMounted = true;
     async function fetchResults() {
-      // Jika data hasil belum ada dan memiliki analysisId serta bukan mode simulasi murni, ambil dari backend
-      if (!results && analysisId && !isSimulated) {
+      if (!results && analysisId) {
         setIsLoadingBackend(true);
+        setFetchError(null);
         try {
           const data = await analysisService.getFullAnalysisResults(analysisId);
           if (isMounted) {
             setResults(data);
           }
         } catch (err) {
-          console.warn('Gagal memuat hasil dari backend:', err);
+          console.error('Gagal memuat hasil dari backend:', err);
           if (isMounted) {
-            setFetchError(err.message || 'Gagal memuat hasil dari backend.');
+            setFetchError({
+              message: err?.message || err?.pesan || 'Gagal memuat hasil analisis dari server.',
+              details: err?.details || err?.rincian || [],
+            });
           }
         } finally {
           if (isMounted) setIsLoadingBackend(false);
@@ -53,20 +57,9 @@ export default function Step4Results({ analysisId, onNavigateStep }) {
     return () => {
       isMounted = false;
     };
-  }, [analysisId, results, isSimulated, setResults]);
+  }, [analysisId, results, setResults]);
 
-  // Ambil data hasil (utamakan hasil backend asli; jangan pernah menimpa hasil backend dengan benchmark simulasi)
-  const activeResults = useMemo(() => {
-    if (results && (results.association_results || results.raw_backend_results)) {
-      return results;
-    }
-    if (isSimulated) {
-      const benchmark = generateBenchmarkResults(configParams, uploadSummary);
-      setResults(benchmark);
-      return benchmark;
-    }
-    return results || null;
-  }, [results, configParams, uploadSummary, setResults, isSimulated]);
+  const activeResults = results || null;
 
   const rawBackend = activeResults?.raw_backend_results || {};
   const qc = activeResults?.summary?.qc || rawBackend?.qc || {};
@@ -76,7 +69,47 @@ export default function Step4Results({ analysisId, onNavigateStep }) {
   const topSnps = activeResults?.top_snps || [];
   const summary = activeResults?.summary || {};
   const qqData = activeResults?.qq_data || [];
-  const threshold = summary.neg_log10_threshold || 3.98;
+  const hasThreshold =
+    summary.neg_log10_threshold !== null &&
+    summary.neg_log10_threshold !== undefined &&
+    !isNaN(Number(summary.neg_log10_threshold));
+  const threshold = hasThreshold ? Number(summary.neg_log10_threshold) : 0;
+
+  // Penyelarasan hitungan sampel & SNP dari backend nyata
+  const rawSampelLolos = qc.sampel_lolos ?? summary.samples_passed_qc ?? null;
+  const rawSampelTotal =
+    qc.sampel_awal ??
+    qc.sampel_total ??
+    summary.total_samples_analyzed ??
+    uploadSummary?.genotipe?.jumlah_sampel ??
+    rawSampelLolos;
+  const displaySampelTotal =
+    rawSampelTotal !== null
+      ? Math.max(Number(rawSampelTotal), Number(rawSampelLolos ?? 0))
+      : '—';
+  const displaySampelLolos =
+    rawSampelLolos !== null
+      ? Math.min(Number(rawSampelLolos), Number(displaySampelTotal) || Number(rawSampelLolos))
+      : '—';
+
+  const rawSnpsLolos = qc.snp_lolos ?? summary.snps_passed_qc ?? (snps.length > 0 ? snps.length : null);
+  const displaySnpsLolos = rawSnpsLolos;
+  const rawLambdaGc = asosiasi.lambda_gc ?? summary.lambda_gc ?? null;
+  const hasLambdaGc = rawLambdaGc !== null && rawLambdaGc !== undefined && !isNaN(Number(rawLambdaGc));
+
+  const detailCardRef = useRef(null);
+
+  const handleSelectSnp = useCallback((snp) => {
+    if (!snp) return;
+    setActivePlotTab('manhattan');
+    setSelectedSnp(snp);
+    setTimeout(() => {
+      const detailEl = document.getElementById('selected-snp-detail-card') || detailCardRef.current;
+      if (detailEl) {
+        detailEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    }, 50);
+  }, []);
 
   // Selected SNP State
   const [selectedSnp, setSelectedSnp] = useState(
@@ -144,36 +177,7 @@ export default function Step4Results({ analysisId, onNavigateStep }) {
     }
   }
 
-  // Pemilihan SNP aktif dengan smooth scroll ke kartu rincian & Manhattan plot
-  const handleSelectSnp = (snp) => {
-    setSelectedSnp(snp);
-    setTimeout(() => {
-      const el = document.getElementById('panel-detail-snp');
-      if (el) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
-    }, 60);
-  };
-
-  // Metrik Terverifikasi (Bebas Bug "39 dari 38")
-  const totalSampelAwal = Math.max(
-    Number(qc.sampel_total || 0),
-    Number(summary.total_samples_analyzed || 0),
-    Number(uploadSummary?.genotipe?.jumlah_sampel || 0),
-    Number(qc.sampel_lolos || 0),
-    Number(summary.samples_passed_qc || 0),
-    40
-  );
-
-  const rawSampelLolos = qc.sampel_lolos ?? summary.samples_passed_qc ?? 38;
-  const sampelLolos = Math.min(Number(rawSampelLolos), totalSampelAwal);
-
-  // Konsistensi Total SNP Teruji persis dengan Manhattan Plot
-  const snpLolosQc = snps.length > 0 ? snps.length : (qc.snp_lolos ?? summary.snps_passed_qc ?? 500);
-
-  const lambdaVal = Number(asosiasi.lambda_gc ?? summary.lambda_gc ?? 1.04);
-
-  if (isLoadingBackend || (!activeResults && !fetchError)) {
+  if (isLoadingBackend) {
     return (
       <div className="flex min-h-[40vh] flex-col items-center justify-center p-8 space-y-3">
         <Loader2 className="h-8 w-8 animate-spin text-[#06B6D4]" />
@@ -184,14 +188,70 @@ export default function Step4Results({ analysisId, onNavigateStep }) {
     );
   }
 
+  if (fetchError && !activeResults) {
+    return (
+      <div className="space-y-4 py-6">
+        <ErrorMessageArea error={fetchError} />
+        <button
+          type="button"
+          onClick={() => onNavigateStep?.(3)}
+          className="figma-btn-secondary"
+        >
+          Kembali ke Komputasi Pipeline (Langkah 3)
+        </button>
+      </div>
+    );
+  }
+
+  const chromosomeCount =
+    summary.chromosome_count ||
+    rawBackend.chromosome_count ||
+    new Set(snps.map((s) => s.chromosome).filter(Boolean)).size ||
+    null;
+  const sigCountDisplay = asosiasi.jumlah_signifikan ?? significantSnps.length;
+  const peakPool = significantSnps.length > 0 ? significantSnps : topSnps.length > 0 ? topSnps : snps;
+  const topPeakSnp = peakPool.length
+    ? [...peakPool].sort((a, b) => {
+        const nA = a.neg_log10_p ?? a.neglog10p ?? (a.p_value > 0 ? -Math.log10(a.p_value) : 0);
+        const nB = b.neg_log10_p ?? b.neglog10p ?? (b.p_value > 0 ? -Math.log10(b.p_value) : 0);
+        return nB - nA;
+      })[0]
+    : null;
+  const resolvedTraitName = resolveTargetTraitName({
+    analysis: analysis || currentAnalysis,
+    configParams,
+    uploadSummary,
+    results: activeResults,
+    qcSummary: qc,
+  });
+  const traitDisplay = resolvedTraitName !== '—' ? resolvedTraitName : 'sifat target';
+  const rawOrganism =
+    configParams?.organism ||
+    currentAnalysis?.organism_label ||
+    currentAnalysis?.organism ||
+    summary.organism_label ||
+    summary.organism ||
+    rawBackend.organism;
+  const inferredOrg =
+    rawOrganism && !/^allium sativum$/i.test(String(rawOrganism).trim())
+      ? rawOrganism
+      : detectOrganismClientSide({
+          filenames: [uploadSummary?.genotipe?.nama_berkas, currentAnalysis?.analysis_name],
+          traits: [traitDisplay],
+          numChromosomes: chromosomeCount,
+          snpIds: snps.slice(0, 25).map((s) => s.snp_id),
+        }).organism;
+  const scientificOrganismName = formatScientificBinomial(inferredOrg);
+  const manhattanInterpretation = buildManhattanInterpretation({
+    sigCount: sigCountDisplay,
+    thresholdVal: hasThreshold ? threshold : null,
+    topPeakSnp,
+    traitName: traitDisplay,
+    organismScientific: scientificOrganismName,
+  });
+
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* ── Banner Mode Simulasi (Poin #2) ── */}
-      {isSimulated && (
-        <div className="rounded-2xl border-2 border-amber-500 bg-amber-400/20 text-amber-950 dark:text-amber-200 p-4 text-center font-bold text-sm sm:text-base shadow-lg animate-pulse flex items-center justify-center gap-2">
-          <span>⚠️ MODE SIMULASI — Bukan hasil analisis asli (Backend tidak terhubung)</span>
-        </div>
-      )}
 
       {/* ── Sub-Navigasi Cepat Pasca-Komputasi (Figma Style) ── */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 dark:border-white/10 pb-4">
@@ -230,70 +290,70 @@ export default function Step4Results({ analysisId, onNavigateStep }) {
         </div>
       </div>
 
-      {/* ── Bar Ringkasan Eksekusi ── */}
+      {/* ─── Bar Ringkasan Eksekusi (Evaluasi Tester Poin 19: Penyelarasan & Micro-caption) ─── */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        <div className="glass-subcard p-3.5">
+        <div className="glass-subcard p-3.5 space-y-1">
           <span className="text-xs font-sans font-bold text-slate-800 dark:text-slate-200 block uppercase tracking-wider">Model Asosiasi</span>
-          <span className="font-serif text-lg font-bold text-slate-900 dark:text-white block mt-0.5">
-            {asosiasi.model || summary.model || configParams.model || 'MLM'}
+          <span className="font-serif text-lg font-bold text-slate-900 dark:text-white block">
+            {asosiasi.model || summary.model || configParams.model || '—'}
           </span>
-          <span className="text-xs text-slate-700 dark:text-slate-300 block truncate font-sans font-medium">
-            Sifat: {asosiasi.trait || summary.trait || configParams.trait || 'bobot_umbi'}
+          <span className="text-[11px] text-slate-600 dark:text-slate-400 block truncate font-sans font-medium" title="Model regresi asosiasi genomik">
+            Sifat: {resolvedTraitName}
           </span>
         </div>
 
-        <div className="glass-subcard p-3.5">
+        <div className="glass-subcard p-3.5 space-y-1">
           <span className="text-xs font-sans font-bold text-slate-800 dark:text-slate-200 block uppercase tracking-wider">Sampel Lolos QC</span>
-          <span className="font-serif text-lg font-bold text-slate-900 dark:text-white tabular-nums block mt-0.5">
-            {sampelLolos} sampel
+          <span className="font-serif text-lg font-bold text-slate-900 dark:text-white tabular-nums block">
+            {displaySampelLolos} <span className="text-xs font-sans font-semibold text-slate-500">/ {displaySampelTotal}</span>
           </span>
-          <span className="text-xs text-slate-700 dark:text-slate-300 block font-sans font-medium">
-            dari {totalSampelAwal} sampel awal diuji
+          <span className="text-[11px] text-slate-600 dark:text-slate-400 block font-sans font-medium" title="Sampel memenuhi ambang batas kelengkapan data (mind ≤ 0.10)">
+            Lolos batas missingness
           </span>
         </div>
 
-        <div className="glass-subcard p-3.5">
+        <div className="glass-subcard p-3.5 space-y-1">
           <span className="text-xs font-sans font-bold text-slate-800 dark:text-slate-200 block uppercase tracking-wider">SNP Lolos QC</span>
-          <span className="font-serif text-lg font-bold text-slate-900 dark:text-white tabular-nums block mt-0.5">
-            {snpLolosQc.toLocaleString('id-ID')} SNP
+          <span className="font-serif text-lg font-bold text-slate-900 dark:text-white tabular-nums block">
+            {displaySnpsLolos !== null ? Number(displaySnpsLolos).toLocaleString('id-ID') : '—'}
           </span>
-          <span className="text-xs text-slate-700 dark:text-slate-300 block font-sans font-medium">
-            Total penanda teruji di plot
+          <span className="text-[11px] text-slate-600 dark:text-slate-400 block font-sans font-medium" title="Varian penanda lolos MAF & missingness">
+            Teruji pada {chromosomeCount || '—'} Kromosom
           </span>
         </div>
 
-        <div className="glass-subcard p-3.5">
+        <div className="glass-subcard p-3.5 space-y-1">
           <span className="text-xs font-sans font-bold text-slate-800 dark:text-slate-200 block uppercase tracking-wider">Ambang Signifikansi</span>
-          <span className="font-serif text-lg font-bold text-[#0284C7] dark:text-[#06B6D4] tabular-nums block mt-0.5">
-            -log₁₀P = {threshold.toFixed(2)}
+          <span className="font-serif text-lg font-bold text-[#0284C7] dark:text-[#06B6D4] tabular-nums block">
+            {hasThreshold ? `-log₁₀P = ${threshold.toFixed(2)}` : '—'}
           </span>
-          <span className="text-xs text-slate-700 dark:text-slate-300 block font-mono font-bold">
-            p &lt; {summary.bonferroni_threshold ? (Number(summary.bonferroni_threshold) < 0.001 ? Number(summary.bonferroni_threshold).toExponential(2) : Number(summary.bonferroni_threshold).toFixed(5)) : '1.04e-4'}
+          <span className="text-[11px] text-slate-600 dark:text-slate-400 block font-mono font-bold" title="Batas statistik p-value setelah koreksi multiple testing">
+            p &lt; {summary.bonferroni_threshold ? (Number(summary.bonferroni_threshold) < 0.001 ? Number(summary.bonferroni_threshold).toExponential(2) : Number(summary.bonferroni_threshold).toFixed(5)) : '—'}
           </span>
         </div>
 
-        <div className="glass-subcard p-3.5">
+        <div className="glass-subcard p-3.5 space-y-1">
           <span className="text-xs font-sans font-bold text-slate-800 dark:text-slate-200 block uppercase tracking-wider">SNP Signifikan</span>
-          <span className="font-serif text-lg font-bold text-emerald-600 dark:text-emerald-400 tabular-nums block mt-0.5">
-            {significantSnps.length} SNP
+          <span className="font-serif text-lg font-bold text-emerald-600 dark:text-emerald-400 tabular-nums block">
+            {asosiasi.jumlah_signifikan ?? significantSnps.length} SNP
           </span>
-          <span className="text-xs text-emerald-700 dark:text-emerald-400 block font-sans font-bold">
-            {significantSnps.length > 0 ? 'Lolos ambang p-value' : '0 SNP di atas ambang'}
+          <span className="text-[11px] text-emerald-700 dark:text-emerald-400 block font-sans font-bold" title="Lolos Ambang — Memiliki asosiasi statistik kuat terhadap sifat fenotipe">
+            Lolos Ambang Signifikansi
           </span>
         </div>
 
-        <div className="glass-subcard p-3.5">
+        <div className="glass-subcard p-3.5 space-y-1">
           <span className="text-xs font-sans font-bold text-slate-800 dark:text-slate-200 block uppercase tracking-wider">Inflasi Genomik (λ)</span>
-          <span className="font-serif text-lg font-bold text-slate-900 dark:text-white tabular-nums block mt-0.5">
-            {lambdaVal.toFixed(3)}
+          <span className="font-serif text-lg font-bold text-slate-900 dark:text-white tabular-nums block">
+            {hasLambdaGc ? Number(rawLambdaGc).toFixed(3) : '—'}
           </span>
-          <span className="text-xs text-emerald-700 dark:text-emerald-400 block font-sans font-bold">
-            {lambdaVal <= 1.05 ? 'Terkontrol (bebas bias strata)' : 'Tingkat inflasi moderat'}
+          <span className="text-[11px] text-emerald-700 dark:text-emerald-400 block font-sans font-bold" title="Terkontrol (λ ≤ 1.05) — Ketiadaan bias stratifikasi">
+            {hasLambdaGc ? (Number(rawLambdaGc) <= 1.05 ? 'Terkontrol (≤ 1.05)' : 'Inflasi Moderat') : '—'}
           </span>
         </div>
       </div>
 
-      {/* ── Panel Visualisasi Plot Interaktif ── */}
+      {/* ─── Panel Visualisasi Plot Interaktif ── */}
       <div className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
@@ -333,6 +393,7 @@ export default function Step4Results({ analysisId, onNavigateStep }) {
         {activePlotTab === 'manhattan' ? (
           <div>
             <ManhattanPlot
+              analysisId={analysisId}
               snps={snps}
               threshold={threshold}
               selectedSnpId={selectedSnp?.snp_id}
@@ -345,22 +406,36 @@ export default function Step4Results({ analysisId, onNavigateStep }) {
           </div>
         ) : (
           <div>
-            <QQPlot qqData={qqData} lambdaGc={summary.lambda_gc || 1.024} />
+            <QQPlot analysisId={analysisId} qqData={qqData} lambdaGc={hasLambdaGc ? Number(rawLambdaGc) : null} />
             <p className="mt-2 text-xs sm:text-[13px] text-slate-700 dark:text-slate-300 font-medium">
               QQ Plot membandingkan distribusi p-value observasi dengan ekspektasi teoritis (null
-              hypothesis). Nilai lambda GC = {summary.lambda_gc || 1.024} menunjukkan tidak adanya
-              inflasi populasi palsu.
+              hypothesis).{hasLambdaGc ? ` Nilai lambda GC = ${Number(rawLambdaGc).toFixed(4)}.` : ''}
             </p>
           </div>
         )}
       </div>
 
+      {/* ─── Kotak Interpretasi Hasil Asosiasi Genomik (Manhattan Plot) ── */}
+      <div
+        data-testid="step4-manhattan-interpretation"
+        className="rounded-2xl border-l-4 border-l-[#0284C7] dark:border-l-[#06B6D4] border border-slate-200 dark:border-white/10 bg-sky-50/70 dark:bg-sky-950/25 p-4 space-y-1"
+      >
+        <div className="flex items-center gap-2 text-xs sm:text-sm font-sans font-bold text-slate-900 dark:text-white">
+          <Info className="h-4 w-4 text-[#0284C7] dark:text-[#06B6D4] shrink-0" />
+          <span>Interpretasi Hasil Asosiasi Genomik (Manhattan Plot):</span>
+        </div>
+        <p className="text-xs sm:text-[13px] font-serif leading-relaxed text-slate-800 dark:text-slate-200">
+          {manhattanInterpretation}
+        </p>
+      </div>
+
       {/* ── Panel Detail SNP Terpilih ── */}
       {selectedSnp && (
         <div
-          id="panel-detail-snp"
+          ref={detailCardRef}
+          id="selected-snp-detail-card"
           key={selectedSnp.snp_id}
-          className="rounded-3xl figma-card border-white/80 dark:border-[#06B6D4]/50 p-5 sm:p-6 relative animate-pop-in animate-glow-brief"
+          className="rounded-3xl figma-card border-white/80 dark:border-[#06B6D4]/50 p-5 sm:p-6 relative animate-pop-in animate-glow-brief scroll-mt-24"
         >
           <button
             type="button"
@@ -397,10 +472,10 @@ export default function Step4Results({ analysisId, onNavigateStep }) {
             <button
               type="button"
               onClick={() => onNavigateStep(5)}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-cyan-400/50 dark:border-[#06B6D4]/50 bg-cyan-50 dark:bg-[#06B6D4]/15 px-4 py-2 text-xs font-sans font-bold text-cyan-800 dark:text-[#06B6D4] hover:bg-cyan-100 dark:hover:bg-[#06B6D4]/25 hover:-translate-y-[1px] hover:shadow-md active:scale-[0.97] active:brightness-95 transition-all duration-100 self-start sm:self-auto cursor-pointer"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-cyan-400/50 dark:border-[#06B6D4]/50 bg-cyan-50 dark:bg-[#06B6D4]/15 px-4 py-2 text-xs font-sans font-bold text-cyan-800 dark:text-[#06B6D4] hover:bg-cyan-100 dark:hover:bg-[#06B6D4]/25 hover:-translate-y-[1px] hover:shadow-md active:scale-[0.97] active:brightness-95 transition-all duration-100 self-start sm:self-auto"
             >
               <Dna className="h-3.5 w-3.5" />
-              <span>Lihat Gen Terkait di Tab Anotasi &rarr;</span>
+              <span>Lihat Anotasi Gen Terkait &rarr;</span>
             </button>
           </div>
 
@@ -492,7 +567,7 @@ export default function Step4Results({ analysisId, onNavigateStep }) {
                 <table className="w-full text-left text-sm">
                   <thead className="border-b border-slate-200 dark:border-white/10 text-xs text-slate-800 dark:text-slate-200 uppercase font-sans font-bold bg-slate-100/95 dark:bg-[#0B132C]/90">
                     <tr>
-                      <th className="py-3 px-3 w-12 text-center">NO.</th>
+                      <th className="py-3 px-3.5 w-12 text-center">NO.</th>
                       <th className="py-3 px-3.5">SNP ID (Kandidat Teratas)</th>
                       <th className="py-3 px-3.5">Kromosom</th>
                       <th className="py-3 px-3.5">Posisi (bp)</th>
@@ -508,10 +583,10 @@ export default function Step4Results({ analysisId, onNavigateStep }) {
                       <tr
                         key={snp.snp_id}
                         className={`hover:bg-slate-50/80 dark:hover:bg-white/5 transition-colors ${
-                          selectedSnp?.snp_id === snp.snp_id ? 'bg-cyan-50/80 dark:bg-[#06B6D4]/15' : ''
+                          selectedSnp?.snp_id === snp.snp_id ? 'bg-cyan-50/40 dark:bg-cyan-950/30 border-l-4 border-l-cyan-500' : ''
                         }`}
                       >
-                        <td className="py-3 px-3 text-center text-xs font-bold text-slate-500 dark:text-slate-400">
+                        <td className="px-3 py-3 text-xs sm:text-sm font-semibold text-slate-500 dark:text-slate-400 text-center">
                           {idx + 1}
                         </td>
                         <td className="py-3 px-3.5 font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
@@ -537,7 +612,7 @@ export default function Step4Results({ analysisId, onNavigateStep }) {
                           <button
                             type="button"
                             onClick={() => handleSelectSnp(snp)}
-                            className="rounded-full border border-slate-300 dark:border-white/10 bg-white/90 dark:bg-[#162142] px-3.5 py-1 text-xs font-sans font-bold text-slate-800 dark:text-slate-200 hover:bg-[#0284C7] hover:text-white dark:hover:bg-[#06B6D4] dark:hover:text-[#0B132C] hover:-translate-y-[1px] active:scale-[0.97] transition-all duration-100 shadow-sm cursor-pointer"
+                            className="px-3 py-1 text-xs font-semibold rounded-lg border border-cyan-500/40 text-cyan-700 dark:text-cyan-300 bg-cyan-50/60 dark:bg-cyan-950/40 hover:bg-cyan-100 dark:hover:bg-cyan-900/60 active:scale-95 transition-all cursor-pointer shadow-sm"
                           >
                             Pilih
                           </button>
@@ -554,7 +629,7 @@ export default function Step4Results({ analysisId, onNavigateStep }) {
             <table className="w-full text-left text-sm">
               <thead className="border-b border-slate-200 dark:border-white/10 text-xs text-slate-800 dark:text-slate-200 uppercase font-sans font-bold bg-slate-100/95 dark:bg-[#0B132C]/90">
                 <tr>
-                  <th className="py-3 px-3 w-12 text-center">NO.</th>
+                  <th className="py-3 px-3.5 w-12 text-center">NO.</th>
                   <th className="py-3 px-3.5">SNP ID</th>
                   <th className="py-3 px-3.5">Kromosom</th>
                   <th className="py-3 px-3.5">Posisi (bp)</th>
@@ -570,12 +645,10 @@ export default function Step4Results({ analysisId, onNavigateStep }) {
                   <tr
                     key={snp.snp_id}
                     className={`hover:bg-slate-50/80 dark:hover:bg-white/5 transition-colors ${
-                      selectedSnp?.snp_id === snp.snp_id ? 'bg-cyan-50/80 dark:bg-[#06B6D4]/15' : ''
+                      selectedSnp?.snp_id === snp.snp_id ? 'bg-cyan-50/40 dark:bg-cyan-950/30 border-l-4 border-l-cyan-500' : ''
                     }`}
                   >
-                    <td className="py-3 px-3 text-center text-xs font-bold text-slate-500 dark:text-slate-400">
-                      {idx + 1}
-                    </td>
+                    <td className="px-3 py-3 text-xs sm:text-sm font-semibold text-slate-500 dark:text-slate-400 text-center">{idx + 1}</td>
                     <td className="py-3 px-3.5 font-bold text-slate-900 dark:text-white">{snp.snp_id}</td>
                     <td className="py-3 px-3.5 text-slate-800 dark:text-slate-200 font-sans font-semibold">Chr {snp.chromosome}</td>
                     <td className="py-3 px-3.5 text-slate-800 dark:text-slate-200 font-medium">{Number(snp.position).toLocaleString('id-ID')}</td>
@@ -596,7 +669,7 @@ export default function Step4Results({ analysisId, onNavigateStep }) {
                       <button
                         type="button"
                         onClick={() => handleSelectSnp(snp)}
-                        className="rounded-full border border-slate-300 dark:border-white/10 bg-white/90 dark:bg-[#162142] px-3.5 py-1 text-xs font-sans font-bold text-slate-800 dark:text-slate-200 hover:bg-[#0284C7] hover:text-white dark:hover:bg-[#06B6D4] dark:hover:text-[#0B132C] hover:-translate-y-[1px] active:scale-[0.97] transition-all duration-100 shadow-sm cursor-pointer"
+                        className="px-3 py-1 text-xs font-semibold rounded-lg border border-cyan-500/40 text-cyan-700 dark:text-cyan-300 bg-cyan-50/60 dark:bg-cyan-950/40 hover:bg-cyan-100 dark:hover:bg-cyan-900/60 active:scale-95 transition-all cursor-pointer shadow-sm"
                       >
                         Pilih
                       </button>
@@ -742,14 +815,20 @@ export default function Step4Results({ analysisId, onNavigateStep }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-white/5 font-mono">
-              {paginatedSnps.map((snp, idx) => (
+              {paginatedSnps.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="px-3 py-8 text-center font-sans text-xs text-slate-500 dark:text-slate-400">
+                    Tidak ada penanda SNP yang sesuai dengan filter atau pencarian.
+                  </td>
+                </tr>
+              ) : paginatedSnps.map((snp, idx) => (
                 <tr
                   key={snp.snp_id}
                   className={`hover:bg-slate-50/80 dark:hover:bg-white/5 transition-colors ${
-                    selectedSnp?.snp_id === snp.snp_id ? 'bg-cyan-50/80 dark:bg-[#06B6D4]/15' : ''
+                    selectedSnp?.snp_id === snp.snp_id ? 'bg-cyan-50/40 dark:bg-cyan-950/30 border-l-4 border-l-cyan-500' : ''
                   }`}
                 >
-                  <td className="py-2.5 px-3 text-center text-xs font-bold text-slate-500 dark:text-slate-400">
+                  <td className="px-3 py-3 text-xs sm:text-sm font-semibold text-slate-500 dark:text-slate-400 text-center">
                     {(page - 1) * pageSize + idx + 1}
                   </td>
                   <td className="py-2.5 px-3 font-bold text-slate-900 dark:text-white">
@@ -785,7 +864,7 @@ export default function Step4Results({ analysisId, onNavigateStep }) {
                     <button
                       type="button"
                       onClick={() => handleSelectSnp(snp)}
-                      className="rounded-full border border-slate-300 dark:border-white/10 bg-white/90 dark:bg-[#162142] px-3.5 py-1 text-xs font-sans font-bold text-slate-800 dark:text-slate-200 hover:text-[#0284C7] dark:hover:text-[#06B6D4] hover:-translate-y-[1px] active:scale-[0.97] transition-all duration-100 shadow-sm cursor-pointer"
+                      className="px-3 py-1 text-xs font-semibold rounded-lg border border-cyan-500/40 text-cyan-700 dark:text-cyan-300 bg-cyan-50/60 dark:bg-cyan-950/40 hover:bg-cyan-100 dark:hover:bg-cyan-900/60 active:scale-95 transition-all cursor-pointer shadow-sm"
                     >
                       Pilih
                     </button>

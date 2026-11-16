@@ -1,59 +1,87 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useMemo, useCallback, memo } from 'react';
 import Plotly from 'plotly.js-dist-min';
 import { useThemeStore } from '../../store/useThemeStore.js';
+
+function normalizeChrKey(chr) {
+  return String(chr ?? '1').replace(/^chr/i, '').trim() || '1';
+}
+
+function compareChroms(a, b) {
+  const na = parseInt(a, 10);
+  const nb = parseInt(b, 10);
+  if (!isNaN(na) && !isNaN(nb)) return na - nb;
+  if (!isNaN(na)) return -1;
+  if (!isNaN(nb)) return 1;
+  return a.localeCompare(b);
+}
 
 /**
  * ManhattanPlot - Visualisasi Interaktif GWAS Manhattan Plot
  * WebGL (scattergl) dengan pewarnaan bergantian antar-kromosom,
- * garis ambang signifikansi, margin presisi tanpa pemotongan,
+ * optimasi useMemo + useCallback untuk eliminasi lag layar saat interaksi klik SNP,
+ * penguncian posisi zoom (uirevision + relayout preservation) saat klik SNP,
  * dan Custom HTML Legend Pills bar di luar SVG untuk menjamin 100% bebas clipping.
  */
-export default function ManhattanPlot({
+function ManhattanPlot({
+  analysisId = 'default',
   snps = [],
   threshold = 3.98, // -log10(p) cutoff
   onSelectSnp,
   selectedSnpId = null,
 }) {
   const containerRef = useRef(null);
+  const zoomRangeRef = useRef({ xaxis: null, yaxis: null });
+  const prevDatasetKeyRef = useRef('');
+  const onSelectSnpRef = useRef(onSelectSnp);
+  onSelectSnpRef.current = onSelectSnp;
+
   const theme = useThemeStore((state) => state.theme);
+  const isDark = theme === 'dark';
 
-  useEffect(() => {
-    if (!containerRef.current || !snps || snps.length === 0) return;
+  // Memoize komputasi koordinat kromosom dan traces utama (eliminasi komputasi ulang saat klik SNP)
+  const basePlotData = useMemo(() => {
+    if (!snps || snps.length === 0) return null;
 
-    const isDark = theme === 'dark';
-
-    // Warna kromosom bergantian sesuai spesifikasi ilmiah kontras tinggi
     const colorOdd = isDark ? '#818CF8' : '#4F46E5';   // Indigo
     const colorEven = isDark ? '#38BDF8' : '#0EA5E9';  // Cyan / Sky
     const colorSignificant = isDark ? '#34D399' : '#10B981'; // Emerald
-    const colorSelected = '#F43F5E'; // Rose-500
 
-    // Siapkan data per kromosom dengan offset posisi kumulatif pada sumbu X
-    const chrLengths = {
-      1: 180000000,
-      2: 175000000,
-      3: 190000000,
-      4: 165000000,
-      5: 170000000,
-      6: 160000000,
-      7: 155000000,
-      8: 150000000,
+    const defaultChrLengths = {
+      '1': 180000000,
+      '2': 175000000,
+      '3': 190000000,
+      '4': 165000000,
+      '5': 170000000,
+      '6': 160000000,
+      '7': 155000000,
+      '8': 150000000,
     };
 
+    const posByChr = {};
+    snps.forEach((snp) => {
+      const ck = normalizeChrKey(snp.chromosome);
+      const p = Number(snp.position) || 0;
+      if (!posByChr[ck] || p > posByChr[ck]) {
+        posByChr[ck] = p;
+      }
+    });
+
+    const chromList = Object.keys(posByChr).sort(compareChroms);
     const chrOffsets = {};
-    let runningOffset = 0;
+    const chrIndex = {};
     const tickVals = [];
     const tickText = [];
+    let runningOffset = 0;
 
-    for (let c = 1; c <= 8; c++) {
-      chrOffsets[c] = runningOffset;
-      const cLength = chrLengths[c] || 160000000;
-      tickVals.push(runningOffset + cLength / 2);
-      tickText.push(`Chr ${c}`);
-      runningOffset += cLength;
-    }
+    chromList.forEach((ck, idx) => {
+      chrOffsets[ck] = runningOffset;
+      chrIndex[ck] = idx;
+      const span = Math.max(posByChr[ck] || 0, defaultChrLengths[ck] || 10000000);
+      tickVals.push(runningOffset + span / 2);
+      tickText.push(chromList.length > 12 ? ck : `Chr ${ck}`);
+      runningOffset += span;
+    });
 
-    // Pisahkan SNP ke dalam traces
     const xNonSig = [];
     const yNonSig = [];
     const textNonSig = [];
@@ -65,30 +93,44 @@ export default function ManhattanPlot({
     const textSig = [];
     const snpRefSig = [];
 
-    const xSel = [];
-    const ySel = [];
-    const textSel = [];
+    const snpMap = new Map();
+    let maxNegLogP = 0;
 
     snps.forEach((snp) => {
-      const c = Number(snp.chromosome) || 1;
-      const offset = chrOffsets[c] || 0;
+      const ck = normalizeChrKey(snp.chromosome);
+      const offset = chrOffsets[ck] || 0;
+      const cIdx = chrIndex[ck] ?? 0;
       const cumPos = offset + Number(snp.position);
-      const negLogP = snp.neg_log10_p ?? -Math.log10(snp.p_value);
-      const isSelected = selectedSnpId && snp.snp_id === selectedSnpId;
+      const pVal = snp.p_value;
+      const negLogP = snp.neg_log10_p ?? snp.neglog10p ?? (pVal > 0 ? -Math.log10(pVal) : 0);
+      if (negLogP > maxNegLogP) maxNegLogP = negLogP;
+
+      const pDisplay =
+        pVal !== null && pVal !== undefined && !isNaN(Number(pVal))
+          ? Number(pVal) < 0.0001
+            ? Number(pVal).toExponential(3)
+            : Number(pVal).toFixed(5)
+          : '-';
+      const betaRaw = snp.beta ?? snp.effect_size;
+      const betaDisplay =
+        betaRaw !== null && betaRaw !== undefined && !isNaN(Number(betaRaw))
+          ? `${Number(betaRaw) >= 0 ? '+' : ''}${Number(Number(betaRaw).toFixed(4))}`
+          : '-';
 
       const tooltipText =
         `<b>${snp.snp_id}</b><br>` +
-        `Kromosom: ${c}<br>` +
+        `Kromosom: ${ck}<br>` +
         `Posisi: ${Number(snp.position).toLocaleString('id-ID')} bp<br>` +
-        `p-value: ${snp.p_value < 0.0001 ? Number(snp.p_value).toExponential(3) : Number(snp.p_value).toFixed(5)}<br>` +
-        `-log10(p): ${negLogP.toFixed(2)}<br>` +
-        `Effect Size (Beta): ${snp.effect_size >= 0 ? '+' : ''}${snp.effect_size}`;
+        `p-value: ${pDisplay}<br>` +
+        `-log10(p): ${Number(negLogP).toFixed(2)}<br>` +
+        `Effect Size (Beta): ${betaDisplay}`;
 
-      if (isSelected) {
-        xSel.push(cumPos);
-        ySel.push(negLogP);
-        textSel.push(tooltipText);
-      }
+      snpMap.set(snp.snp_id, {
+        cumPos,
+        negLogP,
+        tooltipText,
+        snp,
+      });
 
       if (snp.is_significant || negLogP >= threshold) {
         xSig.push(cumPos);
@@ -99,13 +141,80 @@ export default function ManhattanPlot({
         xNonSig.push(cumPos);
         yNonSig.push(negLogP);
         textNonSig.push(tooltipText);
-        colorNonSig.push(c % 2 === 0 ? colorEven : colorOdd);
+        colorNonSig.push(cIdx % 2 === 0 ? colorOdd : colorEven);
         snpRefNonSig.push(snp);
       }
     });
 
+    return {
+      tickVals,
+      tickText,
+      maxNegLogP,
+      colorSignificant,
+      xNonSig,
+      yNonSig,
+      textNonSig,
+      colorNonSig,
+      snpRefNonSig,
+      xSig,
+      ySig,
+      textSig,
+      snpRefSig,
+      snpMap,
+    };
+  }, [snps, threshold, isDark]);
+
+  const selectedSnpEntry = useMemo(() => {
+    if (!selectedSnpId || !basePlotData?.snpMap) return null;
+    return basePlotData.snpMap.get(selectedSnpId) || null;
+  }, [selectedSnpId, basePlotData]);
+
+  // Event Listener Klik Titik terisolasi via useCallback
+  const handlePlotClick = useCallback((data) => {
+    if (!data || !data.points || data.points.length === 0) return;
+    const pt = data.points[0];
+    const curveNumber = pt.curveNumber;
+    const pointNumber = pt.pointNumber;
+
+    let clickedSnp = null;
+    if (curveNumber === 0 && basePlotData?.snpRefNonSig) {
+      clickedSnp = basePlotData.snpRefNonSig[pointNumber];
+    } else if (curveNumber === 1 && basePlotData?.snpRefSig) {
+      clickedSnp = basePlotData.snpRefSig[pointNumber];
+    } else if (curveNumber === 2 && selectedSnpEntry) {
+      clickedSnp = selectedSnpEntry.snp;
+    }
+
+    if (clickedSnp && onSelectSnpRef.current) {
+      onSelectSnpRef.current(clickedSnp);
+    }
+  }, [basePlotData, selectedSnpEntry]);
+
+  useEffect(() => {
+    if (!containerRef.current || !basePlotData) return;
+
+    const datasetKey = `${analysisId || 'default'}:${snps.length}:${snps[0]?.snp_id || ''}`;
+    if (prevDatasetKeyRef.current !== datasetKey) {
+      zoomRangeRef.current = { xaxis: null, yaxis: null };
+      prevDatasetKeyRef.current = datasetKey;
+    }
+
+    const {
+      tickVals,
+      tickText,
+      maxNegLogP,
+      colorSignificant,
+      xNonSig,
+      yNonSig,
+      textNonSig,
+      colorNonSig,
+      xSig,
+      ySig,
+      textSig,
+    } = basePlotData;
+
     const traces = [
-      // Trace 1: SNP Teruji (Non-Signifikan)
+      // Trace 0: SNP Teruji (Non-Signifikan)
       {
         x: xNonSig,
         y: yNonSig,
@@ -120,7 +229,7 @@ export default function ManhattanPlot({
           opacity: 0.85,
         },
       },
-      // Trace 2: SNP Signifikan (Lolos Ambang)
+      // Trace 1: SNP Signifikan (Lolos Ambang)
       {
         x: xSig,
         y: ySig,
@@ -141,19 +250,19 @@ export default function ManhattanPlot({
       },
     ];
 
-    // Trace 3: SNP Terpilih (jika ada)
-    if (xSel.length > 0) {
+    // Trace 2: SNP Terpilih (jika ada)
+    if (selectedSnpEntry) {
       traces.push({
-        x: xSel,
-        y: ySel,
-        text: textSel,
+        x: [selectedSnpEntry.cumPos],
+        y: [selectedSnpEntry.negLogP],
+        text: [selectedSnpEntry.tooltipText],
         hoverinfo: 'text',
         mode: 'markers',
         type: 'scattergl',
         name: 'SNP Terpilih',
         marker: {
           size: 11,
-          color: colorSelected,
+          color: '#F43F5E',
           line: {
             color: '#FFFFFF',
             width: 2,
@@ -163,18 +272,22 @@ export default function ManhattanPlot({
     }
 
     // Batas Sumbu Y otomatis dengan padding atas proporsional
-    const maxNegLogP = Math.max(0, ...snps.map((s) => s.neg_log10_p ?? (-Math.log10(s.p_value) || 0)));
     const yUpper = Math.max(maxNegLogP + 1.2, threshold + 1.0, 5.0);
+
+    const savedXRange = zoomRangeRef.current.xaxis;
+    const savedYRange = zoomRangeRef.current.yaxis;
 
     const layout = {
       autosize: true,
-      // Margin presisi sesuai spesifikasi agar sumbu X dan label Y tidak terpotong
+      // Pertahankan posisi zoom saat selectedSnp berubah (uirevision konstan)
+      uirevision: `manhattan-zoom-lock-${analysisId || 'default'}`,
       margin: { l: 65, r: 30, t: 30, b: 60 },
       paper_bgcolor: 'transparent',
       plot_bgcolor: isDark ? 'rgba(7, 11, 20, 0.65)' : 'rgba(248, 250, 252, 0.65)',
-      // Gunakan Custom HTML Legend di luar canvas untuk menjamin 100% bebas clipping
       showlegend: false,
       xaxis: {
+        uirevision: true,
+        ...(savedXRange ? { range: savedXRange, autorange: false } : {}),
         title: {
           text: 'Kromosom Genom (Chromosome)',
           font: {
@@ -197,6 +310,9 @@ export default function ManhattanPlot({
         zeroline: false,
       },
       yaxis: {
+        uirevision: true,
+        range: savedYRange || [0, yUpper],
+        ...(savedYRange ? { autorange: false } : {}),
         title: {
           text: '-log₁₀(p-value)',
           font: {
@@ -206,7 +322,6 @@ export default function ManhattanPlot({
           },
           standoff: 10,
         },
-        range: [0, yUpper],
         tickfont: {
           family: 'JetBrains Mono, monospace',
           size: 11,
@@ -257,40 +372,45 @@ export default function ManhattanPlot({
       responsive: true,
       displayModeBar: true,
       displaylogo: false,
+      scrollZoom: true,
       doubleClick: 'reset+autosize',
-      modeBarButtonsToRemove: ['sendDataToCloud', 'editInChartStudio', 'lasso2d', 'select2d'],
+      modeBarButtonsToRemove: ['lasso2d', 'select2d', 'sendDataToCloud', 'toggleSpikelines'],
       toImageButtonOptions: {
         format: 'png',
-        filename: 'Manhattan_Plot_GWASena_HD',
-        height: 1200,
-        width: 2400,
+        filename: 'gwasena_manhattan_plot_hd',
+        height: 1080,
+        width: 1920,
         scale: 3,
       },
     };
 
-    Plotly.react(containerRef.current, traces, layout, config);
-
-    // Event Listener Klik Titik
     const container = containerRef.current;
-    const handlePlotClick = (data) => {
-      if (!data || !data.points || data.points.length === 0) return;
-      const pt = data.points[0];
-      const curveNumber = pt.curveNumber;
-      const pointNumber = pt.pointNumber;
+    Plotly.react(container, traces, layout, config);
 
-      let clickedSnp = null;
-      if (curveNumber === 0) {
-        clickedSnp = snpRefNonSig[pointNumber];
-      } else if (curveNumber === 1) {
-        clickedSnp = snpRefSig[pointNumber];
+    // Simpan rentang zoom terakhir agar tidak pernah tereset saat re-render / klik SNP
+    const handleRelayout = (ev) => {
+      if (!ev || typeof ev !== 'object') return;
+      if (ev['xaxis.autorange'] === true) {
+        zoomRangeRef.current.xaxis = null;
+      } else if (ev['xaxis.range[0]'] !== undefined && ev['xaxis.range[1]'] !== undefined) {
+        zoomRangeRef.current.xaxis = [ev['xaxis.range[0]'], ev['xaxis.range[1]']];
+      } else if (Array.isArray(ev['xaxis.range']) && ev['xaxis.range'].length === 2) {
+        zoomRangeRef.current.xaxis = [...ev['xaxis.range']];
       }
 
-      if (clickedSnp && onSelectSnp) {
-        onSelectSnp(clickedSnp);
+      if (ev['yaxis.autorange'] === true) {
+        zoomRangeRef.current.yaxis = null;
+      } else if (ev['yaxis.range[0]'] !== undefined && ev['yaxis.range[1]'] !== undefined) {
+        zoomRangeRef.current.yaxis = [ev['yaxis.range[0]'], ev['yaxis.range[1]']];
+      } else if (Array.isArray(ev['yaxis.range']) && ev['yaxis.range'].length === 2) {
+        zoomRangeRef.current.yaxis = [...ev['yaxis.range']];
       }
     };
 
-    container.on('plotly_click', handlePlotClick);
+    if (typeof container.on === 'function') {
+      container.on('plotly_click', handlePlotClick);
+      container.on('plotly_relayout', handleRelayout);
+    }
 
     // Handle Window Resize
     const handleResize = () => {
@@ -302,11 +422,12 @@ export default function ManhattanPlot({
 
     return () => {
       window.removeEventListener('resize', handleResize);
-      if (container && container.removeAllListeners) {
+      if (container && typeof container.removeAllListeners === 'function') {
         container.removeAllListeners('plotly_click');
+        container.removeAllListeners('plotly_relayout');
       }
     };
-  }, [snps, threshold, theme, selectedSnpId, onSelectSnp]);
+  }, [analysisId, snps, threshold, isDark, basePlotData, selectedSnpEntry, handlePlotClick]);
 
   const sigCount = snps.filter((s) => s.is_significant || (s.neg_log10_p ?? -Math.log10(s.p_value)) >= threshold).length;
 
@@ -357,3 +478,5 @@ export default function ManhattanPlot({
     </div>
   );
 }
+
+export default memo(ManhattanPlot);

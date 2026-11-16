@@ -9,8 +9,10 @@ const THEME_STORAGE_KEY = 'gwasena_theme';
 
 function applyThemeToDOM(theme) {
   if (typeof document === 'undefined') return;
+  const mode = theme === 'light' ? 'light' : 'dark';
   const root = document.documentElement;
-  if (theme === 'light') {
+  root.setAttribute('data-theme', mode);
+  if (mode === 'light') {
     root.classList.remove('dark');
     root.classList.add('light');
   } else {
@@ -24,7 +26,7 @@ export const useThemeStore = create((set, get) => ({
 
   initTheme: () => {
     if (typeof localStorage === 'undefined') return;
-    const savedTheme = localStorage.getItem(THEME_STORAGE_KEY);
+    const savedTheme = localStorage.getItem(THEME_STORAGE_KEY) || localStorage.getItem('theme');
     const initialTheme = savedTheme === 'light' ? 'light' : 'dark';
     applyThemeToDOM(initialTheme);
     set({ theme: initialTheme });

@@ -1,7 +1,8 @@
 """Skema masukan API (Pydantic). Keterangan field tampil di Swagger UI."""
 from typing import Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+import re
 
 
 class RegisterIn(BaseModel):
@@ -11,17 +12,35 @@ class RegisterIn(BaseModel):
                        examples=["isnaini@apps.ipb.ac.id"])
     password: str = Field(min_length=8, max_length=128, examples=["rahasia123"])
 
+    @field_validator("username")
+    @classmethod
+    def validate_username_has_alnum(cls, v: str) -> str:
+        if not re.search(r"[A-Za-z0-9]", v):
+            raise ValueError("Username wajib mengandung setidaknya satu huruf atau angka (tidak boleh hanya titik/simbol).")
+        return v
+
 
 class LoginIn(BaseModel):
     username: str = Field(description="Username atau email", examples=["isnaini"])
     password: str = Field(examples=["rahasia123"])
 
 
-class GoogleAuthRequest(BaseModel):
+class BenchmarkLoadRequest(BaseModel):
+    format: str = Field("VCF", description="Format dataset benchmark ('VCF' atau 'PLINK')")
+    analysis_id: int | str | None = Field(
+        None, description="ID analisis aktif jika ada; jika kosong atau invalid/404, dibuatkan sesi baru"
+    )
+
+
+class GoogleAuthPayload(BaseModel):
     credential: Optional[str] = Field(None, description="Google JWT ID Token dari Google Identity Services")
-    email: Optional[str] = Field(None, max_length=120, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$", description="Alamat email Google pengguna")
     name: Optional[str] = Field(None, max_length=150, description="Nama lengkap pengguna dari akun Google")
+    email: Optional[str] = Field(None, max_length=120, description="Alamat email Google pengguna")
     google_sub: Optional[str] = Field(None, max_length=150, description="ID unik subjek Google")
+
+
+# Alias GoogleAuthRequest untuk kompatibilitas kode
+GoogleAuthRequest = GoogleAuthPayload
 
 
 class AnalysisCreate(BaseModel):

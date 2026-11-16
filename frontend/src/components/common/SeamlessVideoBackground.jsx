@@ -299,10 +299,10 @@ function SeamlessVideoBackground() {
         />
         {/* Dark Mode Ambient Overlay (Deep cosmic slate-indigo depth overlay for high-contrast glass cards) */}
         <div
-          className="absolute inset-0 bg-[#080D24]/55 backdrop-blur-[2px] pointer-events-none"
+          className="absolute inset-0 bg-[#080D24]/70 backdrop-blur-[3px] pointer-events-none"
           style={{
             backgroundImage:
-              'radial-gradient(circle at center, transparent 35%, rgba(8, 13, 36, 0.70) 95%)',
+              'radial-gradient(circle at center, rgba(8, 13, 36, 0.65) 0%, rgba(8, 13, 36, 0.92) 95%)',
           }}
         />
       </div>

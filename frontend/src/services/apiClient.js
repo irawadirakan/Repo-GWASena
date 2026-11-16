@@ -18,9 +18,9 @@ export function formatUserFriendlyError(err) {
     // Galat unggah berkas genotipe
     if (
       s.toLowerCase().includes('genotipe') &&
-      (s.includes('UploadFile') || s.includes('Field required') || s.includes('str') || s.includes('expected') || s.includes('Value error'))
+      (s.includes('UploadFile') || s.includes('Field required') || s.includes('str') || s.includes('expected') || s.includes('Value error') || s.toLowerCase().includes('format') || s.toLowerCase().includes('.gz'))
     ) {
-      return 'Berkas Genotipe (.vcf atau PLINK .bed/.bim/.fam) belum dipilih atau formatnya tidak sesuai.';
+      return 'Berkas genotipe harus berformat teks VCF (.vcf) atau PLINK biner (.bed, .bim, .fam). Berkas kompresi (.gz) tidak didukung.';
     }
 
     // Galat unggah berkas fenotipe
@@ -39,6 +39,14 @@ export function formatUserFriendlyError(err) {
       s.toLowerCase().includes('tidak ditemukan pada berkas')
     ) {
       return "Kolom 'sample_id' tidak ditemukan pada berkas CSV atau terdapat ID sampel yang tidak cocok antara berkas Genotipe dan Fenotipe.";
+    }
+
+    // Galat registrasi / email / username
+    if (s.toLowerCase().includes('email') && (s.includes('pattern') || s.includes('valid email') || s.includes('format'))) {
+      return 'Format alamat email tidak valid (contoh: nama@apps.ipb.ac.id).';
+    }
+    if (s.toLowerCase().includes('username') && (s.includes('alnum') || s.includes('huruf') || s.includes('pattern'))) {
+      return 'Username wajib mengandung setidaknya satu huruf atau angka (3–50 karakter).';
     }
 
     // Pembersihan kode teknis FastAPI/Pydantic
@@ -81,7 +89,9 @@ export class ApiError extends Error {
     super(message);
     this.name = 'ApiError';
     this.status = status;
-    this.details = details;
+    this.details = Array.isArray(details) ? details : details ? [String(details)] : [];
+    this.pesan = message;
+    this.rincian = this.details;
   }
 }
 
@@ -112,8 +122,9 @@ export function removeStoredToken() {
  * @param {RequestInit} [options={}]
  */
 export async function request(endpoint, options = {}) {
+  const { timeoutMs = 60000, signal: externalSignal, ...fetchOptions } = options;
   const token = getStoredToken();
-  const headers = new Headers(options.headers || {});
+  const headers = new Headers(fetchOptions.headers || {});
 
   // Inject Bearer token if available
   if (token && !headers.has('Authorization')) {
@@ -121,24 +132,84 @@ export async function request(endpoint, options = {}) {
   }
 
   // If body is NOT FormData and not explicitly set, default to JSON
-  if (options.body && !(options.body instanceof FormData) && !headers.has('Content-Type')) {
+  if (fetchOptions.body && !(fetchOptions.body instanceof FormData) && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json');
   }
 
+  let controller = null;
+  let timeoutId = null;
+  let didTimeout = false;
+  let effectiveSignal = externalSignal;
+
+  if (timeoutMs > 0 && typeof AbortController !== 'undefined') {
+    controller = new AbortController();
+    effectiveSignal = controller.signal;
+    if (externalSignal) {
+      if (externalSignal.aborted) {
+        controller.abort();
+      } else {
+        externalSignal.addEventListener('abort', () => controller.abort(), { once: true });
+      }
+    }
+    timeoutId = setTimeout(() => {
+      didTimeout = true;
+      controller.abort();
+    }, timeoutMs);
+  }
+
   const config = {
-    ...options,
+    ...fetchOptions,
     headers,
+    ...(effectiveSignal ? { signal: effectiveSignal } : {}),
   };
 
+  let abortRejectCleanup = null;
   let res;
   try {
-    res = await fetch(endpoint, config);
+    const fetchPromise = fetch(endpoint, config);
+    if (effectiveSignal) {
+      res = await new Promise((resolve, reject) => {
+        if (effectiveSignal.aborted) {
+          const abortErr = new Error('Aborted');
+          abortErr.name = 'AbortError';
+          reject(abortErr);
+          return;
+        }
+        const onAbort = () => {
+          const abortErr = new Error('Aborted');
+          abortErr.name = 'AbortError';
+          reject(abortErr);
+        };
+        effectiveSignal.addEventListener('abort', onAbort, { once: true });
+        abortRejectCleanup = () => effectiveSignal.removeEventListener('abort', onAbort);
+        fetchPromise.then(resolve, reject);
+      });
+    } else {
+      res = await fetchPromise;
+    }
   } catch (err) {
+    if (err?.name === 'AbortError') {
+      const abortErr = new ApiError(
+        didTimeout
+          ? 'Permintaan melebihi batas waktu tunggu server (timeout).'
+          : 'Permintaan dibatalkan.',
+        didTimeout ? 408 : 0,
+        [didTimeout ? `Batas waktu ${timeoutMs} ms terlampaui.` : 'Request aborted']
+      );
+      abortErr.isAborted = !didTimeout;
+      abortErr.isTimeout = didTimeout;
+      throw abortErr;
+    }
     throw new ApiError(
       'Gagal terhubung ke server backend. Pastikan server aktif.',
       0,
       [err.message]
     );
+  } finally {
+    if (abortRejectCleanup) abortRejectCleanup();
+    if (timeoutId !== null) {
+      clearTimeout(timeoutId);
+    }
   }
 
   // Parse JSON response or handle empty body
@@ -164,14 +235,19 @@ export async function request(endpoint, options = {}) {
       (!data || typeof data === 'string' || !contentType.includes('application/json'))
     ) {
       message =
-        'Server backend di http://localhost:8000 sedang tidak aktif. Silakan jalankan backend FastAPI ("uvicorn backend.main:app --port 8000") atau gunakan tombol Masuk Cepat Akun Demo.';
+        'Server backend di http://localhost:8000 sedang tidak aktif atau tidak dapat dihubungi.';
     }
 
+    const toArray = (v) => (Array.isArray(v) ? v : typeof v === 'string' && v.trim() ? [v] : []);
+
     if (data && typeof data === 'object') {
-      // 1. Format galat 422 khusus GWASena: { detail: { pesan, rincian } }
+      // 1. Format galat khusus GWASena: { detail: { pesan, rincian } } atau top-level { pesan, rincian }
       if (data.detail && typeof data.detail === 'object' && !Array.isArray(data.detail)) {
-        message = data.detail.pesan || message;
-        details = Array.isArray(data.detail.rincian) ? data.detail.rincian : [];
+        message = data.detail.pesan || data.detail.message || message;
+        details = toArray(data.detail.rincian || data.detail.details);
+      } else if (data.pesan) {
+        message = data.pesan;
+        details = toArray(data.rincian || data.details);
       }
       // 2. Format standar FastAPI: { detail: "string" }
       else if (typeof data.detail === 'string') {
@@ -180,20 +256,33 @@ export async function request(endpoint, options = {}) {
       // 3. Format validasi default FastAPI Pydantic: { detail: [{ msg, loc }] }
       else if (Array.isArray(data.detail)) {
         message = 'Format masukan data tidak valid atau berkas belum lengkap.';
+        const firstLoc = data.detail[0]?.loc ? data.detail[0].loc.join(' ') : '';
+        if (firstLoc.includes('email')) {
+          message = 'Format alamat email tidak valid.';
+        } else if (firstLoc.includes('username')) {
+          message = 'Format nama pengguna tidak valid.';
+        }
         details = data.detail.map((d) => {
           const locStr = d.loc ? d.loc.join(' > ') : '';
           const fullMsg = `${locStr ? locStr + ': ' : ''}${d.msg || ''}`;
           // Terjemahkan langsung jika mengandung berkas genotipe/fenotipe
           if (locStr.includes('genotipe')) {
-            return 'Berkas Genotipe (.vcf atau PLINK .bed/.bim/.fam) belum dipilih atau formatnya tidak sesuai.';
+            return 'Berkas genotipe harus berformat teks VCF (.vcf) atau PLINK biner (.bed, .bim, .fam). Berkas kompresi (.gz) tidak didukung.';
           }
           if (locStr.includes('fenotipe')) {
             return 'Berkas Fenotipe (.csv) belum dipilih atau tidak terbaca.';
+          }
+          if (locStr.includes('email')) {
+            return 'Alamat email wajib berformat sah (contoh: peneliti@apps.ipb.ac.id).';
+          }
+          if (locStr.includes('username')) {
+            return 'Username wajib 3–50 karakter dan wajib mengandung huruf atau angka.';
           }
           return fullMsg;
         });
       } else if (data.message) {
         message = data.message;
+        details = toArray(data.details || data.rincian);
       }
     }
 
