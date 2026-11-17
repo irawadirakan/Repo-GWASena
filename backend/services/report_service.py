@@ -87,10 +87,12 @@ def build_report(db: Session, a: Analysis, organism_override: str | None = None)
                 k.get("keterangan")] for k in qc.get("kriteria") or []]
     sampel_awal = qc.get('sampel_awal', '–')
     sampel_lolos = qc.get('sampel_lolos', '–')
+    snp_awal = qc.get('snp_awal', '–')
+    snp_lolos = qc.get('snp_lolos', '–')
     bagian.append(
         "<h2>2. Quality Control</h2>"
-        f"<p>Data awal {sampel_awal} sampel dan {qc.get('snp_awal', '–')} SNP; "
-        f"lolos QC {sampel_lolos} sampel dan {qc.get('snp_lolos', '–')} SNP ({sampel_lolos} / {sampel_awal}).</p>"
+        f"<p>Data awal {sampel_awal} sampel dan {snp_awal} SNP; "
+        f"lolos QC {sampel_lolos} sampel ({sampel_lolos} / {sampel_awal}) dan {snp_lolos} SNP ({snp_lolos} / {snp_awal}).</p>"
         + _table(["Kriteria", "Ambang", "Sampel", "SNP", "Keterangan"], rows_qc, {2, 3}))
 
     var = pca.get("variansi_dijelaskan") or []

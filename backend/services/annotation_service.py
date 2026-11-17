@@ -43,7 +43,7 @@ def annotate(db: Session, a: Analysis, organism: str, sertakan_teratas: bool = F
         label = "SNP (signifikan dan teratas)"
 
     hasil = annotate_snps_auto(snps, organism, settings.ANNOTATION_GFF3, settings.ANNOTATION_WINDOW_BP,
-                               label, timeout_total=settings.ANNOTATION_TIMEOUT_TOTAL)
+                               label, timeout_total=getattr(settings, "ANNOTATION_TIMEOUT_TOTAL", 25.0))
     for k in hasil["kandidat"]:
         k["signifikan"] = k["snp_id"] in signifikan
 

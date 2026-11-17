@@ -26,9 +26,12 @@ def check_features() -> dict:
     except ImportError:
         png = {"ok": False, "error": "matplotlib belum terpasang; ekspor PNG tidak tersedia."}
     gff3 = settings.ANNOTATION_GFF3
+    src = settings.ANNOTATION_SOURCE
     return {
         "ekspor_png": png,
-        "anotasi_gff3": {"ok": gff3.is_file(), "berkas": gff3.name},
+        "sumber_anotasi": src,
+        "anotasi_gff3": {"ok": gff3.is_file(), "berkas": gff3.name,
+                         "dipakai": src in ("otomatis", "gff3")},
         "login_google": {"ok": bool(settings.GOOGLE_CLIENT_ID),
                          **({} if settings.GOOGLE_CLIENT_ID else {"error": "GOOGLE_CLIENT_ID belum diisi."})},
         "mode_pipeline": settings.PIPELINE_MODE,

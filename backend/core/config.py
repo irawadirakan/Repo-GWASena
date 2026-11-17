@@ -61,6 +61,12 @@ class Settings:
         ROOT_DIR / os.getenv("ANNOTATION_GFF3", "./data/contoh/anotasi_bawang_putih_contoh.gff3")
     ).resolve()
     ANNOTATION_WINDOW_BP: int = int(os.getenv("ANNOTATION_WINDOW_BP", "50000"))
+    ANNOTATION_TIMEOUT_TOTAL: float = float(os.getenv("ANNOTATION_TIMEOUT_TOTAL", "25.0"))
+    ANNOTATION_AUTO: bool = _as_bool(os.getenv("ANNOTATION_AUTO", "true"))
+
+    @property
+    def ANNOTATION_SOURCE(self) -> str:
+        return os.getenv("ANNOTATION_SOURCE", "ensembl").strip().lower()
 
     # Smart downsampling Manhattan plot: di atas batas ini, titik non-signifikan diringkas
     # agar grafik interaktif tetap ringan (SNP signifikan selalu dipertahankan).

@@ -25,15 +25,21 @@ def require_admin(user: User = Depends(get_current_user)) -> User:
 @router.get("/ringkasan", summary="Ringkasan jumlah pengguna dan analisis per status")
 def ringkasan(_: User = Depends(require_admin), db: Session = Depends(get_db)):
     per_status = dict(db.execute(select(Analysis.status, func.count()).group_by(Analysis.status)).all())
-    total_users = db.scalar(select(func.count()).select_from(User))
+    total_users = db.scalar(select(func.count()).select_from(User)) or 0
     total_analyses = sum(per_status.values())
+    active_jobs = per_status.get(AnalysisStatus.ANTRE, 0) + per_status.get(AnalysisStatus.BERJALAN, 0)
+    finished_jobs = per_status.get(AnalysisStatus.SELESAI, 0)
+    failed_jobs = per_status.get(AnalysisStatus.GAGAL, 0)
     return {
         "jumlah_pengguna": total_users,
         "total_pengguna": total_users,
         "jumlah_analisis": total_analyses,
         "total_analisis": total_analyses,
         "analisis_per_status": {s: per_status.get(s, 0) for s in STATUS_SEMUA},
-        "job_aktif": per_status.get(AnalysisStatus.ANTRE, 0) + per_status.get(AnalysisStatus.BERJALAN, 0),
+        "job_aktif": active_jobs,
+        "analisis_aktif": active_jobs,
+        "analisis_selesai": finished_jobs,
+        "analisis_gagal": failed_jobs,
     }
 
 
@@ -65,7 +71,16 @@ def daftar_job(
             raise HTTPException(422, {"pesan": f"Status '{status_job}' tidak dikenal.",
                                       "rincian": [f"Pilihan: {', '.join(STATUS_SEMUA)}, aktif"]})
         stmt = stmt.where(Analysis.status == status_job)
-    return [{"analysis_id": a.analysis_id, "analysis_name": a.analysis_name, "pemilik": username,
-             "status": a.status, "trait_name": a.trait_name, "model_name": a.model_name,
-             "significant_count": a.significant_count, "dibuat": a.created_at, "diperbarui": a.updated_at}
-            for a, username in db.execute(stmt).all()]
+    return [{
+        "analysis_id": a.analysis_id,
+        "analysis_name": a.analysis_name,
+        "pemilik": username,
+        "username": username,
+        "status": a.status,
+        "trait_name": a.trait_name,
+        "model_name": a.model_name,
+        "significant_count": a.significant_count,
+        "organism": a.organism,
+        "dibuat": a.created_at,
+        "diperbarui": a.updated_at,
+    } for a, username in db.execute(stmt).all()]

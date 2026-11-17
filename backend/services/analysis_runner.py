@@ -86,6 +86,13 @@ def run_analysis(analysis_id: int) -> None:
             logger.exception("PNG analisis %s gagal dibuat; dapat dibuat ulang lewat endpoint /png", analysis_id)
             db.rollback()
 
+        try:
+            from backend.services import annotation_service
+            annotation_service.precompute(db, analysis)
+        except Exception:  # noqa: BLE001
+            logger.exception("Precompute anotasi analisis %s gagal", analysis_id)
+            db.rollback()
+
 
 def _save_results(db, analysis_id: int, result: dict) -> None:
     geno_ds = db.scalar(select(Dataset).where(Dataset.analysis_id == analysis_id,

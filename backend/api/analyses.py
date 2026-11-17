@@ -23,7 +23,7 @@ from fastapi.responses import HTMLResponse, Response
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
-from backend.api.deps import get_current_user, get_current_user_or_demo, owned_analysis
+from backend.api.deps import get_current_user, owned_analysis
 from backend.core.config import ROOT_DIR, settings
 from backend.core.database import get_db
 from backend.models import (
@@ -270,12 +270,14 @@ def _load_benchmark_internal(
             aid = None
 
     a: Analysis | None = None
+    sesi_baru: bool = False
     if aid is not None:
         candidate = db.get(Analysis, aid)
         if candidate and (candidate.user_id == user.user_id or user.role == "administrator"):
             a = candidate
 
     if a is None:
+        sesi_baru = True
         a = Analysis(
             user_id=user.user_id,
             analysis_name="Analisis Bobot Umbi Bawang Putih",
@@ -286,6 +288,7 @@ def _load_benchmark_internal(
         db.commit()
         db.refresh(a)
     else:
+        sesi_baru = False
         if "tanpa judul" in a.analysis_name.lower() or "sesi" in a.analysis_name.lower():
             a.analysis_name = "Analisis Bobot Umbi Bawang Putih"
 
@@ -413,6 +416,7 @@ def _load_benchmark_internal(
     return {
         "status": "success",
         "analysis_id": a.analysis_id,
+        "sesi_baru": sesi_baru,
         "dataset_type": fmt,
         "files": {
             "genotype": file_list,
@@ -422,7 +426,7 @@ def _load_benchmark_internal(
             "is_valid": True,
             "sample_count": geno.n_samples,
             "snp_count": geno.n_snps,
-            "qc_status": "100% Lolos QC",
+            "qc_status": "Lolos validasi (100% Lolos QC)",
             "sample_match": True,
         },
         "pesan": f"Dataset benchmark {fmt} berhasil dimuat dan divalidasi. 100% Sample ID cocok.",
@@ -444,7 +448,7 @@ def _load_benchmark_internal(
 @router.post("/benchmark", summary="Muat dataset benchmark bawang putih (VCF / PLINK) dengan auto-create session")
 def load_benchmark(
     data: BenchmarkLoadRequest = BenchmarkLoadRequest(),
-    user: User = Depends(get_current_user_or_demo),
+    user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     return _load_benchmark_internal(
@@ -492,7 +496,7 @@ def download_benchmark_zip(
 def load_benchmark_for_analysis(
     analysis_id: int | str,
     data: BenchmarkLoadRequest = BenchmarkLoadRequest(),
-    user: User = Depends(get_current_user_or_demo),
+    user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     return _load_benchmark_internal(
@@ -979,35 +983,15 @@ def get_annotation(
     sertakan_teratas: bool = Query(
         False, description="Ikut menganotasi 10 SNP dengan nilai p terkecil, berguna bila tidak ada "
                            "SNP yang signifikan"),
+    segarkan: bool = Query(False, description="Paksa perbarui dari sumber dan abaikan cache"),
     db: Session = Depends(get_db),
 ):
     _require_done(a)
-    ringkasan = _get_cache(db, a.analysis_id, "ringkasan") or {}
-    snps = list(ringkasan.get("snp_signifikan") or [])
-    signifikan = {s["snp_id"] for s in snps}
-    label = "SNP signifikan"
-    if sertakan_teratas:
-        snps += [s for s in ringkasan.get("snp_teratas") or [] if s["snp_id"] not in signifikan]
-        label = "SNP (signifikan dan teratas)"
     org_code, _ = _resolve_session_organism(db, a)
-    hasil = annotate_snps_auto(snps, org_code, settings.ANNOTATION_GFF3, settings.ANNOTATION_WINDOW_BP, label)
-    for k in hasil["kandidat"]:
-        k["signifikan"] = k["snp_id"] in signifikan
-        db_res = db.scalar(select(AssociationResult).where(
-            AssociationResult.analysis_id == a.analysis_id,
-            AssociationResult.snp_code == k["snp_id"],
-        ))
-        if db_res:
-            # k["gen"] berisi daftar gen terdekat (paling dekat lebih dulu); simpan gen pertama
-            gen = k.get("gen") or []
-            db_res.candidate_gene = (gen[0].get("gene_id") or gen[0].get("gene_name")) if gen else None
-            db_res.annotation_info = k
-    db.commit()
-
-    if hasil["status"] == "tersedia" and not snps:
-        hasil["pesan"] += " Gunakan sertakan_teratas=true untuk melihat kandidat gen di sekitar SNP teratas."
-    return {"analysis_id": a.analysis_id, "trait": ringkasan.get("trait"),
-            "model": ringkasan.get("model"), **hasil}
+    from backend.services import annotation_service
+    return annotation_service.annotate(
+        db, a, org_code, sertakan_teratas=sertakan_teratas, segarkan=segarkan
+    )
 
 
 # ------------------------------------------------------------------ 7. unduh CSV
