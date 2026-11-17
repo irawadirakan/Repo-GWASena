@@ -831,20 +831,20 @@ export default function IntroPage() {
 
                       {/* 2. Tombol Primer di Kanan dengan Micro-Interaction */}
                       <Link
-                        className="group inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-teal-500 to-cyan-500 px-6 py-2.5 text-sm font-semibold text-white shadow-md shadow-teal-500/20 transition-all duration-150 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-cyan-500/30 hover:brightness-105 active:scale-95"
+                        className="group inline-flex items-center justify-center gap-2.5 rounded-xl bg-gradient-to-r from-teal-500 to-cyan-500 px-6 py-2.5 text-sm font-semibold text-white shadow-md shadow-teal-500/20 transition-all duration-150 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-cyan-500/30 hover:brightness-105 active:scale-95"
                         to="/login"
                         onClick={() => {
                           localStorage.setItem('gwasena_intro_completed', 'true');
                           localStorage.setItem('gwasena_has_logged_in', 'true');
                         }}
                       >
-                        <span className="flex items-center gap-1">
-                          <span>Mulai Sekarang </span>
-                          <span className="text-lg leading-none font-extrabold scale-110 inline-block">!</span>
-                        </span>
+                        {/* Teks Mulai Sekarang dan Tanda Seru Default */}
+                        <span>Mulai Sekarang !</span>
+
+                        {/* Tanda Panah yang Diperbesar & Animatif */}
                         <span
                           aria-hidden="true"
-                          className="transition-transform duration-200 ease-out group-hover:translate-x-1"
+                          className="inline-block text-lg sm:text-xl font-bold leading-none transition-transform duration-200 ease-out group-hover:translate-x-1.5"
                         >
                           →
                         </span>
