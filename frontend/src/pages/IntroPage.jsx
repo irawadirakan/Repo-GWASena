@@ -504,10 +504,8 @@ export default function IntroPage() {
 
                       {/* Summary Callout */}
                       <div className="p-3.5 rounded-xl border border-sky-200/80 bg-sky-50/70 text-xs text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 flex items-center gap-2">
-                        <Sparkles className="h-4 w-4 text-[#06B6D4] shrink-0" />
-                        <span>
-                          <strong className="font-semibold text-slate-900 dark:text-white">Status:</strong> Dataset siap dianalisis. Tidak ditemukan diskrepansi nama sampel.
-                        </span>
+                        <span className="font-bold text-slate-900 dark:text-white">Status:</span>
+                        <span>Dataset siap dianalisis. Tidak ditemukan diskrepansi nama sampel.</span>
                       </div>
                     </div>
                   )}
