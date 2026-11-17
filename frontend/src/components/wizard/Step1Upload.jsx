@@ -805,10 +805,6 @@ sample_05,48.2,42.0,13
               ) : (
                 /* Mode PLINK Biner: 3 Berkas */
                 <div className="space-y-2.5">
-                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 text-emerald-800 dark:text-emerald-300 text-xs font-semibold">
-                    <Sparkles className="h-3.5 w-3.5 shrink-0" />
-                    <span>Format terkompresi efisien · Tanpa batas ukuran berkas</span>
-                  </div>
                   <div className="rounded-2xl border border-slate-200 dark:border-white/10 p-2.5 bg-white/50 dark:bg-white/5">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
@@ -1365,9 +1361,7 @@ sample_05,48.2,42.0,13
                   </div>
                 </div>
                 <div className="flex items-center justify-between pt-2">
-                  <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold">
-                    Format terkompresi efisien · Tanpa batas ukuran berkas
-                  </span>
+                  <span className="text-[11px] text-slate-500">Mendukung genom Allium sativum (chr1-chr8)</span>
                   <button
                     type="button"
                     disabled={isDownloadingZip}
