@@ -733,11 +733,6 @@ export default function Step2Config({
               }`}
             >
               <div className="relative text-center pb-3 border-b border-slate-200/80 dark:border-white/10 mb-3.5">
-                <div className="absolute left-0 top-0">
-                  <span className="rounded-full bg-cyan-100 dark:bg-[#06B6D4]/20 border border-cyan-300 dark:border-[#06B6D4]/30 px-2.5 py-0.5 text-[11px] font-bold text-cyan-900 dark:text-[#06B6D4] font-sans">
-                    Direkomendasikan
-                  </span>
-                </div>
                 <div className="absolute right-0 top-0">
                   <EduHintTooltip hintKey="mlm" />
                 </div>

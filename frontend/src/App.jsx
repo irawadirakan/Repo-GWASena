@@ -10,8 +10,10 @@ import DashboardPage from './pages/DashboardPage.jsx';
 import HistoryPage from './pages/HistoryPage.jsx';
 import AdminPage from './pages/AdminPage.jsx';
 import AnalysisWizardPage from './pages/AnalysisWizardPage.jsx';
+import AboutPage from './pages/AboutPage.jsx';
 import { useAuthStore } from './store/useAuthStore.js';
 import SeamlessVideoBackground from './components/common/SeamlessVideoBackground.jsx';
+import AboutFloatingButton from './components/common/AboutFloatingButton.jsx';
 
 /**
  * Root Gatekeeper (Logika Kunjungan Awal vs Pengguna Lama & Sesi Aktif)
@@ -51,9 +53,15 @@ export default function App() {
       {/* ── Global Seamless Looping Live Video Background (Anti Jump-Cut) ── */}
       <SeamlessVideoBackground />
 
+      {/* ── Global Floating Action Button (FAB) "About Us" (Persisten S-00 s.d. S-10) ── */}
+      <AboutFloatingButton />
+
       <Routes>
         {/* ── Root Gatekeeper ── */}
         <Route path="/" element={<RootGatekeeper />} />
+
+        {/* ── Halaman About Us (Interaktif 3D Glassmorphism & Profil Tim Kelompok 4) ── */}
+        <Route path="/about" element={<AboutPage />} />
 
         {/* ── Rute Publik (Dibungkus AuthLayout dengan persistent DnaBackdrop) ── */}
         <Route element={<AuthLayout />}>
