@@ -809,16 +809,16 @@ export default function IntroPage() {
                      ======================================================== */}
                   <div
                     data-testid="intro-cta-card"
-                    className="rounded-2xl border border-white/60 bg-white/70 dark:bg-slate-900/70 backdrop-blur-md p-6 sm:p-7 shadow-sm transition-all duration-300 hover:shadow-md flex flex-col"
+                    className="rounded-2xl border border-white/60 bg-white/70 dark:bg-slate-900/70 backdrop-blur-md p-6 sm:p-8 shadow-sm transition-all duration-300 hover:shadow-md text-center flex flex-col"
                   >
-                    {/* Baris 1: Pertanyaan Utama */}
-                    <h3 className="w-full text-base sm:text-lg font-bold text-slate-900 dark:text-white leading-snug">
+                    {/* Baris 1: Teks Pertanyaan Utama (Di Tengah) */}
+                    <h3 className="w-full text-base sm:text-lg font-bold text-slate-900 dark:text-white leading-snug mx-auto max-w-xl">
                       Siap memulai eksplorasi dan penemuan asosiasi genomik?
                     </h3>
 
-                    {/* Baris 2: Kedua Tombol Berdampingan di Sisi Kanan (justify-end) */}
-                    <div className="mt-5 flex flex-wrap items-center justify-end gap-3.5">
-                      {/* 1. Tombol Sekunder di Samping Kiri Tombol Primer */}
+                    {/* Baris 2: Kedua Tombol Berdampingan di Posisi Tengah (justify-center) */}
+                    <div className="mt-5 flex flex-wrap items-center justify-center gap-3.5">
+                      {/* 1. Tombol Sekunder di Kiri */}
                       <Link
                         className="inline-flex items-center justify-center rounded-xl border border-slate-300/80 bg-white/90 px-5 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:bg-slate-50 hover:text-slate-900 hover:shadow-md active:scale-95 dark:border-white/10 dark:bg-slate-800/80 dark:text-slate-200 dark:hover:bg-slate-800 dark:hover:text-white"
                         to="/register"
@@ -829,7 +829,7 @@ export default function IntroPage() {
                         Buat Akun Baru
                       </Link>
 
-                      {/* 2. Tombol Primer di Sebelah Kanan dengan Micro-Interaction */}
+                      {/* 2. Tombol Primer di Kanan dengan Micro-Interaction */}
                       <Link
                         className="group inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-teal-500 to-cyan-500 px-6 py-2.5 text-sm font-semibold text-white shadow-md shadow-teal-500/20 transition-all duration-150 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-cyan-500/30 hover:brightness-105 active:scale-95"
                         to="/login"

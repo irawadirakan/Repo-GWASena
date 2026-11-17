@@ -94,12 +94,12 @@ describe('Evaluasi Tester Batch 4: Resolusi 100% Modul GWASena', () => {
       expect(ctaCard.querySelector('a[href="/login"]') || ctaCard.querySelector('button')).toHaveTextContent('Mulai Sekarang !');
       expect(ctaCard.querySelector('a[href="/register"]')).toHaveTextContent('Buat Akun Baru');
 
-      // Verifikasi judul CTA melebar (w-full) dan kontainer tombol aksi (justify-end)
+      // Verifikasi judul CTA melebar (w-full) dan kontainer tombol aksi (justify-center)
       const ctaTitle = ctaCard.querySelector('h3') || ctaCard.querySelector('p');
       expect(ctaTitle).toHaveClass('w-full');
       const btnWrapper = ctaCard.querySelector('div.mt-5') || ctaCard.querySelector('div.mt-4');
       expect(btnWrapper).toBeInTheDocument();
-      expect(btnWrapper).toHaveClass('justify-end');
+      expect(btnWrapper).toHaveClass('justify-center');
 
       // Verifikasi container flex memiliki gap vertikal pemisah (gap-4)
       const parentContainer = ctaCard.parentElement;
