@@ -838,7 +838,10 @@ export default function IntroPage() {
                           localStorage.setItem('gwasena_has_logged_in', 'true');
                         }}
                       >
-                        <span>Mulai Sekarang !</span>
+                        <span className="flex items-center gap-1">
+                          <span>Mulai Sekarang </span>
+                          <span className="text-lg leading-none font-extrabold scale-110 inline-block">!</span>
+                        </span>
                         <span
                           aria-hidden="true"
                           className="transition-transform duration-200 ease-out group-hover:translate-x-1"
