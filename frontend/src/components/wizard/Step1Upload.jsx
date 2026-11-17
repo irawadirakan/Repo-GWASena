@@ -127,20 +127,6 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
     if (!file) return;
     const name = file.name.toLowerCase();
 
-    // Guard ukuran berkas genotipe sisi klien (maks 50 MB)
-    if (file.size > 50 * 1024 * 1024) {
-      setError({
-        message: 'Ukuran berkas genotipe melebihi batas maksimum.',
-        details: [
-          `Berkas '${file.name}' berukuran ${(file.size / (1024 * 1024)).toFixed(2)} MB.`,
-          'Batas maksimum unggah berkas genotipe adalah 50 MB.',
-          'Perkecil jumlah varian atau sampel sebelum mengunggah.',
-        ],
-      });
-      setGenotypeFile(null);
-      return;
-    }
-
     // Tolak berkas .vcf.gz atau .gz seketika
     if (name.endsWith('.vcf.gz') || name.endsWith('.gz')) {
       setError({
@@ -153,7 +139,7 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
       return;
     }
 
-    // Auto-deteksi jika berkas yang dipilih adalah .bed
+    // Auto-deteksi jika berkas yang dipilih adalah .bed (PLINK biner: Tanpa batas ukuran berkas)
     if (name.endsWith('.bed')) {
       setFormatMode('plink');
       setGenotypeFile(file);
@@ -162,7 +148,19 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
       return;
     }
 
+    // Jika berkas adalah VCF (.vcf): Guard ukuran berkas maks 50 MB
     if (name.endsWith('.vcf')) {
+      if (file.size > 50 * 1024 * 1024) {
+        setError({
+          message: 'Ukuran berkas VCF melebihi batas maksimal 50 MB. Silakan gunakan berkas yang lebih kecil atau gunakan format PLINK biner.',
+          details: [
+            `Berkas '${file.name}' berukuran ${(file.size / (1024 * 1024)).toFixed(2)} MB.`,
+            'Batas maksimum unggah berkas genotipe VCF adalah 50 MB.',
+          ],
+        });
+        setGenotypeFile(null);
+        return;
+      }
       setFormatMode('vcf');
       setGenotypeFile(file);
       setError(null);
@@ -182,14 +180,6 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
   const handleBimSelect = (file) => {
     if (!file) return;
     const name = file.name.toLowerCase();
-    if (file.size > 50 * 1024 * 1024) {
-      setError({
-        message: 'Ukuran berkas peta varian .bim melebihi batas 50 MB.',
-        details: [`Berkas '${file.name}' berukuran ${(file.size / (1024 * 1024)).toFixed(2)} MB.`],
-      });
-      setBimFile(null);
-      return;
-    }
     if (!name.endsWith('.bim')) {
       setError({
         message: 'Format berkas peta varian tidak valid.',
@@ -198,6 +188,7 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
       setBimFile(null);
       return;
     }
+    // Format PLINK biner (.bim): Tanpa batas ukuran berkas
     setError(null);
     setBimFile(file);
     setUploadResult(null);
@@ -206,14 +197,6 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
   const handleFamSelect = (file) => {
     if (!file) return;
     const name = file.name.toLowerCase();
-    if (file.size > 50 * 1024 * 1024) {
-      setError({
-        message: 'Ukuran berkas sampel .fam melebihi batas 50 MB.',
-        details: [`Berkas '${file.name}' berukuran ${(file.size / (1024 * 1024)).toFixed(2)} MB.`],
-      });
-      setFamFile(null);
-      return;
-    }
     if (!name.endsWith('.fam')) {
       setError({
         message: 'Format berkas sampel/pedigree tidak valid.',
@@ -222,6 +205,7 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
       setFamFile(null);
       return;
     }
+    // Format PLINK biner (.fam): Tanpa batas ukuran berkas
     setError(null);
     setFamFile(file);
     setUploadResult(null);
@@ -407,13 +391,13 @@ export default function Step1Upload({ analysisId, onUploadSuccess, onNext }) {
     const phenoNameLower = (phenotypeFile?.name || '').toLowerCase();
 
     // Guard ukuran berkas sisi klien sebelum menguras bandwidth
-    if (genotypeFile && genotypeFile.size > 50 * 1024 * 1024) {
+    // Format VCF dibatasi 50 MB, sedangkan format PLINK biner (.bed, .bim, .fam) tidak dibatasi ukuran
+    if (formatMode === 'vcf' && genotypeFile && genotypeFile.size > 50 * 1024 * 1024) {
       setError({
-        message: 'Ukuran berkas genotipe melebihi batas maksimum.',
+        message: 'Ukuran berkas VCF melebihi batas maksimal 50 MB. Silakan gunakan berkas yang lebih kecil atau gunakan format PLINK biner.',
         details: [
           `Berkas '${genotypeFile.name}' berukuran ${(genotypeFile.size / (1024 * 1024)).toFixed(2)} MB.`,
-          'Batas maksimum unggah berkas genotipe adalah 50 MB.',
-          'Perkecil jumlah varian atau sampel sebelum mengunggah.',
+          'Batas maksimum unggah berkas genotipe VCF adalah 50 MB.',
         ],
       });
       return;
@@ -753,7 +737,7 @@ sample_05,48.2,42.0,13
 
               <p className="text-xs sm:text-sm text-slate-700 dark:text-slate-300 mb-4 leading-relaxed font-medium">
                 {formatMode === 'plink'
-                  ? 'Format PLINK biner membutuhkan triplet berkas lengkap: .bed (genotipe), .bim (marker SNP), dan .fam (sampel).'
+                  ? 'Format PLINK biner membutuhkan triplet berkas lengkap: .bed (genotipe), .bim (marker SNP), dan .fam (sampel). Bebas batasan ukuran (Direkomendasikan untuk dataset besar).'
                   : 'Format VCF standar (.vcf) yang memuat informasi varian penanda SNP multi-sampel.'}
               </p>
 
@@ -821,6 +805,10 @@ sample_05,48.2,42.0,13
               ) : (
                 /* Mode PLINK Biner: 3 Berkas */
                 <div className="space-y-2.5">
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 text-emerald-800 dark:text-emerald-300 text-xs font-semibold">
+                    <Sparkles className="h-3.5 w-3.5 shrink-0" />
+                    <span>Format terkompresi efisien · Tanpa batas ukuran berkas</span>
+                  </div>
                   <div className="rounded-2xl border border-slate-200 dark:border-white/10 p-2.5 bg-white/50 dark:bg-white/5">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
@@ -945,7 +933,7 @@ sample_05,48.2,42.0,13
             <div className="mt-4 pt-3 border-t border-slate-200 dark:border-white/10 text-xs sm:text-sm text-slate-700 dark:text-slate-300 flex items-center gap-1.5 font-medium">
               <Info className="h-4 w-4 shrink-0 text-[#0284C7] dark:text-[#06B6D4]" />
               <span>
-                Format genotipe yang didukung adalah teks VCF (.vcf) atau PLINK Biner (.bed, .bim, .fam).
+                Teks VCF (.vcf) dibatasi hingga 50 MB. Untuk dataset genomik skala besar, gunakan format PLINK biner (.bed, .bim, .fam) tanpa batasan ukuran.
               </span>
             </div>
           </div>
@@ -1377,7 +1365,9 @@ sample_05,48.2,42.0,13
                   </div>
                 </div>
                 <div className="flex items-center justify-between pt-2">
-                  <span className="text-[11px] text-slate-500">Mendukung genom Allium sativum (chr1-chr8)</span>
+                  <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold">
+                    Format terkompresi efisien · Tanpa batas ukuran berkas
+                  </span>
                   <button
                     type="button"
                     disabled={isDownloadingZip}

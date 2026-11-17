@@ -102,6 +102,20 @@ export default function LoginPage() {
     }
   };
 
+  const handleDemoLogin = async () => {
+    setError(null);
+    try {
+      await loginDemo();
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('gwasena_has_logged_in', 'true');
+        localStorage.setItem('gwasena_is_demo', 'true');
+      }
+      navigate('/dashboard', { replace: true });
+    } catch (e) {
+      setError(e);
+    }
+  };
+
   return (
     <div className="w-full max-w-md animate-fade-in">
       <div className="figma-card p-7 sm:p-9">
@@ -242,22 +256,10 @@ export default function LoginPage() {
           <button
             type="button"
             disabled={isLoading}
-            onClick={async () => {
-              setError(null);
-              try {
-                await loginDemo();
-                if (typeof window !== 'undefined') {
-                  localStorage.setItem('gwasena_has_logged_in', 'true');
-                  localStorage.setItem('gwasena_is_demo', 'true');
-                }
-                navigate('/dashboard', { replace: true });
-              } catch (e) {
-                setError(e);
-              }
-            }}
-            className="w-full figma-btn-secondary py-2.5 text-xs sm:text-sm font-bold cursor-pointer"
+            onClick={handleDemoLogin}
+            className="w-full py-3 px-6 rounded-full border border-sky-300 dark:border-sky-700 bg-sky-50/70 dark:bg-sky-950/40 text-sky-800 dark:text-sky-200 text-sm font-semibold hover:bg-sky-100 dark:hover:bg-sky-900/50 transition-all text-center shadow-sm"
           >
-            Jelajahi Mode Demo (Akun Peneliti)
+            Gunakan Akun Peneliti Demo di Layar Masuk
           </button>
         </form>
 

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Eye, EyeOff, Lock, User, Mail, ArrowRight, Loader2, Sparkles } from 'lucide-react';
+import { Eye, EyeOff, Lock, User, Mail, ArrowRight, Loader2 } from 'lucide-react';
 import { useAuthStore } from '../store/useAuthStore.js';
 import ErrorMessageArea from '../components/common/ErrorMessageArea.jsx';
 import { formatUserFriendlyError } from '../services/apiClient.js';
@@ -150,6 +150,20 @@ export default function RegisterPage() {
     }
   };
 
+  const handleDemoLogin = async () => {
+    setError(null);
+    try {
+      await loginDemo();
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('gwasena_has_logged_in', 'true');
+        localStorage.setItem('gwasena_is_demo', 'true');
+      }
+      navigate('/dashboard', { replace: true });
+    } catch (e) {
+      setError(formatUserFriendlyError(e) || e);
+    }
+  };
+
   return (
     <div className="w-full max-w-md animate-fade-in py-2">
       <div className="figma-card p-7 sm:p-9">
@@ -192,6 +206,8 @@ export default function RegisterPage() {
                 name="username"
                 type="text"
                 autoComplete="username"
+                autoCapitalize="none"
+                spellCheck="false"
                 required
                 minLength={3}
                 maxLength={50}
@@ -234,6 +250,8 @@ export default function RegisterPage() {
                 name="email"
                 type="email"
                 autoComplete="email"
+                autoCapitalize="none"
+                spellCheck="false"
                 required
                 maxLength={120}
                 value={email}
@@ -374,23 +392,10 @@ export default function RegisterPage() {
           <button
             type="button"
             disabled={isLoading}
-            onClick={async () => {
-              setError(null);
-              try {
-                await loginDemo();
-                if (typeof window !== 'undefined') {
-                  localStorage.setItem('gwasena_has_logged_in', 'true');
-                  localStorage.setItem('gwasena_is_demo', 'true');
-                }
-                navigate('/dashboard', { replace: true });
-              } catch (e) {
-                setError(e);
-              }
-            }}
-            className="w-full figma-btn-secondary py-2.5 text-xs sm:text-sm font-bold cursor-pointer"
+            onClick={handleDemoLogin}
+            className="w-full py-3 px-6 rounded-full border border-sky-300 dark:border-sky-700 bg-sky-50/70 dark:bg-sky-950/40 text-sky-800 dark:text-sky-200 text-sm font-semibold hover:bg-sky-100 dark:hover:bg-sky-900/50 transition-all text-center shadow-sm"
           >
-            <Sparkles className="h-4 w-4 text-[#0284C7] dark:text-[#06B6D4]" />
-            <span>Gunakan Akun Peneliti Demo di Layar Masuk &rarr;</span>
+            Gunakan Akun Peneliti Demo di Layar Masuk
           </button>
         </form>
 

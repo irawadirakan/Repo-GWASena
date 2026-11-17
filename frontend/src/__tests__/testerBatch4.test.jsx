@@ -146,7 +146,7 @@ describe('Evaluasi Tester Batch 4: Resolusi 100% Modul GWASena', () => {
         </BrowserRouter>
       );
 
-      const demoBtn = screen.getByRole('button', { name: /Jelajahi Mode Demo/i });
+      const demoBtn = screen.getByRole('button', { name: /Gunakan Akun Peneliti Demo di Layar Masuk|Jelajahi Mode Demo/i });
       fireEvent.click(demoBtn);
 
       await waitFor(() => {
@@ -257,7 +257,7 @@ describe('Evaluasi Tester Batch 4: Resolusi 100% Modul GWASena', () => {
 
       // Periksa catatan infobox bawah kartu
       expect(
-        screen.getByText('Format genotipe yang didukung adalah teks VCF (.vcf) atau PLINK Biner (.bed, .bim, .fam).')
+        screen.getByText(/Teks VCF \(\.vcf\) dibatasi hingga 50 MB|Format genotipe yang didukung/i)
       ).toBeInTheDocument();
 
       // Periksa atribut accept pada input file genotipe
@@ -274,7 +274,7 @@ describe('Evaluasi Tester Batch 4: Resolusi 100% Modul GWASena', () => {
       ).toBeInTheDocument();
     });
 
-    it('Validasi batas ukuran file di sisi klien: tolak genotipe > 50 MB', async () => {
+    it('Validasi batas ukuran file di sisi klien: tolak genotipe VCF > 50 MB', async () => {
       render(<Step1Upload onNext={vi.fn()} />);
 
       const fileInput = screen.getByTestId('genotype-file-input');
@@ -284,8 +284,21 @@ describe('Evaluasi Tester Batch 4: Resolusi 100% Modul GWASena', () => {
       fireEvent.change(fileInput, { target: { files: [largeFile] } });
 
       expect(
-        await screen.findByText(/Batas maksimum unggah berkas genotipe adalah 50 MB/i)
+        await screen.findByText(/Ukuran berkas VCF melebihi batas maksimal 50 MB/i)
       ).toBeInTheDocument();
+    });
+
+    it('Validasi format PLINK biner: menerima berkas .bed > 50 MB tanpa batasan ukuran', async () => {
+      render(<Step1Upload onNext={vi.fn()} />);
+
+      const fileInput = screen.getByTestId('genotype-file-input');
+      const largeBed = new File(['binary_content'], 'large_dataset.bed', { type: 'application/octet-stream' });
+      Object.defineProperty(largeBed, 'size', { value: 120 * 1024 * 1024 }); // 120 MB
+
+      fireEvent.change(fileInput, { target: { files: [largeBed] } });
+
+      expect(screen.queryByText(/melebihi batas/i)).not.toBeInTheDocument();
+      expect(screen.getByText('large_dataset.bed')).toBeInTheDocument();
     });
 
     it('Validasi batas ukuran file di sisi klien: tolak fenotipe CSV > 10 MB', async () => {
@@ -319,17 +332,19 @@ describe('Evaluasi Tester Batch 4: Resolusi 100% Modul GWASena', () => {
       expect(pcaDesc.textContent).not.toContain('atau kekerabatan aksesi');
     });
 
-    it('Input Alpha menggunakan step="any" dan preset 0.10 mempertahankan format dua desimal', async () => {
+    it('Input Alpha menggunakan step="0.0001" dan preset numerik mempertahankan format desimal titik', async () => {
       render(<Step2Config onNext={vi.fn()} onBack={vi.fn()} />);
 
-      const alphaInput = document.getElementById('alpha');
+      const alphaInput = document.getElementById('alpha-threshold') || document.getElementById('alpha');
       expect(alphaInput).toBeInTheDocument();
-      expect(alphaInput).toHaveAttribute('step', 'any');
+      expect(alphaInput).toHaveAttribute('step', '0.0001');
+      expect(alphaInput).toHaveAttribute('min', '0.0001');
+      expect(alphaInput).toHaveAttribute('max', '0.20');
 
       const presetBtn = screen.getByRole('button', { name: /0\.10 \(Eksploratori\)/i });
       fireEvent.click(presetBtn);
 
-      expect(alphaInput.value).toBe('0.10');
+      expect(Number(alphaInput.value)).toBe(0.1);
     });
   });
 
