@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Eye, EyeOff, Lock, User, ArrowRight, CheckCircle2, Loader2, Sparkles } from 'lucide-react';
+import { Eye, EyeOff, Lock, User, ArrowRight, CheckCircle2, Loader2 } from 'lucide-react';
 import { useAuthStore } from '../store/useAuthStore.js';
 import ErrorMessageArea from '../components/common/ErrorMessageArea.jsx';
 
@@ -257,8 +257,7 @@ export default function LoginPage() {
             }}
             className="w-full figma-btn-secondary py-2.5 text-xs sm:text-sm font-bold cursor-pointer"
           >
-            <Sparkles className="h-4 w-4 text-[#0284C7] dark:text-[#06B6D4]" />
-            <span>Jelajahi Mode Demo (Akun Peneliti)</span>
+            Jelajahi Mode Demo (Akun Peneliti)
           </button>
         </form>
 
@@ -279,7 +278,7 @@ export default function LoginPage() {
               to="/welcome"
               className="inline-flex items-center gap-1 text-xs text-slate-700 dark:text-slate-300 hover:text-[#0284C7] dark:hover:text-[#06B6D4] transition-colors font-semibold"
             >
-              <span>✨ Lihat Pengenalan GWASena</span>
+              Lihat Pengenalan GWASena
             </Link>
           </div>
         </div>
