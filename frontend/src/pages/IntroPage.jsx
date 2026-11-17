@@ -817,10 +817,10 @@ export default function IntroPage() {
                     </h3>
 
                     {/* Baris 2: Kedua Tombol Berdampingan di Posisi Tengah (justify-center) */}
-                    <div className="mt-5 flex flex-wrap items-center justify-center gap-4">
-                      {/* 1. Tombol Sekunder (Buat Akun Baru) - Tinggi & Padding Selaras */}
+                    <div className="mt-5 flex flex-wrap items-center justify-center gap-3.5 sm:gap-4">
+                      {/* 1. Tombol Sekunder (Buat Akun Baru) - DIMENSI & SHAPE SAMA PERSIS */}
                       <Link
-                        className="inline-flex items-center justify-center rounded-2xl border border-slate-300/80 bg-white/90 px-6 py-3 text-base font-bold text-slate-700 shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:bg-slate-50 hover:text-slate-900 hover:shadow-md active:scale-95 dark:border-white/10 dark:bg-slate-800/80 dark:text-slate-200 dark:hover:bg-slate-800 dark:hover:text-white"
+                        className="inline-flex h-12 sm:h-[52px] items-center justify-center rounded-2xl border border-slate-300/80 bg-white/95 px-6 sm:px-7 text-sm sm:text-base font-bold text-slate-700 shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:bg-slate-50 hover:text-slate-900 hover:shadow-md active:scale-95 dark:border-white/10 dark:bg-slate-800/90 dark:text-slate-200 dark:hover:bg-slate-800 dark:hover:text-white"
                         to="/register"
                         onClick={() => {
                           localStorage.setItem('gwasena_intro_completed', 'true');
@@ -829,22 +829,19 @@ export default function IntroPage() {
                         Buat Akun Baru
                       </Link>
 
-                      {/* 2. Tombol Primer (Mulai Sekarang ! →) - Teks & Panah FIT dengan Shape */}
+                      {/* 2. Tombol Primer (Mulai Sekarang ! →) - DIMENSI & SHAPE SAMA PERSIS */}
                       <Link
-                        className="group inline-flex items-center justify-center gap-3 rounded-2xl bg-gradient-to-r from-teal-500 to-cyan-500 px-7 py-3 text-base sm:text-lg font-bold text-white shadow-md shadow-teal-500/25 transition-all duration-150 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-cyan-500/35 hover:brightness-105 active:scale-95"
+                        className="group inline-flex h-12 sm:h-[52px] items-center justify-center gap-2.5 rounded-2xl bg-gradient-to-r from-teal-500 to-cyan-500 px-6 sm:px-7 text-sm sm:text-base font-bold text-white shadow-md shadow-teal-500/20 transition-all duration-150 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-cyan-500/30 hover:brightness-105 active:scale-95"
                         to="/login"
                         onClick={() => {
                           localStorage.setItem('gwasena_intro_completed', 'true');
                           localStorage.setItem('gwasena_has_logged_in', 'true');
                         }}
                       >
-                        {/* Teks Utama Lebih Besar & Proporsional */}
-                        <span className="tracking-tight">Mulai Sekarang !</span>
-
-                        {/* Tanda Panah Besar & Responsif Hover */}
+                        <span>Mulai Sekarang !</span>
                         <span
                           aria-hidden="true"
-                          className="inline-block text-xl sm:text-2xl font-black leading-none transition-transform duration-200 ease-out group-hover:translate-x-1.5"
+                          className="inline-block text-lg sm:text-xl font-bold leading-none transition-transform duration-200 ease-out group-hover:translate-x-1"
                         >
                           →
                         </span>
