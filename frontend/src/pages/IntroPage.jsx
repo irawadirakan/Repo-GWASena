@@ -809,16 +809,18 @@ export default function IntroPage() {
                      ======================================================== */}
                   <div
                     data-testid="intro-cta-card"
-                    className="rounded-2xl border border-white/60 bg-white/70 dark:bg-slate-900/70 backdrop-blur-md px-6 py-5 shadow-sm flex flex-col"
+                    className="rounded-2xl border border-white/60 bg-white/70 dark:bg-slate-900/70 backdrop-blur-md p-6 sm:p-7 shadow-sm transition-all duration-300 hover:shadow-md flex flex-col"
                   >
-                    <p className="w-full text-base sm:text-lg font-bold text-slate-800 dark:text-slate-100 leading-snug">
+                    {/* Baris 1: Teks Pertanyaan Utama */}
+                    <h3 className="w-full text-base sm:text-lg font-bold text-slate-900 dark:text-white leading-snug">
                       Siap memulai eksplorasi dan penemuan asosiasi genomik?
-                    </p>
+                    </h3>
 
-                    <div className="mt-4 flex flex-wrap items-center gap-3">
-                      {/* 1. Tombol Sekunder di KIRI */}
+                    {/* Baris 2: Tombol Aksi di Bawah Teks (Buat Akun di Kiri, Mulai Sekarang di Kanan) */}
+                    <div className="mt-4 flex flex-wrap items-center gap-3.5">
+                      {/* Tombol Sekunder (KIRI) */}
                       <Link
-                        className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100 dark:hover:bg-slate-900 active:scale-95"
+                        className="inline-flex items-center justify-center rounded-xl border border-slate-300/80 bg-white/90 px-5 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:bg-slate-50 hover:text-slate-900 hover:shadow-md active:scale-95 dark:border-white/10 dark:bg-slate-800/80 dark:text-slate-200 dark:hover:bg-slate-800 dark:hover:text-white"
                         to="/register"
                         onClick={() => {
                           localStorage.setItem('gwasena_intro_completed', 'true');
@@ -827,9 +829,9 @@ export default function IntroPage() {
                         Buat Akun Baru
                       </Link>
 
-                      {/* 2. Tombol Primer di KANAN */}
+                      {/* Tombol Primer (KANAN) dengan Micro-Interaction Hover Panah */}
                       <Link
-                        className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-teal-500 to-cyan-500 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-transform hover:-translate-y-0.5 active:scale-95"
+                        className="group inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-teal-500 to-cyan-500 px-5 py-2.5 text-sm font-semibold text-white shadow-md shadow-teal-500/20 transition-all duration-150 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-cyan-500/30 hover:brightness-105 active:scale-95"
                         to="/login"
                         onClick={() => {
                           localStorage.setItem('gwasena_intro_completed', 'true');
@@ -837,7 +839,12 @@ export default function IntroPage() {
                         }}
                       >
                         <span>Mulai Sekarang !</span>
-                        <span aria-hidden="true">→</span>
+                        <span
+                          aria-hidden="true"
+                          className="transition-transform duration-200 ease-out group-hover:translate-x-1"
+                        >
+                          →
+                        </span>
                       </Link>
                     </div>
                   </div>

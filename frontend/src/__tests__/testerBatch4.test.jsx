@@ -95,7 +95,7 @@ describe('Evaluasi Tester Batch 4: Resolusi 100% Modul GWASena', () => {
       expect(ctaCard.querySelector('a[href="/register"]')).toHaveTextContent('Buat Akun Baru');
 
       // Verifikasi judul CTA melebar (w-full) dan tombol bertumpuk ke bawah (mt-4 flex-wrap)
-      const ctaTitle = ctaCard.querySelector('p');
+      const ctaTitle = ctaCard.querySelector('h3') || ctaCard.querySelector('p');
       expect(ctaTitle).toHaveClass('w-full');
       const btnWrapper = ctaCard.querySelector('div.mt-4');
       expect(btnWrapper).toBeInTheDocument();
