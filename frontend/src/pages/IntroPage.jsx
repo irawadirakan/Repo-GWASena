@@ -117,8 +117,8 @@ export default function IntroPage() {
     {
       id: 0,
       badge: 'Validasi',
-      title: 'Validasi Genotipe & Fenotipe Otomatis',
-      desc: 'Unggah berkas VCF (.vcf) dan metadata CSV fenotipe. Sistem memverifikasi format bialelik dan mencocokkan 100% Sample ID seketika sebelum pipeline berjalan.',
+      title: 'Pemeriksaan Berkas Otomatis',
+      desc: 'Unggah berkas data genetik dan tabel sifat fisik. Sistem otomatis memeriksa kelengkapan format dan memastikan nomor sampel cocok sebelum analisis dimulai.',
       icon: FileCheck2,
       accent: 'text-[#06B6D4] border-[#06B6D4]/30 bg-[#06B6D4]/10',
     },
@@ -144,25 +144,25 @@ export default function IntroPage() {
     {
       num: '01',
       step: 1,
-      title: 'Unggah dataset',
-      desc: 'Genotipe VCF dan fenotipe CSV, divalidasi otomatis.',
+      title: 'Unggah Dataset',
+      desc: 'Genotipe VCF dan fenotipe CSV, divalidasi secara otomatis.',
     },
     {
       num: '02',
       step: 2,
-      title: 'Atur parameter',
+      title: 'Atur Parameter',
       desc: 'Bantuan kontekstual EDU-HINT di setiap pengaturan.',
     },
     {
       num: '03',
       step: 3,
-      title: 'Jalankan komputasi',
+      title: 'Jalankan Komputasi',
       desc: 'Proses berjalan terpisah, dengan tips edukatif selama menunggu.',
     },
     {
       num: '04',
       step: 4,
-      title: 'Lihat hasil dan laporan',
+      title: 'Lihat Hasil dan Laporan',
       desc: 'Manhattan plot, anotasi, dan ekspor PDF.',
     },
   ];
@@ -432,10 +432,10 @@ export default function IntroPage() {
                           <span>Tahap 01 · Ingestion & Validation</span>
                         </div>
                         <h3 className="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white tracking-tight">
-                          Validasi genotipe dan fenotipe otomatis
+                          Pemeriksaan Berkas Otomatis
                         </h3>
                         <p className="mt-1 text-xs sm:text-sm text-slate-600 dark:text-slate-300">
-                          Sistem memverifikasi format berkas dan mencocokkan Sample ID sebelum pipeline dijalankan.
+                          Sistem otomatis memeriksa kelengkapan format dan memastikan nomor identitas sampel (Sample ID) cocok sebelum analisis dimulai.
                         </p>
                       </div>
 
@@ -451,7 +451,7 @@ export default function IntroPage() {
                                 genotipe.vcf
                               </div>
                               <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                                Format VCF v4.2 bialelik · 9.286 SNP terdeteksi
+                                Format VCF v4.2 · 9.286 SNP terdeteksi
                               </div>
                             </div>
                           </div>
@@ -698,7 +698,7 @@ export default function IntroPage() {
                           to="/login"
                           onClick={() => sessionStorage.setItem('gwasena_intro_completed', 'true')}
                         >
-                          <span>Mulai Sekarang !</span>
+                          <span>Mulai Sekarang</span>
                           <span>→</span>
                         </Link>
                       </div>
@@ -827,7 +827,7 @@ export default function IntroPage() {
                         Buat Akun Baru
                       </Link>
 
-                      {/* 2. Tombol Primer (Mulai Sekarang ! →) - DIMENSI & SHAPE SAMA PERSIS */}
+                      {/* 2. Tombol Primer (Mulai Sekarang →) - DIMENSI & SHAPE SAMA PERSIS */}
                       <Link
                         className="group inline-flex h-12 sm:h-[52px] items-center justify-center gap-2.5 rounded-2xl bg-gradient-to-r from-teal-500 to-cyan-500 px-6 sm:px-7 text-sm sm:text-base font-bold text-white shadow-md shadow-teal-500/20 transition-all duration-150 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-cyan-500/30 hover:brightness-105 active:scale-95"
                         to="/login"
@@ -836,7 +836,7 @@ export default function IntroPage() {
                           localStorage.setItem('gwasena_has_logged_in', 'true');
                         }}
                       >
-                        <span>Mulai Sekarang !</span>
+                        <span>Mulai Sekarang</span>
                         <span
                           aria-hidden="true"
                           className="inline-block text-lg sm:text-xl font-bold leading-none transition-transform duration-200 ease-out group-hover:translate-x-1"

@@ -748,7 +748,7 @@ export default function Step3Computation({ analysisId, analysis = null, onComple
                 onClick={onComplete}
                 className="w-full figma-btn-primary py-3.5 text-sm sm:text-base cursor-pointer"
               >
-                <span>Lihat Hasil Analisis & Visualisasi Plot (Langkah 4)</span>
+                <span>Lihat Hasil Analisis & Visualisasi Plot</span>
                 <ArrowRight className="h-4 w-4" />
               </button>
             </div>
