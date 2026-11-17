@@ -816,9 +816,9 @@ export default function IntroPage() {
                       Siap memulai eksplorasi dan penemuan asosiasi genomik?
                     </h3>
 
-                    {/* Baris 2: Tombol Aksi di Bawah Teks (Buat Akun di Kiri, Mulai Sekarang di Kanan) */}
-                    <div className="mt-4 flex flex-wrap items-center gap-3.5">
-                      {/* Tombol Sekunder (KIRI) */}
+                    {/* Baris 2: Tombol Aksi - Buat Akun di Kiri, Mulai Sekarang di Kanan */}
+                    <div className="mt-5 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3.5">
+                      {/* Tombol Sekunder (SISI KIRI) */}
                       <Link
                         className="inline-flex items-center justify-center rounded-xl border border-slate-300/80 bg-white/90 px-5 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:bg-slate-50 hover:text-slate-900 hover:shadow-md active:scale-95 dark:border-white/10 dark:bg-slate-800/80 dark:text-slate-200 dark:hover:bg-slate-800 dark:hover:text-white"
                         to="/register"
@@ -829,9 +829,9 @@ export default function IntroPage() {
                         Buat Akun Baru
                       </Link>
 
-                      {/* Tombol Primer (KANAN) dengan Micro-Interaction Hover Panah */}
+                      {/* Tombol Primer (SISI KANAN / ml-auto) dengan Micro-Interaction */}
                       <Link
-                        className="group inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-teal-500 to-cyan-500 px-5 py-2.5 text-sm font-semibold text-white shadow-md shadow-teal-500/20 transition-all duration-150 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-cyan-500/30 hover:brightness-105 active:scale-95"
+                        className="group inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-teal-500 to-cyan-500 px-6 py-2.5 text-sm font-semibold text-white shadow-md shadow-teal-500/20 transition-all duration-150 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-cyan-500/30 hover:brightness-105 active:scale-95 sm:ml-auto"
                         to="/login"
                         onClick={() => {
                           localStorage.setItem('gwasena_intro_completed', 'true');
