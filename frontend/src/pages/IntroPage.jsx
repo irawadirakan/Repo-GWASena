@@ -688,20 +688,20 @@ export default function IntroPage() {
 
                       <div className="flex items-center gap-3 shrink-0">
                         <Link
+                          className="rounded-xl border border-slate-300 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                          to="/register"
+                          onClick={() => sessionStorage.setItem('gwasena_intro_completed', 'true')}
+                        >
+                          Buat Akun Baru
+                        </Link>
+
+                        <Link
                           className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-teal-500 to-cyan-500 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-transform hover:-translate-y-0.5"
                           to="/login"
                           onClick={() => sessionStorage.setItem('gwasena_intro_completed', 'true')}
                         >
                           <span>Mulai Sekarang !</span>
                           <span>→</span>
-                        </Link>
-
-                        <Link
-                          className="rounded-xl border border-slate-300 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
-                          to="/register"
-                          onClick={() => sessionStorage.setItem('gwasena_intro_completed', 'true')}
-                        >
-                          Buat Akun Baru
                         </Link>
                       </div>
                     </div>
@@ -816,6 +816,18 @@ export default function IntroPage() {
                     </p>
 
                     <div className="mt-4 flex flex-wrap items-center gap-3">
+                      {/* 1. Tombol Sekunder di KIRI */}
+                      <Link
+                        className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50 dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100 dark:hover:bg-slate-900 active:scale-95"
+                        to="/register"
+                        onClick={() => {
+                          localStorage.setItem('gwasena_intro_completed', 'true');
+                        }}
+                      >
+                        Buat Akun Baru
+                      </Link>
+
+                      {/* 2. Tombol Primer di KANAN */}
                       <Link
                         className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-teal-500 to-cyan-500 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-transform hover:-translate-y-0.5 active:scale-95"
                         to="/login"
@@ -826,16 +838,6 @@ export default function IntroPage() {
                       >
                         <span>Mulai Sekarang !</span>
                         <span aria-hidden="true">→</span>
-                      </Link>
-
-                      <Link
-                        className="rounded-xl border border-slate-300 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 active:scale-95"
-                        to="/register"
-                        onClick={() => {
-                          localStorage.setItem('gwasena_intro_completed', 'true');
-                        }}
-                      >
-                        Buat Akun Baru
                       </Link>
                     </div>
                   </div>
