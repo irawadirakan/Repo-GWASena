@@ -126,6 +126,13 @@ def build_report(db: Session, a: Analysis, organism_override: str | None = None)
     n_sig = int(aso.get("jumlah_signifikan") or len(sig) or 0)
     bonf_p = aso.get("ambang_bonferroni_p")
     bonf_neglog = f"{-__import__('math').log10(bonf_p):.2f}" if isinstance(bonf_p, (int, float)) and bonf_p > 0 else "–"
+    # Nama dan nilai garis ambang mengikuti metode koreksi yang dipilih (sama dengan Manhattan plot)
+    _mh = (r.get("plot") or {}).get("manhattan") or {}
+    _garis = _mh.get("garis_signifikansi")
+    if isinstance(_garis, (int, float)):
+        bonf_neglog = f"{_garis:.2f}"
+    nama_ambang = "FDR (Benjamini-Hochberg)" if _mh.get("jenis_garis") == "fdr" else "Bonferroni"
+    n_sampel_uji = aso.get("jumlah_sampel")
     org_raw = organism_override or a.organism
     org_sci = scientific_name(org_raw)
     trait_disp = str(r.get("trait") or a.trait_name or "sifat target")
@@ -140,11 +147,12 @@ def build_report(db: Session, a: Analysis, organism_override: str | None = None)
         peak_nl_txt = f"{peak_nl:.2f}" if isinstance(peak_nl, (int, float)) else "–"
         catatan_manhattan = (
             '<p class="cat"><strong>Interpretasi Hasil Asosiasi Genomik (Manhattan Plot):</strong> '
-            f"Identifikasi lokus genomik mendeteksi {n_sig} varian SNP signifikan yang melampaui ambang batas Bonferroni "
-            f"(-log₁₀P ≥ {escape(bonf_neglog)}), dengan sinyal asosiasi puncak pada {escape(str(peak.get('snp_id', '–')))} "
+            f"Terdapat {n_sig} SNP yang melampaui ambang {escape(nama_ambang)} "
+            f"(-log₁₀P ≥ {escape(bonf_neglog)}), dengan sinyal terkuat pada {escape(str(peak.get('snp_id', '–')))} "
             f"(Kromosom {escape(str(peak.get('chromosome', '–')))}, -log₁₀P = {escape(peak_nl_txt)}). "
-            "Konsentrasi puncak pada kromosom tersebut mengindikasikan keberadaan Quantitative Trait Loci (QTL) utama "
-            f"yang mengendalikan variasi fenotipe {escape(trait_disp)} pada <em>{escape(org_sci)}</em>.</p>"
+            "Lokus tersebut merupakan kandidat Quantitative Trait Loci (QTL) yang berasosiasi secara statistik dengan "
+            f"{escape(trait_disp)} pada <em>{escape(org_sci)}</em>. Asosiasi statistik ini belum membuktikan hubungan "
+            "sebab-akibat dan perlu dikonfirmasi dengan validasi biologis.</p>"
         )
     else:
         catatan_manhattan = (

@@ -139,12 +139,29 @@ def run_pipeline(
     q_fdr = benjamini_hochberg(glm.p)
     alpha = params.get("alpha", 0.05)
     methods = params.get("koreksi") or ["bonferroni", "fdr"]
-    significant = np.zeros(v_idx.size, dtype=bool)
-    if "bonferroni" in methods:
-        significant |= np.nan_to_num(p_bonf, nan=1.0) < alpha
-    if "fdr" in methods:
-        significant |= np.nan_to_num(q_fdr, nan=1.0) < alpha
     n_tested = int(np.isfinite(glm.p).sum())
+    # SNP signifikan = lolos SEMUA koreksi yang dipilih, supaya tabel SNP, Manhattan plot,
+    # dan daftar anotasi memakai satu aturan yang sama (temuan tester #26/#31). Sebelumnya
+    # cukup lolos salah satu, sehingga titik di bawah garis Bonferroni masih dihitung signifikan.
+    lolos_bonf = np.nan_to_num(p_bonf, nan=1.0) < alpha
+    lolos_fdr = np.nan_to_num(q_fdr, nan=1.0) < alpha
+    significant = np.ones(v_idx.size, dtype=bool)
+    if "bonferroni" in methods:
+        significant &= lolos_bonf
+    if "fdr" in methods:
+        significant &= lolos_fdr
+    if "bonferroni" not in methods and "fdr" not in methods:
+        significant[:] = False
+    # Garis ambang pada Manhattan plot mengikuti aturan di atas: Bonferroni bila dipilih,
+    # selain itu batas p terbesar yang masih lolos FDR (Benjamini-Hochberg).
+    if not n_tested:
+        garis_signifikansi, jenis_garis = None, None
+    elif "bonferroni" in methods or "fdr" not in methods:
+        garis_signifikansi, jenis_garis = float(-np.log10(alpha / n_tested)), "bonferroni"
+    else:
+        p_lolos = glm.p[lolos_fdr & np.isfinite(glm.p)]
+        batas_p = float(p_lolos.max()) if p_lolos.size else alpha / n_tested
+        garis_signifikansi, jenis_garis = float(-np.log10(batas_p)), "fdr"
     notify("koreksi", "selesai", f"{int(significant.sum())} SNP signifikan")
 
     def fnum(x, nd=6):
@@ -205,6 +222,8 @@ def run_pipeline(
             "manhattan": {
                 "titik": manhattan,
                 "garis_bonferroni": round(float(-np.log10(alpha / n_tested)), 4) if n_tested else None,
+                "garis_signifikansi": round(garis_signifikansi, 4) if garis_signifikansi is not None else None,
+                "jenis_garis": jenis_garis,
             },
             "qq": {"titik": _qq_points(glm.p), "lambda_gc": genomic_inflation(glm.p)},
         },

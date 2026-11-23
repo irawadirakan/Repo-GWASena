@@ -65,7 +65,9 @@ def select_lead_snps_for_labels(
 def manhattan_png(data: dict, judul: str | None = None) -> bytes:
     """data = {"titik": [{snp_id, chromosome, position, neglog10p, signifikan}], "garis_bonferroni": float}"""
     titik = data.get("titik") or []
-    garis = data.get("garis_bonferroni")
+    # garis_signifikansi mengikuti metode koreksi yang dipilih; hasil lama hanya punya garis_bonferroni
+    garis = data.get("garis_signifikansi", data.get("garis_bonferroni"))
+    nama_garis = "FDR (Benjamini-Hochberg)" if data.get("jenis_garis") == "fdr" else "Bonferroni"
 
     kromosom = sorted({t["chromosome"] for t in titik}, key=_chrom_key)
     # posisi kumulatif agar kromosom tampil berurutan pada satu sumbu x
@@ -101,7 +103,7 @@ def manhattan_png(data: dict, judul: str | None = None) -> bytes:
             )
     if garis is not None:
         ax.axhline(garis, color=WARNA_GARIS, linestyle="--", linewidth=0.9,
-                   label=f"Ambang Bonferroni (-log10 p = {garis:.2f})")
+                   label=f"Ambang {nama_garis} (-log10 p = {garis:.2f})")
 
     ax.set_xticks(tengah)
     ax.set_xticklabels(kromosom, fontsize=8)
