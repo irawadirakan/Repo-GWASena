@@ -32,3 +32,22 @@ def test_meta_garlic():
     with TestClient(app) as client:
         body = client.get("/api/meta").json()
         assert body["organisme"]["nama_ilmiah"].startswith("Allium sativum")
+
+
+def test_health_siap_analisis_flag():
+    # badge status: bendera siap_analisis true bila DB terhubung (Redis tak wajib di mode non-celery)
+    with TestClient(app) as client:
+        body = client.get("/api/health").json()
+        assert "siap_analisis" in body
+        assert body["siap_analisis"] is True
+
+
+def test_meta_batas_unggah_dan_rentang_qc():
+    # /api/meta memuat batas unggah tunggal dan rentang valid parameter QC untuk frontend
+    with TestClient(app) as client:
+        m = client.get("/api/meta").json()
+        assert isinstance(m["batas_unggah_mb"], int) and m["batas_unggah_mb"] > 0
+        ids = {p["id"] for p in m["parameter_qc"]}
+        assert {"mind", "geno", "maf", "hwe", "king_cutoff", "alpha", "n_pc"} <= ids
+        maf = next(p for p in m["parameter_qc"] if p["id"] == "maf")
+        assert maf["min"] == 0.0 and maf["max"] == 0.5

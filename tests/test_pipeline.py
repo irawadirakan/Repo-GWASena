@@ -62,3 +62,14 @@ def test_mlm_mengendalikan_inflasi_pada_data_klonal():
 def test_sifat_tidak_ada_ditolak():
     with pytest.raises(PipelineError):
         run_pipeline(VCF, CSV, {"trait": "tinggi_daun"})
+
+
+def test_qc_memisahkan_sampel_lolos_dan_dipakai_uji():
+    # Angka "lolos QC" (genotipe) vs "dipakai uji" (punya fenotipe) harus dipisah agar UI
+    # tidak menampilkan angka membingungkan seperti "217 vs 154".
+    r = run_pipeline(VCF, CSV, {"trait": "bobot_umbi_g"})
+    q = r["qc"]
+    assert "sampel_dipakai_uji" in q and "sampel_tanpa_fenotipe" in q
+    assert q["sampel_dipakai_uji"] == r["asosiasi"]["jumlah_sampel"]
+    assert q["sampel_tanpa_fenotipe"] == max(0, q["sampel_lolos"] - q["sampel_dipakai_uji"])
+    assert q["sampel_dipakai_uji"] <= q["sampel_lolos"]

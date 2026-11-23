@@ -835,7 +835,17 @@ def get_status(a: Analysis = Depends(owned_analysis), db: Session = Depends(get_
     galat = None
     if a.status == AnalysisStatus.GAGAL and failed and failed.message:
         lines = failed.message.splitlines()
-        galat = {"tahap": failed.stage, "pesan": lines[0], "rincian": lines[1:]}
+        # arahkan pengguna ke langkah yang tepat sesuai tahap yang gagal:
+        # - validasi  -> berkas bermasalah, kembali ke Unggah & Validasi
+        # - qc/pca/asosiasi/koreksi -> parameter QC/Model, kembali ke Konfigurasi
+        if failed.stage == "validasi":
+            langkah_perbaikan = {"tujuan": "unggah", "label": "Kembali ke Unggah & Validasi",
+                                 "alasan": "Masalah pada berkas genotipe/fenotipe yang diunggah."}
+        else:
+            langkah_perbaikan = {"tujuan": "qc", "label": "Kembali ke Konfigurasi QC & Model",
+                                 "alasan": "Coba longgarkan ambang QC (missingness/MAF/HWE/KING) atau periksa parameter."}
+        galat = {"tahap": failed.stage, "pesan": lines[0], "rincian": lines[1:],
+                 "langkah_perbaikan": langkah_perbaikan}
 
     # kalimat status yang siap ditampilkan antarmuka
     teks, langkah = STATUS_TEXT.get(a.status, ("", None))

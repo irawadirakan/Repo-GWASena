@@ -89,10 +89,19 @@ def build_report(db: Session, a: Analysis, organism_override: str | None = None)
     sampel_lolos = qc.get('sampel_lolos', '–')
     snp_awal = qc.get('snp_awal', '–')
     snp_lolos = qc.get('snp_lolos', '–')
+    dipakai_uji = qc.get('sampel_dipakai_uji')
+    tanpa_feno = qc.get('sampel_tanpa_fenotipe')
+    # jelaskan selisih sampel lolos QC vs sampel yang benar-benar dipakai uji (punya fenotipe)
+    ket_uji = ""
+    if dipakai_uji is not None and dipakai_uji != sampel_lolos:
+        ket_uji = (f" Dari sampel lolos QC, {dipakai_uji} sampel dipakai pada uji asosiasi"
+                   + (f"; {tanpa_feno} sampel tidak memiliki nilai fenotipe sehingga tidak diuji" if tanpa_feno else "")
+                   + ".")
     bagian.append(
         "<h2>2. Quality Control</h2>"
         f"<p>Data awal {sampel_awal} sampel dan {snp_awal} SNP; "
-        f"lolos QC {sampel_lolos} sampel ({sampel_lolos} / {sampel_awal}) dan {snp_lolos} SNP ({snp_lolos} / {snp_awal}).</p>"
+        f"lolos QC {sampel_lolos} sampel ({sampel_lolos} / {sampel_awal}) dan {snp_lolos} SNP ({snp_lolos} / {snp_awal})."
+        f"{ket_uji}</p>"
         + _table(["Kriteria", "Ambang", "Sampel", "SNP", "Keterangan"], rows_qc, {2, 3}))
 
     var = pca.get("variansi_dijelaskan") or []

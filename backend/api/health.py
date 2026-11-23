@@ -42,8 +42,14 @@ def check_features() -> dict:
 def health():
     db = check_database()
     rd = check_redis()
+    # Redis hanya wajib bila pipeline berjalan via Celery; mode background/sinkron tidak memerlukannya.
+    redis_wajib = settings.PIPELINE_MODE == "celery"
+    # Bendera ringkas kesiapan menjalankan analisis, untuk badge status di antarmuka:
+    # server siap bila API hidup, database terhubung, dan (bila dipakai) Redis terhubung.
+    siap_analisis = bool(db["ok"]) and (rd["ok"] or not redis_wajib)
     return {
         "status": "ok" if db["ok"] else "degraded",
+        "siap_analisis": siap_analisis,
         "app": settings.APP_NAME,
         "version": settings.APP_VERSION,
         "environment": settings.APP_ENV,

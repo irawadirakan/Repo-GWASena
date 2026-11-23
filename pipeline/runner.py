@@ -194,10 +194,18 @@ def run_pipeline(
         key=lambda d: (_chrom_key(d["chromosome"]), d["position"]),
     )
 
+    # Pisahkan dua angka sampel yang kerap tertukar di UI:
+    # - sampel_lolos  : lolos filter QC (berbasis genotipe)
+    # - sampel_dipakai_uji : subset yang juga punya nilai fenotipe sehingga ikut uji asosiasi
+    # Selisihnya adalah sampel tanpa nilai fenotipe (menjawab kebingungan "217 vs 154").
+    qc_dict = qc.as_dict(geno.n_samples, geno.n_snps, trait_name=trait)
+    qc_dict["sampel_dipakai_uji"] = int(glm.n_used)
+    qc_dict["sampel_tanpa_fenotipe"] = max(0, int(qc_dict.get("sampel_lolos", 0)) - int(glm.n_used))
+
     return {
         "trait": trait,
         "model": model,
-        "qc": qc.as_dict(geno.n_samples, geno.n_snps, trait_name=trait),
+        "qc": qc_dict,
         # dipakai backend untuk menandai kolom passed_qc pada tabel samples dan snps
         "qc_lolos": {"sampel": samples_kept, "varian_index": [int(j) for j in v_idx]},
         "statistik_snp": {
