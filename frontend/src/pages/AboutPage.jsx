@@ -32,6 +32,8 @@ const TEAM_MEMBERS = [
     roleCode: 'PM',
     email: 'irawadirakan@apps.ipb.ac.id',
     photo: '/assets/team/foto-rakan.jpg',
+    cardDark: '/assets/team/cards/rakan-dark.png',
+    cardLight: '/assets/team/cards/rakan-light.png',
     fallbackAvatar: 'https://ui-avatars.com/api/?name=Rakan+Fawwaz&background=0284c7&color=fff',
     fallbackInitials: 'RF',
     badgeColor: 'from-amber-500 to-orange-600',
@@ -51,6 +53,8 @@ const TEAM_MEMBERS = [
     roleCode: 'SA',
     email: 'faisakna@apps.ipb.ac.id',
     photo: '/assets/team/foto-akna.png',
+    cardDark: '/assets/team/cards/akna-dark.png',
+    cardLight: '/assets/team/cards/akna-light.png',
     fallbackAvatar: 'https://ui-avatars.com/api/?name=Akna+Mafaiz&background=06b6d4&color=fff',
     fallbackInitials: 'AM',
     badgeColor: 'from-cyan-500 to-teal-600',
@@ -69,6 +73,8 @@ const TEAM_MEMBERS = [
     roleCode: 'FE',
     email: 'refall22ardiansyah@apps.ipb.ac.id',
     photo: '/assets/team/foto-moreno.jpeg',
+    cardDark: '/assets/team/cards/moreno-dark.png',
+    cardLight: '/assets/team/cards/moreno-light.png',
     fallbackAvatar: 'https://ui-avatars.com/api/?name=Moreno+Ardiansyah&background=3b82f6&color=fff',
     fallbackInitials: 'MA',
     badgeColor: 'from-blue-500 to-indigo-600',
@@ -90,6 +96,8 @@ const TEAM_MEMBERS = [
     roleCode: 'BE',
     email: 'isnainitiana@apps.ipb.ac.id',
     photo: '/assets/team/foto-isnaini.png',
+    cardDark: '/assets/team/cards/isna-dark.png',
+    cardLight: '/assets/team/cards/isna-light.png',
     fallbackAvatar: 'https://ui-avatars.com/api/?name=Isnaini+Tiana&background=10b981&color=fff',
     fallbackInitials: 'IT',
     badgeColor: 'from-emerald-500 to-teal-600',
@@ -111,6 +119,8 @@ const TEAM_MEMBERS = [
     roleCode: 'QA',
     email: 'fannikhahaen_dzikriany@apps.ipb.ac.id',
     photo: '/assets/team/foto-fannikha.jpeg',
+    cardDark: '/assets/team/cards/fannikha-dark.png',
+    cardLight: '/assets/team/cards/fannikha-light.png',
     fallbackAvatar: 'https://ui-avatars.com/api/?name=Fannikha+Haeny&background=f43f5e&color=fff',
     fallbackInitials: 'FH',
     badgeColor: 'from-rose-500 to-pink-600',
@@ -190,142 +200,130 @@ function GithubIcon({ className = 'w-4 h-4' }) {
 
 /**
  * Komponen 3D Flip Card Tim Pengembang
- * Efek membalik dipicu secara murni oleh hover kursor (group-hover:rotate-y-180)
- * Foto terpusat presisi menggunakan object-cover object-center w-24 h-24 mx-auto rounded-full
- * Email tampil utuh tanpa elipsis/truncate dengan break-all font-mono
+ * - Sisi Depan (Front): Desain Penuh Buatan Pengguna (Canva HD 4:5) dengan adaptasi otomatis Dark & Light Mode
+ * - Sisi Belakang (Back): Daftar Tanggung Jawab Lengkap, Keahlian/Stack, NIM, & Email Interaktif
+ * - Efek 3D Flip dipicu secara mulus oleh hover kursor atau fokus/ketuk pada kartu
  */
 function TeamFlipCard({ member, index }) {
+  const theme = useThemeStore((state) => state.theme);
+  const isDark = theme === 'dark';
   const [imgError, setImgError] = useState(false);
+
+  const cardSrc = isDark ? member.cardDark : member.cardLight;
 
   return (
     <div
       tabIndex={0}
-      aria-label={`Kartu profil ${member.name}`}
-      className="group perspective-1000 min-h-[440px] h-[440px] w-full focus:outline-none select-none"
+      aria-label={`Kartu profil ${member.name} (${member.role})`}
+      className="group perspective-1000 min-h-[475px] h-[475px] sm:h-[480px] w-full focus:outline-none select-none"
       style={{ animationDelay: `${100 + index * 80}ms` }}
     >
-      <div className="relative w-full h-full transform-style-3d transition-transform duration-700 ease-out group-hover:rotate-y-180 group-hover:[transform:rotateY(180deg)]">
-        {/* ── BAGIAN DEPAN (Front Card) ── */}
-        <div className="absolute inset-0 backface-hidden glass-subcard p-6 flex flex-col justify-between rounded-3xl overflow-hidden border border-white/90 dark:border-cyan-500/30 shadow-xl group-hover:shadow-2xl transition-all duration-300">
-          {/* Ambient Glow Corner */}
+      <div className="relative w-full h-full transform-style-3d transition-transform duration-700 ease-out group-hover:rotate-y-180 group-hover:[transform:rotateY(180deg)] group-focus-within:rotate-y-180 group-focus-within:[transform:rotateY(180deg)]">
+        {/* ── BAGIAN DEPAN (Front Card - Full Desain Canva Buatan Pengguna) ── */}
+        <div className="absolute inset-0 backface-hidden rounded-3xl overflow-hidden border border-white/80 dark:border-cyan-500/30 shadow-xl group-hover:shadow-2xl transition-all duration-300 bg-slate-100 dark:bg-slate-900 flex items-center justify-center">
+          {!imgError ? (
+            <img
+              src={cardSrc}
+              alt={member.name}
+              onError={() => {
+                setImgError(true);
+              }}
+              className="w-full h-full object-cover object-center rounded-3xl transition-transform duration-500 group-hover:scale-[1.02]"
+              loading="lazy"
+            />
+          ) : (
+            /* Fallback cadangan jika berkas kartu desain belum termuat */
+            <div className="w-full h-full glass-subcard p-6 flex flex-col justify-between items-center text-center">
+              <span className={`px-3 py-1 rounded-full text-xs font-bold text-white bg-gradient-to-r ${member.badgeColor}`}>
+                {member.roleCode}
+              </span>
+              <img
+                src={member.photo}
+                alt={member.name}
+                className="w-24 h-24 rounded-full object-cover object-center border-2 border-white/60 dark:border-cyan-400/40"
+              />
+              <div>
+                <h3 className="text-lg font-bold font-heading text-slate-900 dark:text-white">{member.name}</h3>
+                <p className={`text-xs font-semibold ${member.accentText}`}>{member.role}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Reflektif Glass Glare Border Tipis untuk Kedalaman Visual 3D */}
           <div
-            className={`absolute -top-16 -right-16 w-36 h-36 rounded-full bg-gradient-to-br ${member.badgeColor} opacity-15 blur-2xl pointer-events-none`}
+            className="absolute inset-0 rounded-3xl pointer-events-none border border-white/50 dark:border-cyan-400/20 shadow-inner"
             aria-hidden="true"
           />
-
-          {/* Header Card: Role Badge & NIM */}
-          <div className="flex items-center justify-between z-10">
-            <span
-              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold tracking-wider text-white bg-gradient-to-r ${member.badgeColor} shadow-md`}
-            >
-              <Award className="w-3.5 h-3.5" />
-              {member.roleCode}
-            </span>
-            <span className="text-[11px] font-mono font-medium text-slate-500 dark:text-cyan-400/80 bg-slate-100/80 dark:bg-slate-800/80 px-2.5 py-0.5 rounded-full border border-slate-200 dark:border-cyan-500/20">
-              {member.nim}
-            </span>
-          </div>
-
-          {/* Foto Wajah / Fallback Avatar — Presisi object-cover object-center w-24 h-24 mx-auto rounded-full */}
-          <div className="my-auto text-center flex flex-col items-center z-10">
-            <div className="relative group/avatar mb-4">
-              <div
-                className="absolute -inset-1 rounded-full bg-gradient-to-r from-cyan-400 to-indigo-500 opacity-70 blur-md group-hover:opacity-100 transition duration-300"
-                aria-hidden="true"
-              />
-              {!imgError ? (
-                <img
-                  src={member.photo}
-                  alt={member.name}
-                  onError={(e) => {
-                    if (member.fallbackAvatar && e.currentTarget.src !== member.fallbackAvatar) {
-                      e.currentTarget.src = member.fallbackAvatar;
-                    } else {
-                      setImgError(true);
-                    }
-                  }}
-                  className="relative w-24 h-24 rounded-full object-cover object-center mx-auto border-2 border-white/60 dark:border-cyan-400/40 ring-4 ring-white dark:ring-slate-900 shadow-lg group-hover/avatar:scale-105 transition-transform duration-300"
-                />
-              ) : (
-                <div
-                  className={`relative flex items-center justify-center object-center w-24 h-24 mx-auto rounded-full ring-4 ring-white dark:ring-slate-900 shadow-2xl bg-gradient-to-br ${member.badgeColor} text-white font-heading font-extrabold text-2xl tracking-tight`}
-                >
-                  {member.fallbackInitials}
-                </div>
-              )}
-            </div>
-
-            {/* Nama & Role Murni */}
-            <h3 className="text-lg font-bold font-heading text-slate-900 dark:text-white tracking-tight leading-snug">
-              {member.name}
-            </h3>
-            <p className={`text-xs font-semibold mt-1 ${member.accentText}`}>
-              {member.role}
-            </p>
-
-            {/* Email Utuh (Tanpa Elipsis / break-all font-mono) */}
-            {member.email && (
-              <a
-                href={`mailto:${member.email}`}
-                onClick={(e) => e.stopPropagation()}
-                className="mt-3 inline-flex items-center gap-1.5 py-1 px-3 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors"
-              >
-                <Mail className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400 flex-shrink-0" />
-                <span className="break-all text-xs text-slate-600 dark:text-slate-300 font-mono">
-                  {member.email}
-                </span>
-              </a>
-            )}
-          </div>
-
-          {/* Spacer Bawah Bersih (Tanpa Teks Petunjuk) */}
-          <div className="h-2" />
         </div>
 
-        {/* ── BAGIAN BELAKANG (Back Card) ── */}
+        {/* ── BAGIAN BELAKANG (Back Card - Tanggung Jawab & Keahlian Lengkap) ── */}
         <div className="absolute inset-0 backface-hidden rotate-y-180 [transform:rotateY(180deg)] glass-subcard p-6 flex flex-col justify-between rounded-3xl overflow-hidden border border-white/90 dark:border-cyan-500/30 shadow-xl group-hover:shadow-2xl transition-all duration-300">
-          {/* Header Belakang: Nama & Role */}
-          <div className="flex items-center justify-between pb-3 border-b border-slate-200/60 dark:border-slate-800/60">
+          {/* Header Belakang: Nama, Role, & Badge NIM */}
+          <div className="flex items-start justify-between pb-3 border-b border-slate-200/60 dark:border-slate-800/60">
             <div>
-              <h4 className="text-sm font-bold text-slate-900 dark:text-white leading-tight">
+              <h4 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white leading-tight font-heading">
                 {member.name}
               </h4>
-              <p className={`text-[11px] font-semibold ${member.accentText}`}>
+              <p className={`text-[11px] sm:text-xs font-semibold mt-0.5 ${member.accentText}`}>
                 {member.role}
               </p>
             </div>
-            <span
-              className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold text-white bg-gradient-to-r ${member.badgeColor}`}
-            >
-              {member.roleCode}
-            </span>
+            <div className="flex flex-col items-end gap-1 flex-shrink-0">
+              <span
+                className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold text-white bg-gradient-to-r ${member.badgeColor} shadow-sm`}
+              >
+                {member.roleCode}
+              </span>
+              <span className="text-[10px] font-mono font-medium text-slate-600 dark:text-cyan-400/90 bg-slate-100/90 dark:bg-slate-800/90 px-2 py-0.5 rounded-full border border-slate-200 dark:border-cyan-500/20">
+                {member.nim}
+              </span>
+            </div>
           </div>
 
           {/* Poin-Poin Tanggung Jawab */}
-          <div className="my-auto py-2 space-y-2 overflow-y-auto max-h-[230px] pr-1">
+          <div className="my-auto py-2.5 space-y-2 overflow-y-auto max-h-[220px] pr-1">
             <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
               Tanggung Jawab:
             </p>
             {member.responsibilities.map((resp, i) => (
-              <div key={i} className="flex items-start gap-2 text-xs leading-relaxed text-slate-700 dark:text-slate-300">
+              <div key={i} className="flex items-start gap-2 text-xs leading-relaxed text-slate-700 dark:text-slate-200">
                 <span className="text-cyan-600 dark:text-cyan-400 mt-0.5 flex-shrink-0 font-bold">•</span>
                 <span>{resp}</span>
               </div>
             ))}
           </div>
 
-          {/* Badges Keahlian / Stack (Liquid Glass Pill) */}
-          <div className="pt-3 border-t border-slate-200/60 dark:border-slate-800/60">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
-              Keahlian / Stack:
-            </p>
-            <div className="flex flex-wrap gap-1.5">
-              {member.techStack.map((tech) => (
-                <span key={tech} className="liquid-glass-pill text-[11px]">
-                  {tech}
-                </span>
-              ))}
+          {/* Badges Keahlian / Stack & Email */}
+          <div className="pt-3 border-t border-slate-200/60 dark:border-slate-800/60 space-y-2">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
+                Keahlian / Stack:
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {member.techStack.map((tech) => (
+                  <span key={tech} className="liquid-glass-pill text-[11px]">
+                    {tech}
+                  </span>
+                ))}
+              </div>
             </div>
+
+            {/* Email Anggota Tim (Utuh, break-all, font-mono) */}
+            {member.email && (
+              <div className="pt-1 flex items-center">
+                <a
+                  href={`mailto:${member.email}`}
+                  onClick={(e) => e.stopPropagation()}
+                  className="inline-flex items-center gap-1.5 text-slate-600 dark:text-slate-300 hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors"
+                  title={`Kirim email ke ${member.name}`}
+                >
+                  <Mail className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400 flex-shrink-0" />
+                  <span className="break-all text-[11px] font-mono">
+                    {member.email}
+                  </span>
+                </a>
+              </div>
+            )}
           </div>
         </div>
       </div>

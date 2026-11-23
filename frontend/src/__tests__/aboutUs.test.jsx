@@ -114,7 +114,7 @@ describe('Feature About Us — Revisi Presisi Master Prompt', () => {
       expect(screen.getAllByText('Project Manager (PM)').length).toBeGreaterThan(0);
       const rakanImg = screen.getByRole('img', { name: 'Rakan Fawwaz Irawadi' });
       expect(rakanImg).toBeInTheDocument();
-      expect(rakanImg).toHaveAttribute('src', '/assets/team/foto-rakan.jpg');
+      expect(rakanImg.getAttribute('src')).toMatch(/\/assets\/team\/(cards\/rakan-dark\.png|foto-rakan\.jpg)/);
       expect(rakanImg).toHaveClass('object-cover');
       expect(rakanImg).toHaveClass('object-center');
 
