@@ -78,12 +78,13 @@ def manhattan_png(data: dict, judul: str | None = None) -> bytes:
         tengah.append(mulai + (min(posisi) + max(posisi)) / 2)
         mulai += max(posisi) + 1
 
-    fig = Figure(figsize=(11, 4.2))
+    # kanvas lebih lebar + titik lebih besar agar hasil unduhan PNG tetap tajam saat diperbesar
+    fig = Figure(figsize=(16, 5.5))
     ax = fig.subplots()
     for i, c in enumerate(kromosom):
         pts = [t for t in titik if t["chromosome"] == c]
         ax.scatter([offset[c] + t["position"] for t in pts], [t["neglog10p"] for t in pts],
-                   s=10, color=WARNA_KROMOSOM[i % 2], linewidths=0)
+                   s=14, color=WARNA_KROMOSOM[i % 2], linewidths=0)
     sig = [t for t in titik if t.get("signifikan")]
     max_y = max([t.get("neglog10p") or 0 for t in titik] + ([float(garis)] if garis is not None else []) + [1.0])
     if sig:
