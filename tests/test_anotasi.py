@@ -55,7 +55,9 @@ def test_berkas_tanpa_gen_menghasilkan_tidak_tersedia(tmp_path):
 
 
 def test_endpoint_anotasi(monkeypatch):
-    monkeypatch.setenv("ANNOTATION_SOURCE", "otomatis")  # uji jalur GFF3 lokal
+    # Jalur GFF3 lokal dinonaktifkan permanen; anotasi kini hanya lewat Ensembl.
+    # Genom bawang putih belum ada di Ensembl, jadi endpoint harus menurun dengan rapi
+    # ("anotasi gen tidak ditemukan"), bukan error, dan tetap 409 sebelum analisis dijalankan.
     from fastapi.testclient import TestClient
 
     from backend.main import app
@@ -73,13 +75,10 @@ def test_endpoint_anotasi(monkeypatch):
         r = c.get(f"/api/analyses/{aid}/annotation", headers=h)
         assert r.status_code == 200, r.text
         body = r.json()
-        assert body["status"] == "tersedia"
-        utama = next(k for k in body["kandidat"] if k["snp_id"] == "snp_chr3_0042")
-        assert utama["gen"][0]["gene_id"] == "GC3G9001"
-        assert utama["signifikan"] is True
-
-        # ikut menganotasi SNP teratas (10 SNP dengan p terkecil, termasuk yang signifikan)
-        r = c.get(f"/api/analyses/{aid}/annotation?sertakan_teratas=true", headers=h)
-        body = r.json()
-        assert r.status_code == 200 and len(body["kandidat"]) >= 10
-        assert sum(k["signifikan"] for k in body["kandidat"]) == 1
+        # Menurun dengan rapi tanpa memakai anotasi GFF3 contoh: status tidak_tersedia,
+        # sumber Ensembl, pesan jelas (genom belum ada di Ensembl atau Ensembl tak terjangkau),
+        # dan setiap SNP ditandai gagal, bukan error server.
+        assert body["status"] == "tidak_tersedia"
+        assert body["sumber_tipe"] == "ensembl"
+        assert body["pesan"].strip()
+        assert all(k["status_anotasi"] == "gagal" for k in body["kandidat"])

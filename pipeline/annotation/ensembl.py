@@ -109,13 +109,14 @@ LOCAL_GFF3_SPECIES = {"allium_sativum"}
 
 
 def gff3_lokal_aktif() -> bool:
-    """Sumber anotasi diatur lewat variabel lingkungan ANNOTATION_SOURCE.
+    """Jalur anotasi GFF3 lokal dinonaktifkan secara permanen.
 
-    - ``ensembl`` (bawaan): semua organisme, termasuk bawang putih, dianotasi melalui Ensembl REST API.
-      Berkas GFF3 lokal tidak dipakai sementara karena berkas yang ada hanya anotasi contoh.
-    - ``otomatis``: bawang putih memakai berkas GFF3 lokal (ANNOTATION_GFF3), organisme lain Ensembl.
+    Rencana memakai berkas GFF3 contoh dibatalkan karena anotasinya belum tentu relevan dengan
+    data asli pengguna. Seluruh anotasi kini bersumber dari Ensembl REST API. Bila spesies atau
+    gen tidak ada di Ensembl, sistem menampilkan "anotasi gen tidak ditemukan", bukan memakai
+    anotasi contoh yang bisa menyesatkan.
     """
-    return os.getenv("ANNOTATION_SOURCE", "ensembl").strip().lower() in ("otomatis", "gff3")
+    return False
 
 
 def _source_for(code: str) -> str:
@@ -474,6 +475,21 @@ def _species_info(species_code: str, timeout: float) -> dict:
     raise last_exc or OSError("Ensembl tidak dapat dihubungi")
 
 
+def _ensembl_web_url(server: str, species_code: str, ensembl_id: str) -> str | None:
+    """Bangun URL halaman gen Ensembl agar pengguna dapat membukanya langsung.
+
+    Server REST menentukan situs web yang tepat: rest.ensembl.org -> www.ensembl.org (vertebrata),
+    rest.ensemblgenomes.org -> plants.ensembl.org (tumbuhan, mencakup padi/jagung). Bila stable ID
+    gen tidak tersedia, kembalikan None.
+    """
+    sid = (ensembl_id or "").strip()
+    species_url = (species_code or "").strip().capitalize()
+    if not sid or not species_url:
+        return None
+    web = "https://plants.ensembl.org" if "ensemblgenomes" in (server or "") else "https://www.ensembl.org"
+    return f"{web}/{species_url}/Gene/Summary?g={urllib.parse.quote(sid, safe='')}"
+
+
 def _query_region(server: str, species_code: str, chrom: str, pos: int, window_bp: int,
                   timeout: float) -> list[dict]:
     """Minta gen di sekitar satu SNP. Melempar galat bila gagal (berbeda dengan 'tidak ada gen')."""
@@ -490,13 +506,13 @@ def _query_region(server: str, species_code: str, chrom: str, pos: int, window_b
             data = []
         else:
             raise
-    genes = _parse_genes(data, pos) if isinstance(data, list) else []
+    genes = _parse_genes(data, pos, server, species_code) if isinstance(data, list) else []
     if len(_REGION_CACHE) < _REGION_CACHE_MAX:
         _REGION_CACHE[key] = genes
     return genes
 
 
-def _parse_genes(data: list, pos_int: int) -> list[dict]:
+def _parse_genes(data: list, pos_int: int, server: str = "", species_code: str = "") -> list[dict]:
     candidates: list[dict] = []
     for raw in data:
         if not isinstance(raw, dict):
@@ -514,6 +530,8 @@ def _parse_genes(data: list, pos_int: int) -> list[dict]:
             "gene_id": gene_symbol, "ensembl_id": ensembl_id or gene_symbol, "nama": gene_symbol,
             "deskripsi": description, "awal": g_start, "akhir": g_end, "untai": untai,
             "jarak_bp": jarak_bp, "konsekuensi": konsekuensi, "letak": letak,
+            # tautan langsung ke halaman gen di Ensembl agar pengguna bisa memeriksa sendiri
+            "tautan_ensembl": _ensembl_web_url(server, species_code, ensembl_id),
         })
     candidates.sort(key=lambda item: (item["jarak_bp"], item["gene_id"]))
     return candidates
@@ -566,13 +584,10 @@ def annotate_with_ensembl(
         info = _species_info(species, timeout_request)
     except _SpeciesNotFound:
         if species == "allium_sativum":
-            return _semua_gagal("Genom bawang putih (Allium sativum) belum tersedia di Ensembl, sehingga gen "
-                                "kandidat belum dapat dicari. Hasil uji asosiasi tetap dapat dipakai; anotasi "
-                                "akan tersedia setelah genom bawang putih dimuat di Ensembl Plants atau berkas "
-                                "anotasi genom rujukan dipasang.")
-        return _semua_gagal(f"Spesies '{display_name}' tidak tersedia di Ensembl, sehingga gen kandidat "
-                            "tidak dapat dicari. Pilih organisme lain pada pengaturan parameter bila "
-                            "nama organisme belum tepat.")
+            return _semua_gagal("Anotasi gen tidak ditemukan: genom bawang putih (Allium sativum) belum "
+                                "tersedia di Ensembl. Hasil uji asosiasi tetap dapat dipakai.")
+        return _semua_gagal(f"Anotasi gen tidak ditemukan: genom '{display_name}' belum tersedia di Ensembl. "
+                            "Periksa kembali pilihan organisme bila namanya belum tepat.")
     except Exception as exc:  # noqa: BLE001
         logger.warning("Ensembl tidak terjangkau untuk %s: %s", species, exc)
         return _semua_gagal("Ensembl REST API tidak dapat dihubungi (periksa koneksi internet), sehingga "

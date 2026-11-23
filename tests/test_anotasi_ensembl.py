@@ -58,13 +58,14 @@ def test_resolve_species_target():
     assert resolve_species_target(None) == ("allium_sativum", "ensembl")
 
 
-def test_resolve_species_target_gff3_lokal(monkeypatch):
-    # ANNOTATION_SOURCE=otomatis: GFF3 lokal hanya untuk Allium sativum atau kosong
+def test_resolve_species_target_selalu_ensembl(monkeypatch):
+    # Jalur GFF3 lokal dinonaktifkan permanen: semua organisme diarahkan ke Ensembl,
+    # bahkan saat ANNOTATION_SOURCE=otomatis (variabel lama tidak lagi mengaktifkan GFF3).
     monkeypatch.setenv("ANNOTATION_SOURCE", "otomatis")
-    assert resolve_species_target("allium_sativum") == ("allium_sativum", "gff3")
-    assert resolve_species_target("Allium sativum") == ("allium_sativum", "gff3")
-    assert resolve_species_target(None) == ("allium_sativum", "gff3")
-    assert resolve_species_target("") == ("allium_sativum", "gff3")
+    assert resolve_species_target("allium_sativum") == ("allium_sativum", "ensembl")
+    assert resolve_species_target("Allium sativum") == ("allium_sativum", "ensembl")
+    assert resolve_species_target(None) == ("allium_sativum", "ensembl")
+    assert resolve_species_target("") == ("allium_sativum", "ensembl")
     assert resolve_species_target("mus_musculus") == ("mus_musculus", "ensembl")
 
 
@@ -211,14 +212,19 @@ def test_annotate_snps_auto_dual_kingdom(monkeypatch):
     assert res_ensembl["sumber"] == "Ensembl REST API (mus_musculus)"
     assert res_ensembl["sumber_tipe"] == "ensembl"
     assert res_ensembl["organism"] == "mus_musculus"
-    assert res_ensembl["kandidat"][0]["gen"][0]["gene_id"] == "Sox21"
+    gen0 = res_ensembl["kandidat"][0]["gen"][0]
+    assert gen0["gene_id"] == "Sox21"
+    # tautan langsung ke halaman gen Ensembl ikut disertakan
+    assert gen0["tautan_ensembl"] == (
+        "https://www.ensembl.org/Mus_musculus/Gene/Summary?g=ENSMUSG00000064842"
+    )
 
+    # Allium sativum pun kini diarahkan ke Ensembl (GFF3 lokal dinonaktifkan permanen),
+    # meski ANNOTATION_SOURCE=otomatis di-set.
     snp_garlic = [{"snp_id": "snp_chr1_0001", "chromosome": 1, "position": 402_000, "p_value": 1e-6}]
     monkeypatch.setenv("ANNOTATION_SOURCE", "otomatis")
-    res_gff3 = annotate_snps_auto(snp_garlic, "Allium sativum", GFF3, window_bp=50_000)
-    assert res_gff3["status"] == "tersedia"
-    assert res_gff3["sumber_tipe"] == "gff3"
-    assert any(g["gene_id"] == "GC1G0001" for g in res_gff3["kandidat"][0]["gen"])
+    res_garlic = annotate_snps_auto(snp_garlic, "Allium sativum", GFF3, window_bp=50_000)
+    assert res_garlic["sumber_tipe"] == "ensembl"
 
 
 def test_schemas_organism_field_preserves_extra_forbid():

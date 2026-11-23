@@ -191,8 +191,8 @@ def test_panel_admin_hanya_untuk_administrator():
 
 
 # ------------------------------------------------------------------ laporan web
-def test_laporan_web_lengkap(monkeypatch):
-    monkeypatch.setenv("ANNOTATION_SOURCE", "otomatis")  # uji jalur GFF3 lokal
+def test_laporan_web_lengkap():
+    # GFF3 lokal dinonaktifkan; laporan tetap lengkap tanpa mengandalkan gen anotasi contoh.
     with TestClient(app) as c:
         h = _login(c, "uji_laporan")
         aid = _selesai(c, h, "Uji laporan", "MLM")
@@ -200,7 +200,7 @@ def test_laporan_web_lengkap(monkeypatch):
         assert r.status_code == 200 and r.headers["content-type"].startswith("text/html")
         html = r.text
         for bagian in ("Parameter Analisis", "Quality Control", "PCA", "Uji Asosiasi (MLM)",
-                       "Manhattan Plot", "QQ Plot", "SNP Signifikan", "Kandidat Gen", "GC3G9001",
+                       "Manhattan Plot", "QQ Plot", "SNP Signifikan", "Kandidat Gen",
                        "data:image/png;base64", "heritabilitas"):
             assert bagian in html, bagian
         r = c.get(f"/api/analyses/{aid}/report?unduh=true", headers=h)

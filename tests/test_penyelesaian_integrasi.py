@@ -48,16 +48,18 @@ def test_data_tersimpan_sesuai_rancangan():
                 assert row.file_path and Path(row.file_path).is_file()
 
 
-def test_anotasi_mengisi_kolom_candidate_gene(monkeypatch):
-    monkeypatch.setenv("ANNOTATION_SOURCE", "otomatis")  # uji jalur GFF3 lokal
+def test_anotasi_mengisi_kolom_candidate_gene():
+    # Bawang putih belum ada di Ensembl dan GFF3 lokal dinonaktifkan: endpoint anotasi tetap
+    # merespons 200 (menurun dengan rapi), dan kolom candidate_gene tidak diisi anotasi palsu.
     with TestClient(app) as c:
         h = _login(c, "penguji_kandidat")
         aid = _jalankan(c, h, "Uji kandidat gen")
-        assert c.get(f"/api/analyses/{aid}/annotation", headers=h).status_code == 200
+        r = c.get(f"/api/analyses/{aid}/annotation", headers=h)
+        assert r.status_code == 200 and r.json()["status"] == "tidak_tersedia"
         with SessionLocal() as db:
             res = db.scalar(select(AssociationResult).where(
                 AssociationResult.analysis_id == aid, AssociationResult.snp_code == "snp_chr3_0042"))
-            assert res.candidate_gene == "GC3G9001"
+            assert res.candidate_gene is None
 
 
 def test_csv_lengkap_dan_hanya_signifikan():

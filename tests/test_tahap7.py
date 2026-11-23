@@ -55,7 +55,7 @@ def test_ensembl_spesies_tidak_tersedia(monkeypatch):
     monkeypatch.setattr(urllib.request, "urlopen", fake)
     r = annotate_with_ensembl(SNPS, "allium_cepa")
     assert r["status"] == "tidak_tersedia"
-    assert "tidak tersedia di Ensembl" in r["pesan"]
+    assert "tidak ditemukan" in r["pesan"].lower() and "belum tersedia di Ensembl" in r["pesan"]
     assert all(k["status_anotasi"] == "gagal" for k in r["kandidat"])
 
 
@@ -119,20 +119,20 @@ def _jalankan(c, h, nama):
     return aid
 
 
-def test_anotasi_otomatis_setelah_analisis_dan_cache(monkeypatch):
-    monkeypatch.setenv("ANNOTATION_SOURCE", "otomatis")  # pakai GFF3 contoh agar hasilnya pasti
+def test_anotasi_otomatis_setelah_analisis_dan_cache():
+    # Genom bawang putih belum ada di Ensembl dan GFF3 lokal dinonaktifkan: anotasi otomatis
+    # harus menurun dengan rapi (status tidak_tersedia), CSV tetap terunduh dengan kolom
+    # Kandidat_Gen kosong, dan endpoint tidak error.
     with TestClient(app) as c:
         h = _login(c, "penguji_tahap7_anotasi")
         aid = _jalankan(c, h, "Uji anotasi otomatis")
-        # Kandidat_Gen pada CSV sudah terisi tanpa memanggil endpoint anotasi
         rows = list(csv.DictReader(io.StringIO(
             c.get(f"/api/analyses/{aid}/results/csv?hanya_signifikan=true", headers=h).text)))
-        assert rows[0]["SNP_ID"] == "snp_chr3_0042" and rows[0]["Kandidat_Gen"] == "GC3G9001"
-        # hasil anotasi teratas diambil dari cache
+        assert rows and rows[0]["SNP_ID"] == "snp_chr3_0042"
+        assert (rows[0]["Kandidat_Gen"] or "") == ""  # tidak diisi anotasi contoh yang menyesatkan
         r = c.get(f"/api/analyses/{aid}/annotation?sertakan_teratas=true", headers=h).json()
-        assert r["dari_cache"] is True and len(r["kandidat"]) >= 10
-        r2 = c.get(f"/api/analyses/{aid}/annotation?sertakan_teratas=true&segarkan=true", headers=h).json()
-        assert r2["dari_cache"] is False and r2["status"] == "tersedia"
+        assert r["status"] == "tidak_tersedia" and r["sumber_tipe"] == "ensembl"
+        assert all(k["status_anotasi"] == "gagal" for k in r["kandidat"])
 
 
 def test_admin_ringkasan_field_antarmuka():
